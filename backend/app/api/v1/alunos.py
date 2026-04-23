@@ -85,15 +85,14 @@ def register(parent: Blueprint) -> None:
     def update_aluno(aluno_id: int):
         data = request.get_json() or {}
         try:
-            # Partial validation
             payload = AlunoUpdate(**data)
         except ValidationError as e:
             return jsonify(e.errors()), 400
-            
+
         user_id = int(get_jwt_identity())
         with session_scope() as session:
             service = AlunoService(session, user_id=user_id)
-            aluno = service.update_aluno(aluno_id, data)
+            aluno = service.update_aluno(aluno_id, payload.model_dump(exclude_unset=True))
             if not aluno:
                 return jsonify({"error": "Aluno não encontrado"}), 404
             from ...core.cache import invalidate_tenant_cache

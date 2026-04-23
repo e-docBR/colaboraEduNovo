@@ -1,5 +1,5 @@
 """Turmas endpoints."""
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt, jwt_required
 from urllib.parse import unquote
 
@@ -37,5 +37,41 @@ def register(parent: Blueprint) -> None:
                 return jsonify({"turma": turma_decoded, "alunos": [], "total": 0}), 200
 
             return jsonify(result.model_dump())
+
+    @bp.patch("/turmas/<path:turma_slug>")
+    @jwt_required()
+    @require_roles("admin", "super_admin", "coordenador", "diretor")
+    def rename_turma(turma_slug: str):
+        slug_decoded = unquote(turma_slug)
+        data = request.get_json() or {}
+        new_nome = data.get("nome", "").strip()
+        new_turno = data.get("turno", "").strip() or None
+
+        if not new_nome:
+            return jsonify({"error": "Nome da turma é obrigatório"}), 400
+
+        with session_scope() as session:
+            service = TurmaService(session)
+            count = service.rename_turma(slug_decoded, new_nome, new_turno)
+            if count is None:
+                return jsonify({"error": "Turma não encontrada"}), 404
+            from ...core.cache import invalidate_tenant_cache
+            invalidate_tenant_cache()
+            return jsonify({"updated": count, "turma": new_nome})
+
+    @bp.delete("/turmas/<path:turma_slug>")
+    @jwt_required()
+    @require_roles("admin", "super_admin", "diretor")
+    def delete_turma(turma_slug: str):
+        slug_decoded = unquote(turma_slug)
+
+        with session_scope() as session:
+            service = TurmaService(session)
+            count = service.delete_turma(slug_decoded)
+            if count is None:
+                return jsonify({"error": "Turma não encontrada"}), 404
+            from ...core.cache import invalidate_tenant_cache
+            invalidate_tenant_cache()
+            return jsonify({"deleted": count})
 
     parent.register_blueprint(bp)

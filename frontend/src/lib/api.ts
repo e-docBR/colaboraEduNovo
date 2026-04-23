@@ -505,6 +505,21 @@ export const api = createApi({
       }),
       providesTags: (result, _error, slug) => ["Turmas", { type: "Turmas", id: slug }]
     }),
+    updateTurma: builder.mutation<{ updated: number; turma: string }, { slug: string; nome: string; turno?: string }>({
+      query: ({ slug, ...body }) => ({
+        url: `/turmas/${slug}`,
+        method: "PATCH",
+        body
+      }),
+      invalidatesTags: ["Turmas", "Alunos", "Dashboard"]
+    }),
+    deleteTurma: builder.mutation<{ deleted: number }, string>({
+      query: (slug) => ({
+        url: `/turmas/${slug}`,
+        method: "DELETE"
+      }),
+      invalidatesTags: ["Turmas", "Alunos", "Dashboard"]
+    }),
     uploadBoletim: builder.mutation<UploadBoletimResponse, UploadBoletimPayload>({
       query: ({ file, turno, turma }) => {
         const formData = new FormData();
@@ -790,6 +805,8 @@ export const {
   useListAlunosQuery,
   useListTurmasQuery,
   useGetTurmaAlunosQuery,
+  useUpdateTurmaMutation,
+  useDeleteTurmaMutation,
   useUploadBoletimMutation,
   useGetRelatorioQuery,
   useGetGraficoQuery,

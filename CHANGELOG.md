@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [1.5.1] - 2026-04-23
 
+### Novas Funcionalidades
+- **Gestão de Turmas (CRUD)**:
+    - Adicionado suporte para renomear turmas (`PATCH /turmas/<slug>`) e alterar seus turnos.
+    - Adicionado suporte para excluir turmas inteiras e todos os alunos associados (`DELETE /turmas/<slug>`).
+    - Interface (`TurmasPage`) atualizada com botões de edição e exclusão (restrito a administradores), com modais de confirmação.
+
 ### Bugs Corrigidos
 - **Upload de PDF (`IndentationError`)**: Corrigido recuo incorreto no `ingestion.py` que impedia o processamento de PDFs em background.
 - **Constraints de Situação no Banco de Dados**: Expandido `CheckConstraint` da tabela `notas` para aceitar novos códigos reais de escolas (`EMC`, `EMR`, `AFC`, `DPC`, `TRN`, `ABA`).

@@ -98,3 +98,42 @@ class TurmaRepository(BaseRepository[Aluno]):
             .order_by(Nota.aluno_id, Nota.disciplina)
             .all()
         )
+
+    def rename_turma(self, old_name: str, new_name: str, new_turno: Optional[str] = None) -> int:
+        from flask import g
+        tenant_id = getattr(g, "tenant_id", None)
+        academic_year_id = getattr(g, "academic_year_id", None)
+
+        query = self.session.query(Aluno).filter(Aluno.turma == old_name)
+        if tenant_id:
+            query = query.filter(Aluno.tenant_id == tenant_id)
+        if academic_year_id:
+            query = query.filter(Aluno.academic_year_id == academic_year_id)
+
+        alunos = query.all()
+        for aluno in alunos:
+            aluno.turma = new_name
+            if new_turno:
+                aluno.turno = new_turno
+        self.session.commit()
+        return len(alunos)
+
+    def delete_turma(self, turma_nome: str) -> int:
+        from flask import g
+        tenant_id = getattr(g, "tenant_id", None)
+        academic_year_id = getattr(g, "academic_year_id", None)
+
+        alunos = self.get_alunos_by_turma(turma_nome)
+        aluno_ids = [a.id for a in alunos]
+
+        if aluno_ids:
+            self.session.query(Nota).filter(Nota.aluno_id.in_(aluno_ids)).delete(synchronize_session=False)
+            query = self.session.query(Aluno).filter(Aluno.turma == turma_nome)
+            if tenant_id:
+                query = query.filter(Aluno.tenant_id == tenant_id)
+            if academic_year_id:
+                query = query.filter(Aluno.academic_year_id == academic_year_id)
+            query.delete(synchronize_session=False)
+            self.session.commit()
+
+        return len(aluno_ids)

@@ -101,6 +101,18 @@ class TurmaService:
             alunos=alunos_payload
         )
 
+    def rename_turma(self, slug: str, new_nome: str, new_turno: Optional[str] = None) -> Optional[int]:
+        turma_real = self.repository.get_real_name(slug, self._slugify)
+        if not turma_real:
+            return None
+        return self.repository.rename_turma(turma_real, new_nome, new_turno)
+
+    def delete_turma(self, slug: str) -> Optional[int]:
+        turma_real = self.repository.get_real_name(slug, self._slugify)
+        if not turma_real:
+            return None
+        return self.repository.delete_turma(turma_real)
+
     def _calcular_media(self, notas: List[Nota]) -> Optional[float]:
         valores = [float(n.total) for n in notas if n.total is not None]
         if not valores:

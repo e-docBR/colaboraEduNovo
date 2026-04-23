@@ -10,6 +10,7 @@ import {
   CircularProgress,
   Divider,
   Link,
+  Snackbar,
   Stack,
   Table,
   TableBody,
@@ -105,6 +106,7 @@ export const AlunoDetailPage = () => {
   const [editingNota, setEditingNota] = useState<AlunoNota | null>(null);
   const [editingAluno, setEditingAluno] = useState(false);
   const [deletingAluno, setDeletingAluno] = useState(false);
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: "success" | "error" }>({ open: false, message: "", severity: "success" });
 
   const [updateAluno, { isLoading: isUpdating }] = useUpdateAlunoMutation();
   const [deleteAluno, { isLoading: isDeleting }] = useDeleteAlunoMutation();
@@ -113,8 +115,10 @@ export const AlunoDetailPage = () => {
     try {
       await updateAluno({ id: Number(alunoId), ...formData }).unwrap();
       setEditingAluno(false);
+      setSnackbar({ open: true, message: "Aluno atualizado com sucesso!", severity: "success" });
     } catch (error) {
       console.error("Failed to update aluno", error);
+      setSnackbar({ open: true, message: "Erro ao salvar. Tente novamente.", severity: "error" });
     }
   };
 
@@ -477,6 +481,16 @@ export const AlunoDetailPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar(s => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity={snackbar.severity} onClose={() => setSnackbar(s => ({ ...s, open: false }))}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Stack>
 
   );
