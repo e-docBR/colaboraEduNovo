@@ -9,6 +9,18 @@ from werkzeug.utils import secure_filename
 from ...core.config import settings
 from ...services import enqueue_pdf
 
+_PDF_MAGIC = b"%PDF-"
+_MAX_EXTENSION = ".pdf"
+
+
+def _is_valid_pdf(file_stream) -> bool:
+    """Verifica se o arquivo contém o magic bytes de PDF nos primeiros 1024 bytes.
+    Busca dentro de 1024 bytes para aceitar PDFs com BOM UTF-8 ou whitespace antes do header.
+    """
+    header = file_stream.read(1024)
+    file_stream.seek(0)
+    return _PDF_MAGIC in header
+
 
 def register(parent: Blueprint) -> None:
     bp = Blueprint("uploads", __name__)
@@ -29,9 +41,35 @@ def register(parent: Blueprint) -> None:
         if not filename:
             return jsonify({"error": "nome de arquivo inválido"}), 400
 
-        upload_dir = Path(settings.upload_folder) / _normalize_segment(turno) / _normalize_segment(turma)
+        # Valida extensão
+        if not filename.lower().endswith(_MAX_EXTENSION):
+            return jsonify({"error": "apenas arquivos PDF são permitidos"}), 400
+
+        # Valida magic bytes (evita renomear outros tipos para .pdf)
+        if not _is_valid_pdf(file.stream):
+            return jsonify({"error": "arquivo inválido: não é um PDF"}), 400
+
+        # Valida tamanho: lê até MAX+1 bytes para detectar excesso sem ler tudo
+        max_bytes = settings.max_upload_size_mb * 1024 * 1024
+        file.stream.seek(0, 2)  # seek to end
+        file_size = file.stream.tell()
+        file.stream.seek(0)
+        if file_size > max_bytes:
+            return jsonify({"error": f"arquivo muito grande (máximo {settings.max_upload_size_mb} MB)"}), 413
+
+        base_upload = Path(settings.upload_folder).resolve()
+        upload_dir = (base_upload / _normalize_segment(turno) / _normalize_segment(turma)).resolve()
+        filepath = (upload_dir / filename).resolve()
+
+        # C5: validate paths BEFORE creating any directories
+        base_str = str(base_upload)
+        if not str(upload_dir).startswith(base_str + "/") and str(upload_dir) != base_str:
+            return jsonify({"error": "caminho de arquivo inválido"}), 400
+        if not str(filepath).startswith(base_str + "/"):
+            return jsonify({"error": "caminho de arquivo inválido"}), 400
+
         upload_dir.mkdir(parents=True, exist_ok=True)
-        filepath = upload_dir / filename
+
         file.save(filepath)
 
         from flask import g

@@ -1,6 +1,7 @@
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 from loguru import logger
 import pickle
 from pathlib import Path
@@ -9,12 +10,10 @@ from ..core.database import SessionLocal
 
 MODEL_PATH = Path(__file__).resolve().parents[3] / "data" / "risk_model.pkl"
 
-def train_risk_model():
+def train_risk_model(session: Session):
     """
     Trains a simple logistic regression model to predict failure risk.
-    Since we lack historical data, we use current data with heuristic labelling as a 'bootstrap'.
     """
-    session = SessionLocal()
     try:
         # 1. Fetch Data
         stm = select(Aluno)
@@ -62,27 +61,26 @@ def train_risk_model():
         with open(MODEL_PATH, "wb") as f:
             pickle.dump(model, f)
             
-        logger.info(f"Risk model trained on {len(df)} records. Accuracy: {model.score(X, y):.2f}")
+    except Exception as e:
+        logger.error(f"Training failed: {e}")
         
-    finally:
-        session.close()
+from sqlalchemy.orm import Session
 
-def predict_risk(aluno_id: int) -> float:
+def predict_risk(aluno_id: int, session: Session) -> dict:
     """
-    Returns probability of risk (0.0 to 1.0) for a given student.
+    Returns probability and insights about failure risk for a student.
     """
     if not MODEL_PATH.exists():
         logger.info("Model not found, training new one...")
-        train_risk_model()
+        train_risk_model(session)
         
     try:
         with open(MODEL_PATH, "rb") as f:
             model = pickle.load(f)
             
-        session = SessionLocal()
         aluno = session.get(Aluno, aluno_id)
         if not aluno:
-            return 0.0
+            return {"score": 0.0, "status": "INEXISTENTE"}
             
         # Extract features
         total_score = 0
@@ -95,18 +93,28 @@ def predict_risk(aluno_id: int) -> float:
             total_score += score
             faltas += (nota.faltas or 0)
             
+        num_notas = len(aluno.notas)
+        mean_score = total_score / num_notas if num_notas else 0
+        
         features = pd.DataFrame([{
-            "mean_score": total_score / len(aluno.notas) if aluno.notas else 0,
+            "mean_score": mean_score,
             "low_grades": low_grades_count,
             "faltas": faltas
         }])
         
-        # Predict probability of class 1 (Risk)
-        risk_prob = model.predict_proba(features)[0][1]
-        return float(risk_prob)
+        # Predict probability
+        risk_prob = float(model.predict_proba(features)[0][1])
+        
+        return {
+            "score": round(risk_prob, 2),
+            "status": "ALTO" if risk_prob > 0.7 else "MEDIO" if risk_prob > 0.4 else "BAIXO",
+            "factors": {
+                "media_geral": round(mean_score, 1),
+                "disciplinas_abaixo_60": low_grades_count,
+                "total_faltas": faltas
+            }
+        }
         
     except Exception as e:
         logger.error(f"Prediction failed: {e}")
-        return 0.0
-    finally:
-        session.close()
+        return {"score": 0.0, "status": "ERRO", "error": str(e)}

@@ -33,7 +33,14 @@ class TenantQuery(Query):
 # A simpler approach is to modify the get_all/filter methods in Repositories or use a Session event.
 # However, 'do_orm_execute' in SQLAlchemy 1.4+ is the modern way.
 
-engine = create_engine(settings.database_url)
+engine = create_engine(
+    settings.database_url,
+    pool_size=20,
+    max_overflow=10,
+    pool_recycle=3600,
+    pool_pre_ping=True,
+    connect_args={"connect_timeout": 5} if not settings.database_url.startswith("sqlite") else {},
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 @event.listens_for(SessionLocal, "do_orm_execute")

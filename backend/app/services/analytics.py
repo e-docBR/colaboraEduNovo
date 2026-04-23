@@ -153,20 +153,17 @@ def build_teacher_dashboard(session: Session, query: str | None = None, turno: s
     risky_students = session.execute(stm_risk).all()
     
     alerts = []
-    # Import locally to avoid circular dependencies if any
-    try:
-        from .ai_predictor import predict_risk
-    except ImportError:
-        def predict_risk(aid): return 0.5
+    from .ai_predictor import predict_risk
 
     for aluno, media in risky_students:
-        score = predict_risk(aluno.id)
+        prediction = predict_risk(aluno.id, session)
         alerts.append({
             "id": aluno.id,
             "nome": aluno.nome,
             "turma": aluno.turma,
             "media": round(media, 1),
-            "risk_score": score
+            "risk_score": prediction.get("score", 0.0),
+            "risk_status": prediction.get("status", "BAIXO")
         })
 
     # 3. Classes Count

@@ -1,5 +1,6 @@
 import {
   Alert,
+  Badge,
   Box,
   Card,
   CardContent,
@@ -23,15 +24,16 @@ import {
   Paper,
   Button
 } from "@mui/material";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import GradeIcon from "@mui/icons-material/Grade";
 import DownloadIcon from "@mui/icons-material/Download";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import NotificationsIcon from "@mui/icons-material/Notifications";
 import CircleIcon from "@mui/icons-material/Circle";
+import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 
 import { useAppSelector } from "../../app/hooks";
-import { useGetAlunoQuery, useListComunicadosQuery, useListOcorrenciasQuery } from "../../lib/api";
+import { useGetAlunoQuery, useListComunicadosQuery, useListOcorrenciasQuery, useMarkComunicadoReadMutation } from "../../lib/api";
 
 const formatNota = (value?: number | null) => (typeof value === "number" ? value.toFixed(1) : "-");
 
@@ -59,11 +61,24 @@ export const MeuBoletimPage = () => {
     skip: !alunoId
   });
 
-  const { data: comunicados } = useListComunicadosQuery(undefined, {
+  const { data: comunicadosData } = useListComunicadosQuery(undefined, {
     skip: !alunoId
   });
+  const comunicados = comunicadosData?.items;
+  const unreadCount = comunicados?.filter((c) => !c.is_read).length ?? 0;
+
+  const [markRead] = useMarkComunicadoReadMutation();
 
   const token = useAppSelector((state) => state.auth.accessToken);
+
+  // Mark unread comunicados as read when switching to the recados tab
+  useEffect(() => {
+    if (tab === 2 && comunicados) {
+      comunicados.filter((c) => !c.is_read).forEach((c) => {
+        markRead(c.id);
+      });
+    }
+  }, [tab, comunicados, markRead]);
 
   const handleDownloadPdf = async () => {
     if (!alunoId || !token) return;
@@ -131,7 +146,15 @@ export const MeuBoletimPage = () => {
               <Typography variant="body2" color="text.secondary">
                 Média geral
               </Typography>
-              <Typography fontWeight={600} color={data.media && data.media < 14 ? "error.main" : "success.main"}>
+              <Typography fontWeight={600} color={
+                data.media === null || data.media === undefined
+                  ? "text.primary"
+                  : data.media < 50
+                    ? "error.main"
+                    : data.media < 60
+                      ? "warning.main"
+                      : "success.main"
+              }>
                 {typeof data.media === "number" ? data.media.toFixed(1) : "-"}
               </Typography>
             </Box>
@@ -153,7 +176,15 @@ export const MeuBoletimPage = () => {
         <Tabs value={tab} onChange={(_, v) => setTab(v)} aria-label="boletim tabs">
           <Tab label="Boletim" icon={<GradeIcon />} iconPosition="start" />
           <Tab label="Minhas Ocorrências" icon={<WarningAmberIcon />} iconPosition="start" />
-          <Tab label="Meus Recados" icon={<NotificationsIcon />} iconPosition="start" />
+          <Tab
+            label={
+              <Badge badgeContent={unreadCount} color="error" max={99}>
+                <Box pr={unreadCount > 0 ? 1.5 : 0}>Meus Recados</Box>
+              </Badge>
+            }
+            icon={<NotificationsIcon />}
+            iconPosition="start"
+          />
         </Tabs>
       </Box>
 
@@ -210,18 +241,37 @@ export const MeuBoletimPage = () => {
                       </ListItemIcon>
                       <ListItemText
                         primary={
-                          <Typography fontWeight={600} component="div">
-                            {oc.tipo}
-                            <Typography component="span" variant="caption" color="text.secondary" ml={2}>
+                          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" component="div">
+                            <Typography fontWeight={600} component="span">
+                              {oc.tipo}
+                            </Typography>
+                            {oc.gravidade && (
+                              <Chip
+                                label={oc.gravidade}
+                                size="small"
+                                color={
+                                  oc.gravidade === "GRAVÍSSIMA" ? "error" :
+                                  oc.gravidade === "GRAVE" ? "warning" :
+                                  "default"
+                                }
+                                sx={{ height: 18, fontSize: "0.6rem", fontWeight: 700 }}
+                              />
+                            )}
+                            <Typography component="span" variant="caption" color="text.secondary">
                               {new Date(oc.data_registro).toLocaleDateString()}
                             </Typography>
-                          </Typography>
+                          </Stack>
                         }
                         secondary={
                           <>
                             <Typography component="span" variant="body2" color="text.primary" display="block">
                               {oc.descricao}
                             </Typography>
+                            {oc.acao_tomada && (
+                              <Typography component="span" variant="caption" color="text.secondary" display="block">
+                                Ação: {oc.acao_tomada}
+                              </Typography>
+                            )}
                             <Typography component="span" variant="caption" color="text.secondary">
                               Registrado por: {oc.autor_nome}
                             </Typography>
@@ -250,14 +300,30 @@ export const MeuBoletimPage = () => {
             </Card>
           ) : (
             comunicados.map((recado) => (
-              <Card key={recado.id} variant="outlined">
+              <Card
+                key={recado.id}
+                variant="outlined"
+                sx={{
+                  borderColor: recado.is_read ? "divider" : "primary.light",
+                  bgcolor: recado.is_read ? "background.paper" : "primary.50",
+                }}
+              >
                 <CardContent>
                   <Stack direction="row" spacing={1} alignItems="center" mb={1}>
-                    <NotificationsIcon color="primary" fontSize="small" />
-                    <Typography fontWeight={600} variant="subtitle1">
+                    <NotificationsIcon color={recado.is_read ? "action" : "primary"} fontSize="small" />
+                    <Typography fontWeight={recado.is_read ? 500 : 700} variant="subtitle1" flex={1}>
                       {recado.titulo}
                     </Typography>
-                    <Chip label={new Date(recado.data_envio).toLocaleDateString()} size="small" />
+                    {!recado.is_read && (
+                      <Chip
+                        label="Novo"
+                        size="small"
+                        color="primary"
+                        icon={<FiberManualRecordIcon style={{ fontSize: 8 }} />}
+                        sx={{ height: 20, fontSize: "0.65rem", fontWeight: 700 }}
+                      />
+                    )}
+                    <Chip label={new Date(recado.data_envio).toLocaleDateString()} size="small" variant="outlined" />
                   </Stack>
                   <Typography variant="body2" color="text.secondary" paragraph>
                     {recado.conteudo}

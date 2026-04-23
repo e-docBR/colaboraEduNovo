@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, Text, DateTime, ForeignKey
+from sqlalchemy import String, Text, DateTime, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..core.database import Base
@@ -9,10 +9,13 @@ class Comunicado(Base, TenantYearMixin):
     __tablename__ = "comunicados"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    
+
     titulo: Mapped[str] = mapped_column(String(200), nullable=False)
     conteudo: Mapped[str] = mapped_column(Text, nullable=False)
-    data_envio: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    # M4: server_default avoids the datetime.now-at-import-time bug
+    data_envio: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     
     autor_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False)
     autor = relationship("Usuario")
@@ -23,7 +26,7 @@ class Comunicado(Base, TenantYearMixin):
     
     arquivado: Mapped[bool] = mapped_column(default=False)
 
-    def to_dict(self, user_id=None):
+    def to_dict(self):
         data = {
             "id": self.id,
             "titulo": self.titulo,

@@ -9,14 +9,17 @@ import {
   Chip,
   Grid2 as Grid,
   Skeleton,
+  Snackbar,
   Stack,
   TextField,
+  Tooltip,
   Typography,
   Dialog,
   DialogContent,
   DialogTitle
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import { useMemo, useState } from "react";
 import { Link as RouterLink, useSearchParams } from "react-router-dom";
 
@@ -47,6 +50,15 @@ const getMediaColor = (media?: number | null): "default" | "success" | "warning"
   return "warning";
 };
 
+type RiskLevel = "ALTO" | "MEDIO" | null;
+
+const getRiskLevel = (media?: number | null, faltas?: number | null): RiskLevel => {
+  if (media === undefined || media === null) return null;
+  if (media < 50 || (faltas !== null && faltas !== undefined && faltas > 15)) return "ALTO";
+  if (media < 60 || (faltas !== null && faltas !== undefined && faltas > 10)) return "MEDIO";
+  return null;
+};
+
 
 export const AlunosPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -64,6 +76,7 @@ export const AlunosPage = () => {
   const [turno, setTurno] = useState("");
   const [turma, setTurma] = useState("");
   const [open, setOpen] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const user = useAppSelector((state) => state.auth.user);
   const [createAluno, { isLoading: isCreating }] = useCreateAlunoMutation();
@@ -72,8 +85,9 @@ export const AlunosPage = () => {
     try {
       await createAluno(data).unwrap();
       setOpen(false);
-    } catch (error) {
-      console.error("Failed to create aluno", error);
+    } catch (error: any) {
+      const msg = error?.data?.error ?? error?.data?.message ?? "Erro ao cadastrar aluno. Tente novamente.";
+      setCreateError(msg);
     }
   };
 
@@ -243,7 +257,11 @@ export const AlunosPage = () => {
                 elevation={0}
                 sx={{
                   border: "1px solid",
-                  borderColor: "divider",
+                  borderColor: getRiskLevel(aluno.media, aluno.faltas) === "ALTO"
+                    ? "error.light"
+                    : getRiskLevel(aluno.media, aluno.faltas) === "MEDIO"
+                    ? "warning.light"
+                    : "divider",
                   height: "100%",
                   transition: "all 0.2s",
                   "&:hover": {
@@ -261,7 +279,9 @@ export const AlunosPage = () => {
                     <Stack direction="row" spacing={1.5} alignItems="flex-start" mb={1.5}>
                       <Avatar
                         sx={{
-                          bgcolor: "primary.main",
+                          bgcolor: getRiskLevel(aluno.media, aluno.faltas) === "ALTO"
+                            ? "error.main"
+                            : "primary.main",
                           width: 40,
                           height: 40,
                           fontSize: "0.875rem",
@@ -289,8 +309,23 @@ export const AlunosPage = () => {
                           {aluno.turma}
                         </Typography>
                       </Box>
+                      {getRiskLevel(aluno.media, aluno.faltas) && (
+                        <Tooltip
+                          title={
+                            getRiskLevel(aluno.media, aluno.faltas) === "ALTO"
+                              ? "Alto risco de reprovação"
+                              : "Atenção: desempenho abaixo da média"
+                          }
+                        >
+                          <WarningAmberIcon
+                            fontSize="small"
+                            color={getRiskLevel(aluno.media, aluno.faltas) === "ALTO" ? "error" : "warning"}
+                            sx={{ flexShrink: 0, mt: 0.25 }}
+                          />
+                        </Tooltip>
+                      )}
                     </Stack>
-                    <Stack direction="row" spacing={1} alignItems="center">
+                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" gap={0.5}>
                       {aluno.status && (
                         <Chip
                           label={aluno.status}
@@ -327,6 +362,24 @@ export const AlunosPage = () => {
                           }}
                         />
                       )}
+                      {getRiskLevel(aluno.media, aluno.faltas) === "ALTO" && (
+                        <Chip
+                          label="Alto Risco"
+                          size="small"
+                          color="error"
+                          icon={<WarningAmberIcon style={{ fontSize: 10 }} />}
+                          sx={{ height: 20, fontSize: "0.625rem", fontWeight: 700 }}
+                        />
+                      )}
+                      {getRiskLevel(aluno.media, aluno.faltas) === "MEDIO" && (
+                        <Chip
+                          label="Em Atenção"
+                          size="small"
+                          color="warning"
+                          icon={<WarningAmberIcon style={{ fontSize: 10 }} />}
+                          sx={{ height: 20, fontSize: "0.625rem", fontWeight: 700 }}
+                        />
+                      )}
                     </Stack>
                   </CardContent>
                 </CardActionArea>
@@ -335,6 +388,17 @@ export const AlunosPage = () => {
           ))
         )}
       </Grid>
+
+      <Snackbar
+        open={!!createError}
+        autoHideDuration={6000}
+        onClose={() => setCreateError(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity="error" onClose={() => setCreateError(null)} sx={{ width: "100%" }}>
+          {createError}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

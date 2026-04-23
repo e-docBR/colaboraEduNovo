@@ -89,8 +89,14 @@ def process_pdf(filepath: Path, *, turno: str | None = None, turma: str | None =
     
     final_year_label = "Desconhecido"
 
-    # Resolve academic year if extracted from PDF
-    if extracted_year and tenant_id:
+    # Resolve academic year: explicit parameter takes priority over PDF-extracted year.
+    # The PDF year is only used as fallback when no academic_year_id is provided.
+    if academic_year_id:
+        with session_scope() as session:
+            year_obj = session.get(AcademicYear, academic_year_id)
+            if year_obj:
+                final_year_label = year_obj.label
+    elif extracted_year and tenant_id:
         with session_scope() as session:
             year_obj = session.query(AcademicYear).filter(
                 AcademicYear.tenant_id == tenant_id,
@@ -103,12 +109,6 @@ def process_pdf(filepath: Path, *, turno: str | None = None, turma: str | None =
                 logger.info("Created new AcademicYear {} for tenant {}", extracted_year, tenant_id)
             academic_year_id = year_obj.id
             final_year_label = year_obj.label
-    elif academic_year_id:
-        # Fetch label for passed ID
-         with session_scope() as session:
-            year_obj = session.get(AcademicYear, academic_year_id)
-            if year_obj:
-                final_year_label = year_obj.label
 
     count = 0
     if not records:
@@ -352,7 +352,6 @@ def _extract_single_student_meta(text: str) -> dict[str, str | None]:
         turma_content = turma_line.split(":", 1)[1].strip()
         principal = turma_content.split("- -")[0].strip()
         turma_name, turno_name = _split_turma_turno(principal)
-        turma_name, turno_name = _split_turma_turno(principal)
         meta["turma"] = _normalize_turma_name(turma_name, turno_name)
         meta["turno"] = turno_name
 
@@ -549,7 +548,52 @@ def _upsert_notas(session: Session, aluno: Aluno, notas: Sequence[ParsedNotaReco
         nota.trimestre3 = nota_data.trimestre3
         nota.total = nota_data.total
         nota.faltas = nota_data.faltas or 0
-        nota.situacao = nota_data.situacao
+        nota.situacao = _normalize_situacao(nota_data.situacao)
+
+
+# All situacao codes accepted by the DB check constraint.
+_VALID_SITUACAO = frozenset({
+    "APR", "REP", "REC", "APCC", "AR",
+    "EMC", "EMR", "AFC", "DPC", "TRN", "ABA",
+})
+
+# Map long-form / alternate labels found in real PDFs to canonical codes.
+_SITUACAO_ALIASES: dict[str, str] = {
+    "APROVADO": "APR",
+    "APROVADA": "APR",
+    "REPROVADO": "REP",
+    "REPROVADA": "REP",
+    "RECUPERACAO": "REC",
+    "RECUPERAÇÃO": "REC",
+    "EM RECUPERACAO": "REC",
+    "EM RECUPERAÇÃO": "REC",
+    "APROVADO POR CONSELHO": "APCC",
+    "APCC": "APCC",
+    "EM CURSO": "EMC",
+    "EMCURSO": "EMC",
+    "EM REGIME": "EMR",
+    "TRANSFERIDO": "TRN",
+    "TRANSFERIDA": "TRN",
+    "ABANDONO": "ABA",
+}
+
+
+def _normalize_situacao(value: str | None) -> str | None:
+    """Map raw PDF situacao text to a canonical DB-accepted code.
+
+    Returns None for unknown values to avoid CheckViolation crashes, logging
+    a warning so admins can add new aliases when new codes appear.
+    """
+    if not value:
+        return None
+    upper = value.strip().upper()
+    if upper in _VALID_SITUACAO:
+        return upper
+    alias = _SITUACAO_ALIASES.get(upper)
+    if alias:
+        return alias
+    logger.warning("Situacao desconhecida '{}' encontrada no PDF — será ignorada. Adicione ao _SITUACAO_ALIASES se necessário.", value)
+    return None
 
 
 def _normalize_header(value: str | None) -> str | None:

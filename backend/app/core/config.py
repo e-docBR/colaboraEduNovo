@@ -2,7 +2,7 @@
 from functools import lru_cache
 from typing import List
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
     allowed_origins: List[str] = Field(default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"], alias="ALLOWED_ORIGINS")
     upload_folder: str = Field(default="../data/uploads", alias="UPLOAD_FOLDER")
+    max_upload_size_mb: int = Field(default=20, alias="MAX_UPLOAD_SIZE_MB")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     flask_debug: bool = Field(default=False, alias="FLASK_DEBUG")
     
@@ -27,7 +28,11 @@ class Settings(BaseSettings):
     # WhatsApp Settings (Webhook/Evolution API)
     whatsapp_api_url: str = Field(default="", alias="WHATSAPP_API_URL")
     whatsapp_api_token: str = Field(default="", alias="WHATSAPP_API_TOKEN")
-    whatsapp_instance: str = Field(default="", alias="WHATSAPP_INSTANCE")
+    # Commercial Settings
+    commercial_mode: str = Field(default="saas", alias="COMMERCIAL_MODE") # saas or dedicated
+    enable_registration: bool = Field(default=True, alias="ENABLE_REGISTRATION")
+    brand_name: str = Field(default="ColaboraEdu", alias="BRAND_NAME")
+    frontend_url: str = Field(default="http://localhost:5173", alias="FRONTEND_URL")
 
     model_config = {
         "env_file": ".env",
@@ -36,6 +41,15 @@ class Settings(BaseSettings):
         "populate_by_name": True,
         "extra": "ignore"
     }
+
+    @model_validator(mode='after')
+    def validate_production_secrets(self) -> 'Settings':
+        if self.environment == "production":
+            if self.secret_key in ("dev-key", "") or len(self.secret_key) < 32:
+                raise ValueError("SECRET_KEY insegura para produção")
+            if self.jwt_secret_key in ("dev-jwt", "") or len(self.jwt_secret_key) < 32:
+                raise ValueError("JWT_SECRET_KEY insegura para produção")
+        return self
 
 
 @lru_cache

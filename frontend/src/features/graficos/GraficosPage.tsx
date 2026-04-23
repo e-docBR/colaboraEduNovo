@@ -23,9 +23,13 @@ import {
   useTheme,
   Paper,
   Divider,
-  Fade
+  Fade,
+  Menu
 } from "@mui/material";
 import { useMemo, useState } from "react";
+import { useSelector } from "react-redux";
+import type { RootState } from "../../app/store";
+import FileDownloadIcon from "@mui/icons-material/FileDownload";
 import BarChartIcon from "@mui/icons-material/BarChart";
 import ShowChartIcon from "@mui/icons-material/ShowChart";
 import PieChartIcon from "@mui/icons-material/PieChart";
@@ -103,6 +107,55 @@ export const GraficosPage = () => {
   const [trimestre, setTrimestre] = useState("3");
   const [disciplina, setDisciplina] = useState("");
   const chart = CHARTS_BY_SLUG[chartSlug];
+
+  const token = useSelector((state: RootState) => state.auth.accessToken);
+  const tenantId = useSelector((state: RootState) => state.app.tenantId);
+  const academicYearId = useSelector((state: RootState) => state.app.academicYearId);
+  
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+
+  const handleExportClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+  const handleExportClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleExport = async (format: "csv" | "xlsx") => {
+    handleExportClose();
+    try {
+      const qs = new URLSearchParams();
+      if (chart.supportsTurno && turno) qs.set("turno", turno);
+      if (chart.supportsSerie && serie) qs.set("serie", serie);
+      if (chart.supportsTurma && turma) qs.set("turma", turma);
+      if (chart.supportsTrimestre && trimestre) qs.set("trimestre", trimestre);
+      if (chart.supportsDisciplina && disciplina) qs.set("disciplina", disciplina);
+      qs.set("format", format);
+
+      const url = `/api/v1/relatorios/${chartSlug}?${qs.toString()}`;
+      
+      const headers: Record<string, string> = {
+        "Authorization": `Bearer ${token}`
+      };
+      if (tenantId) headers["X-Tenant-ID"] = String(tenantId);
+      if (academicYearId) headers["x-academic-year-id"] = String(academicYearId);
+
+      const res = await fetch(url, { headers });
+      if (!res.ok) throw new Error("Erro na exportação");
+      
+      const blob = await res.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = `relatorio_${chartSlug}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (e) {
+      console.error("Falha ao exportar:", e);
+    }
+  };
 
   const { data: turmasData } = useListTurmasQuery();
   const turmaOptions = useMemo(() => turmasData?.items ?? [], [turmasData]);
@@ -578,6 +631,25 @@ export const GraficosPage = () => {
               >
                 Limpar
               </Button>
+              
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={<FileDownloadIcon />}
+                onClick={handleExportClick}
+                disabled={!hasData || isLoading || isFetching}
+                sx={{ borderRadius: 2 }}
+              >
+                Exportar
+              </Button>
+              <Menu
+                anchorEl={anchorEl}
+                open={Boolean(anchorEl)}
+                onClose={handleExportClose}
+              >
+                <MenuItem onClick={() => handleExport("xlsx")}>Exportar XLSX (Excel)</MenuItem>
+                <MenuItem onClick={() => handleExport("csv")}>Exportar CSV</MenuItem>
+              </Menu>
             </Paper>
 
             {/* Chart Card */}

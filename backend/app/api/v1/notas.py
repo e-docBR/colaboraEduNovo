@@ -82,6 +82,8 @@ def register(parent: Blueprint) -> None:
         turma = request.args.get("turma")
         turno = request.args.get("turno")
         disciplina = request.args.get("disciplina")
+        page = max(1, int(request.args.get("page", 1)))
+        per_page = min(500, int(request.args.get("per_page", 20)))
 
         from flask import g
         tenant_id = getattr(g, "tenant_id", None)
@@ -104,12 +106,20 @@ def register(parent: Blueprint) -> None:
                 if turno:
                     query = query.filter(Aluno.turno == turno)
 
-            notas = query.limit(200).all()
+            total = query.count()
+            notas = query.offset((page - 1) * per_page).limit(per_page).all()
             
             # Serialize within session context to avoid DetachedInstanceError
             items = [serialize_nota_row(nota, nota.aluno) for nota in notas]
 
-        return jsonify({"items": items, "total": len(items)})
+        return jsonify({
+            "items": items,
+            "meta": {
+                "page": page,
+                "per_page": per_page,
+                "total": total
+            }
+        })
 
     @bp.patch("/notas/<int:nota_id>")
     @jwt_required()
@@ -128,7 +138,12 @@ def register(parent: Blueprint) -> None:
         user_id = int(get_jwt_identity())
 
         with session_scope() as session:
-            nota = session.get(Nota, nota_id)
+            from flask import g
+            nota = (
+                session.query(Nota)
+                .filter(Nota.id == nota_id, Nota.tenant_id == g.tenant_id)
+                .first()
+            )
             if not nota:
                 return jsonify({"error": "Nota não encontrada"}), 404
             
@@ -144,17 +159,16 @@ def register(parent: Blueprint) -> None:
             for key, value in updates.items():
                 setattr(nota, key, value)
             
-            # Auto-calculate total if not explicitly provided and trimesters changed
+            # Auto-calculate total if not explicitly provided and trimesters changed.
+            # Only non-None trimester values count — a missing grade is not a zero.
             if "total" not in updates:
-                # If any trimester was updated, re-sum
                 if any(k in updates for k in ["trimestre1", "trimestre2", "trimestre3"]):
-                    t1 = float(nota.trimestre1) if nota.trimestre1 is not None else 0.0
-                    t2 = float(nota.trimestre2) if nota.trimestre2 is not None else 0.0
-                    t3 = float(nota.trimestre3) if nota.trimestre3 is not None else 0.0
-                    # Only sum if at least one is present? Or treat None as 0? 
-                    # Let's treat None as 0 for sum purposes, but if all are None, total might be None?
-                    # Current logic: Sum distinct values.
-                    nota.total = t1 + t2 + t3
+                    values = [
+                        float(v)
+                        for v in [nota.trimestre1, nota.trimestre2, nota.trimestre3]
+                        if v is not None
+                    ]
+                    nota.total = sum(values) / len(values) if values else None
 
             session.add(nota)
             session.flush()

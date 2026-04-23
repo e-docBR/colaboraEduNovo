@@ -1,0 +1,75 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type 'deploy' to confirm production deployment"
+        required: true
+
+jobs:
+  guard:
+    name: Confirm deployment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation
+        if: github.event.inputs.confirm != 'deploy'
+        run: |
+          echo "❌ Deployment cancelled — confirmation input must be 'deploy'."
+          exit 1
+
+  deploy:
+    name: Deploy to Hetzner
+    runs-on: ubuntu-latest
+    needs: guard
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Sync files to server
+        run: |
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='.venv' \
+            --exclude='node_modules' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.env' \
+            --exclude='data/' \
+            --exclude='letsencrypt/' \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            ./ "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.SERVER_PATH }}/"
+
+      - name: Deploy on server
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+              -o StrictHostKeyChecking=no \
+              "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+              "cd ${{ secrets.SERVER_PATH }} && \
+               docker compose -f docker-compose.prod.yml pull 2>/dev/null || true && \
+               docker compose -f docker-compose.prod.yml up -d --build --remove-orphans && \
+               docker compose -f docker-compose.prod.yml exec -T backend flask --app app db upgrade && \
+               docker image prune -f"
+
+      - name: Smoke test
+        run: |
+          sleep 15
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://${{ secrets.DOMAIN }}/health")
+          if [ "$STATUS" != "200" ]; then
+            echo "❌ Health check failed — HTTP $STATUS"
+            exit 1
+          fi
+          echo "✅ Deployed successfully — /health returned 200"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Deployment failed — check GitHub Actions logs."
+          # Extend here with Slack/Telegram/email webhook if desired

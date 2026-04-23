@@ -10,8 +10,11 @@ class UsuarioRepository(BaseRepository[Usuario]):
         super().__init__(session, Usuario)
 
     def get_by_username(self, username: str) -> Optional[Usuario]:
+        """Busca por username exato ou, se o valor contiver '@', também por e-mail."""
         return self.session.execute(
-            select(Usuario).where(Usuario.username == username)
+            select(Usuario).where(
+                or_(Usuario.username == username, Usuario.email == username)
+            )
         ).scalar_one_or_none()
 
     def exists_username(self, username: str, exclude_id: Optional[int] = None) -> bool:

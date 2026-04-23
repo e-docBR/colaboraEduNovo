@@ -1,9 +1,12 @@
 """Alunos endpoints."""
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
+from pydantic import ValidationError
 
 from ...core.database import session_scope
+from ...core.decorators import require_roles, admin_required
 from ...services.aluno_service import AlunoService
+from ...schemas.aluno import AlunoCreate, AlunoUpdate
 
 
 def register(parent: Blueprint) -> None:
@@ -11,12 +14,14 @@ def register(parent: Blueprint) -> None:
 
     @bp.get("/alunos")
     @jwt_required()
+    @require_roles("admin", "super_admin", "coordenador", "diretor", "orientador", "professor")
     def list_alunos():
-        if "aluno" in (get_jwt().get("roles") or []):
-            return jsonify({"error": "Acesso restrito"}), 403
             
-        page = max(1, int(request.args.get("page", 1)))
-        per_page = min(10000, int(request.args.get("per_page", 20)))
+        try:
+            page = max(1, int(request.args.get("page", 1)))
+            per_page = min(200, int(request.args.get("per_page", 20)))
+        except (ValueError, TypeError):
+            page, per_page = 1, 20
         turno = request.args.get("turno")
         turma = request.args.get("turma")
         query_text = request.args.get("q")
@@ -57,45 +62,55 @@ def register(parent: Blueprint) -> None:
 
     @bp.post("/alunos")
     @jwt_required()
+    @require_roles("admin", "super_admin", "coordenador", "diretor", "orientador")
     def create_aluno():
-        roles = get_jwt().get("roles") or []
-        if not any(r in roles for r in ["admin", "super_admin", "coordenador", "diretor", "orientador"]):
-            return jsonify({"error": "Acesso negado. Apenas administradores podem criar alunos."}), 403
-            
-        data = request.get_json()
+        data = request.get_json() or {}
+        try:
+            # Validate input using Pydantic
+            payload = AlunoCreate(**data)
+        except ValidationError as e:
+             return jsonify(e.errors()), 400
+             
         user_id = int(get_jwt_identity())
         with session_scope() as session:
             service = AlunoService(session, user_id=user_id)
-            aluno = service.create_aluno(data)
+            aluno = service.create_aluno(payload.model_dump())
+            from ...core.cache import invalidate_tenant_cache
+            invalidate_tenant_cache()
             return jsonify(aluno.model_dump()), 201
 
     @bp.patch("/alunos/<int:aluno_id>")
     @jwt_required()
+    @require_roles("admin", "super_admin", "coordenador", "diretor", "orientador")
     def update_aluno(aluno_id: int):
-        roles = get_jwt().get("roles") or []
-        if not any(r in roles for r in ["admin", "super_admin", "coordenador", "diretor", "orientador"]):
-            return jsonify({"error": "Acesso negado. Apenas administradores podem editar alunos."}), 403
+        data = request.get_json() or {}
+        try:
+            # Partial validation
+            payload = AlunoUpdate(**data)
+        except ValidationError as e:
+            return jsonify(e.errors()), 400
             
-        data = request.get_json()
         user_id = int(get_jwt_identity())
         with session_scope() as session:
             service = AlunoService(session, user_id=user_id)
             aluno = service.update_aluno(aluno_id, data)
             if not aluno:
                 return jsonify({"error": "Aluno não encontrado"}), 404
+            from ...core.cache import invalidate_tenant_cache
+            invalidate_tenant_cache()
             return jsonify(aluno.model_dump())
 
     @bp.delete("/alunos/<int:aluno_id>")
     @jwt_required()
+    @require_roles("admin", "super_admin", "coordenador", "diretor")
     def delete_aluno(aluno_id: int):
-        roles = get_jwt().get("roles") or []
-        if not any(r in roles for r in ["admin", "super_admin", "coordenador", "diretor", "orientador"]):
-            return jsonify({"error": "Acesso negado. Apenas administradores podem excluir alunos."}), 403
             
         user_id = int(get_jwt_identity())
         with session_scope() as session:
             service = AlunoService(session, user_id=user_id)
             if service.delete_aluno(aluno_id):
+                from ...core.cache import invalidate_tenant_cache
+                invalidate_tenant_cache()
                 return "", 204
             return jsonify({"error": "Aluno não encontrado"}), 404
 
@@ -117,11 +132,12 @@ def register(parent: Blueprint) -> None:
             tenant = session.get(Tenant, g.tenant_id)
             school_name = tenant.name if tenant else "ColaboraEDU"
             
-            year_label = "2025"
+            import datetime
+            year_label = str(datetime.date.today().year)
             if g.get("academic_year_id"):
-                 year = session.get(AcademicYear, g.academic_year_id)
-                 if year:
-                     year_label = year.label
+                year = session.get(AcademicYear, g.academic_year_id)
+                if year:
+                    year_label = year.label
 
             html = DocumentService.render_bulletin_html(aluno_data, school_name, year_label)
             pdf_bytes = DocumentService.generate_pdf_from_html(html)

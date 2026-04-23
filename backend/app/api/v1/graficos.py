@@ -10,6 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ...core.database import session_scope
+from ...core.cache import cache_response
 from ...models import Aluno, Nota
 
 DISCIPLINA_NORMALIZACAO = {
@@ -38,6 +39,7 @@ def register(parent: Blueprint) -> None:
 
     @bp.get("/graficos/<string:slug>")
     @jwt_required()
+    @cache_response(timeout=600, key_prefix="graficos")
     def get_grafico(slug: str):
         if "aluno" in (get_jwt().get("roles") or []):
             return jsonify({"error": "Acesso restrito"}), 403

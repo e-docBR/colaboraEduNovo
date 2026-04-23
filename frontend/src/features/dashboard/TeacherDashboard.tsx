@@ -32,6 +32,7 @@ import PersonIcon from "@mui/icons-material/Person";
 import { Link } from "react-router-dom";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { useGetTeacherDashboardQuery, useListTurmasQuery } from "../../lib/api";
+import { AIInterventionBoard } from "./AIInterventionBoard";
 
 export const TeacherDashboard = () => {
     const theme = useTheme();
@@ -279,6 +280,11 @@ export const TeacherDashboard = () => {
                     </Card>
                 </Grid>
             </Grid>
+
+            {/* AI Pedagogical Interventions */}
+            {data.alerts?.length > 0 && (
+                <AIInterventionBoard studentIds={data.alerts.map((a: any) => a.id)} />
+            )}
         </Box>
     );
 };

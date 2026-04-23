@@ -9,14 +9,16 @@ services:
       - "--entrypoints.websecure.address=:443"
       - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
       - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
-      - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL:-admin@example.com}"
+      - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+      - "--log.level=INFO"
+      - "--accesslog=true"
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "./letsencrypt:/letsencrypt"
+      - "letsencrypt:/letsencrypt"
     networks:
       - app_network
 
@@ -24,26 +26,29 @@ services:
     image: postgres:15-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-colabora_edu}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - app_network
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes
+    volumes:
+      - redis_data:/data
     networks:
       - app_network
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -53,16 +58,65 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
     environment:
       FLASK_APP: app
+      FLASK_ENV: production
       FLASK_DEBUG: "0"
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-colabora_edu}
-      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       ALLOWED_ORIGINS: '["https://${DOMAIN}"]'
       UPLOAD_FOLDER: /data/uploads
+      FRONTEND_URL: https://${DOMAIN}
+      BRAND_NAME: ${BRAND_NAME:-ColaboraEdu}
+      # SMTP — obrigatório para recuperação de senha
+      SMTP_SERVER: ${SMTP_SERVER}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM: ${SMTP_FROM}
+      # WhatsApp (opcional)
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-}
+      WHATSAPP_API_TOKEN: ${WHATSAPP_API_TOKEN:-}
     volumes:
       - ./data:/data
-    command: [ "gunicorn", "--bind", "0.0.0.0:5000", "--access-logfile", "-", "--error-logfile", "-", "app:create_app()" ]
+    command:
+      - gunicorn
+      - --bind=0.0.0.0:5000
+      - --workers=4
+      - --threads=4
+      - --worker-class=gthread
+      - --timeout=120
+      - --keep-alive=5
+      - --max-requests=1000
+      - --max-requests-jitter=100
+      - --access-logfile=-
+      - --error-logfile=-
+      - "app:create_app()"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      # HTTPS
+      - "traefik.http.routers.backend.rule=Host(`${DOMAIN}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.tls.certresolver=myresolver"
+      - "traefik.http.services.backend.loadbalancer.server.port=5000"
+      # HTTP → HTTPS redirect
+      - "traefik.http.routers.backend-http.rule=Host(`${DOMAIN}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.backend-http.entrypoints=web"
+      - "traefik.http.routers.backend-http.middlewares=redirect-to-https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
     networks:
       - app_network
     depends_on:
@@ -76,12 +130,28 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
-    command: [ "rq", "worker", "default", "--url", "redis://redis:6379/0" ]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+    deploy:
+      replicas: 3
+    command: ["rq", "worker", "default", "--url", "redis://:${REDIS_PASSWORD}@redis:6379/0"]
     environment:
       FLASK_APP: app
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-colabora_edu}
-      REDIS_URL: redis://redis:6379/0
+      FLASK_ENV: production
+      SECRET_KEY: ${SECRET_KEY}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       UPLOAD_FOLDER: /data/uploads
+      BRAND_NAME: ${BRAND_NAME:-ColaboraEdu}
+      SMTP_SERVER: ${SMTP_SERVER}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM: ${SMTP_FROM}
     volumes:
       - ./data:/data
     networks:
@@ -99,19 +169,68 @@ services:
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.colaborafrei.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.colaborafrei.entrypoints=websecure"
-      - "traefik.http.routers.colaborafrei.tls.certresolver=myresolver"
-      - "traefik.http.services.colaborafrei.loadbalancer.server.port=80"
-      # Redirecionamento HTTP para HTTPS automático
-      - "traefik.http.routers.colaborafrei-http.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.colaborafrei-http.entrypoints=web"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-      - "traefik.http.routers.colaborafrei-http.middlewares=redirect-to-https"
+      # HTTPS
+      - "traefik.http.routers.frontend.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls.certresolver=myresolver"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
+      # HTTP → HTTPS redirect
+      - "traefik.http.routers.frontend-http.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.frontend-http.entrypoints=web"
+      - "traefik.http.routers.frontend-http.middlewares=redirect-to-https"
     depends_on:
       - backend
     networks:
       - app_network
+
+  # ─── Monitoramento ─────────────────────────────────────────────────────────
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    restart: unless-stopped
+    volumes:
+      - uptime_kuma_data:/app/data
+    networks:
+      - app_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.monitoring.rule=Host(`monitor.${DOMAIN}`)"
+      - "traefik.http.routers.monitoring.entrypoints=websecure"
+      - "traefik.http.routers.monitoring.tls.certresolver=myresolver"
+      - "traefik.http.services.monitoring.loadbalancer.server.port=3001"
+      - "traefik.http.routers.monitoring-http.rule=Host(`monitor.${DOMAIN}`)"
+      - "traefik.http.routers.monitoring-http.entrypoints=web"
+      - "traefik.http.routers.monitoring-http.middlewares=redirect-to-https"
+
+  # ─── Backup PostgreSQL ──────────────────────────────────────────────────────
+  # Faz pg_dump diário, guarda por 7 dias no volume pgbackups.
+  # Para backup em Object Storage, montar um bucket S3-compatible nesse volume.
+  pgbackup:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    entrypoint: >
+      sh -c "
+        echo 'ColaboraEdu pgbackup started — daily backups at 02:00';
+        while true; do
+          NEXT=$(( $(date -d 'tomorrow 02:00' +%s) - $(date +%s) ));
+          sleep $$NEXT;
+          FILENAME=/backups/backup_$$(date +%Y%m%d_%H%M%S).sql.gz;
+          pg_dump -h postgres -U $$POSTGRES_USER $$POSTGRES_DB | gzip > $$FILENAME
+            && echo \"Backup OK: $$FILENAME\"
+            || echo \"Backup FAILED\";
+          find /backups -name 'backup_*.sql.gz' -mtime +7 -delete;
+        done
+      "
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgbackups:/backups
+    networks:
+      - app_network
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 networks:
   app_network:
@@ -119,3 +238,7 @@ networks:
 
 volumes:
   postgres_data:
+  redis_data:
+  letsencrypt:
+  uptime_kuma_data:
+  pgbackups:

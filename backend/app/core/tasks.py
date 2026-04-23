@@ -62,15 +62,19 @@ def notify_occurrence_task(ocorrencia_id: int):
                 message=message_body
             )
 
-        # Update Ocorrencia status
-        if status_email or status_whatsapp:
-            occurrence.notificacao_status = "Enviado"
-            if not status_email and aluno.email:
-                 occurrence.notificacao_status = "Erro (Email)"
-            if not status_whatsapp and aluno.telefones:
-                  occurrence.notificacao_status = "Erro (WhatsApp)"
-        else:
+        # Update Ocorrencia status — track each channel independently
+        if not status_email and not status_whatsapp:
             occurrence.notificacao_status = "Falha"
+        elif status_email and status_whatsapp:
+            occurrence.notificacao_status = "Enviado"
+        else:
+            # Partial success — build informative status string
+            parts = []
+            if aluno.email:
+                parts.append("Email: OK" if status_email else "Email: Falha")
+            if aluno.telefones:
+                parts.append("WhatsApp: OK" if status_whatsapp else "WhatsApp: Falha")
+            occurrence.notificacao_status = "Parcial (" + ", ".join(parts) + ")"
             
         session.add(occurrence)
         session.commit()

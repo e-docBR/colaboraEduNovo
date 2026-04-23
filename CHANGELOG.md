@@ -2,6 +2,44 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] - 2026-04-10
+
+### Segurança
+- **Redis blocklist fail-closed**: se o Redis estiver indisponível, tokens são tratados como revogados (antes falhava silenciosamente, tokens revogados continuavam válidos)
+- **Security headers HTTP**: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`, `Strict-Transport-Security` (apenas produção)
+- **Rate limiting em troca de senha**: `POST /auth/change-password` limitado a 5 tentativas/hora
+- **Complexidade de senha**: mínimo 8 caracteres, ao menos 1 maiúscula e 1 número (Pydantic validator)
+- **Senhas CLI seguras**: `create-admin` gera senha aleatória via `secrets.token_urlsafe(16)` — sem mais senhas hardcoded
+- **Fallback localhost restrito**: mapeamento automático localhost → tenant1 só ativo em `FLASK_ENV=development`
+- **Sourcemaps desabilitados em produção**: `vite.config.ts` agora usa `sourcemap: false` em build de produção
+
+### Novas Funcionalidades
+- **Recuperação de senha**: `POST /auth/forgot-password` + `POST /auth/reset-password` com token Redis (TTL 1h), e-mail via SMTP, sem enumeração de e-mails
+- **Frontend — ForgotPasswordPage** (`/esqueci-senha`): formulário de recuperação de senha por e-mail
+- **Frontend — ResetPasswordPage** (`/redefinir-senha?token=...`): redefinição de senha com token
+- **Forçar troca de senha no primeiro login**: guard no loader da rota `/app` redireciona para `/alterar-senha` se `must_change_password == true`
+- **Silent token refresh (web)**: `baseQueryWithReauth` no RTK Query — ao receber 401, tenta renovar o token automaticamente antes de fazer logout
+
+### Bugs Corrigidos
+- **B1 — Refresh token perde tenant_id**: `POST /auth/refresh` agora propaga `tenant_id` e `academic_year_id` no novo access token
+- **B3 — Crash com parâmetros de paginação inválidos**: `int(request.args.get("page"))` agora tem try/except — `?page=abc` retorna página 1 em vez de HTTP 500
+- **B4 — Nota `None` tratada como zero**: média final agora considera apenas trimestres preenchidos; alunos sem notas têm `total = null`
+- **B5 — Ano hardcoded no PDF**: ano do boletim agora é dinâmico (`datetime.date.today().year` como fallback)
+- **B7 — Enum de prioridade IA inconsistente**: prioridades alinhadas entre backend (`HIGH`/`MEDIUM`/`LOW`) e frontend
+- **B8 — Mobile exibia campo undefined**: corrigido `user.nome` → `user.username` no app mobile
+- **B11 — Qualquer usuário podia editar comunicados**: PATCH agora verifica ownership — professor só edita seus próprios comunicados
+- **Q4 — Roles inconsistentes**: roles normalizados para nomes canônicos (`coordenador`, `diretor`, `orientador`)
+- **Q8 — Detalhes internos de erro expostos na API**: `intervention_service.py` agora retorna mensagem genérica em caso de erro
+
+### Qualidade
+- **Paginação em comunicados**: `GET /comunicados` retorna `{items, meta}` com suporte a `page`/`per_page`
+- **Frontend adaptado para comunicados paginados**: `ComunicadosPage`, `NotificationBell` e `MeuBoletimPage` usam `comunicadosData?.items`
+
+### Infraestrutura
+- **`docker-compose.prod.yml` completo**: Traefik v2 com ACME, Redis com senha e persistência, backend com todas as variáveis de ambiente (SMTP, FRONTEND_URL, JWT, etc.), worker completo
+- **`.env.example` criado**: documentação de todas as variáveis de ambiente com exemplos e instruções de geração
+- **`FRONTEND_URL`** adicionado às configurações do backend (usado nos links de e-mail)
+
 ## [1.4.0] - 2026-02-16
 
 ### 🚀 Added

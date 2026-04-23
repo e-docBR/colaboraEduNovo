@@ -1,16 +1,31 @@
 import json
 from functools import wraps
-from flask import g
+from flask import g, jsonify
 import redis
 from .config import settings
 
 # Initialize redis client
 redis_client = redis.from_url(settings.redis_url)
 
+# ─── Cache version key helpers ────────────────────────────────────────────────
+# Instead of SCAN+DELETE (O(N)), we use a version counter per tenant.
+# Incrementing the counter instantly invalidates all cached entries for that
+# tenant because old entries will have an outdated version in their key.
+
+def _tenant_cache_version(tenant_id) -> str:
+    """Return the current cache version string for a tenant (from Redis)."""
+    version = redis_client.get(f"cache_ver:{tenant_id}")
+    return version.decode() if version else "1"
+
+def _bump_tenant_cache_version(tenant_id) -> None:
+    """Atomically increment the tenant's cache version counter."""
+    redis_client.incr(f"cache_ver:{tenant_id}")
+
 def cache_response(timeout=300, key_prefix="cache"):
     """
     Decorator to cache API responses in Redis.
-    The cache key is sensitive to tenant_id and academic_year_id.
+    The cache key is sensitive to tenant_id, academic_year_id, and a tenant
+    version counter so that invalidation is O(1) instead of O(N) SCAN.
     """
     def decorator(f):
         @wraps(f)
@@ -18,46 +33,54 @@ def cache_response(timeout=300, key_prefix="cache"):
             if settings.environment == "test":
                 return f(*args, **kwargs)
 
-            # Build cache key based on tenant, year, path and identity
             tenant_id = getattr(g, 'tenant_id', 'no_tenant')
             year_id = getattr(g, 'academic_year_id', 'no_year')
-            
-            # Simple unique key for the request
+
+            # Resolve version — if Redis is down, skip caching entirely
+            try:
+                version = _tenant_cache_version(tenant_id)
+            except Exception:
+                return f(*args, **kwargs)
+
             from flask import request
-            cache_key = f"{key_prefix}:{tenant_id}:{year_id}:{request.path}:{request.query_string.decode()}"
-            
+            cache_key = (
+                f"{key_prefix}:{tenant_id}:v{version}:{year_id}"
+                f":{request.path}:{request.query_string.decode()}"
+            )
+
             try:
                 cached_data = redis_client.get(cache_key)
                 if cached_data:
-                    return json.loads(cached_data)
-            except Exception as e:
-                # Log or ignore redis failure
+                    return jsonify(json.loads(cached_data))
+            except Exception:
                 pass
 
             response = f(*args, **kwargs)
-            
-            # Only cache 200 OK responses
+
+            # Only cache plain 200 OK responses (not tuples with status codes)
             if isinstance(response, tuple):
-                 return response # Don't cache if it has status code (might be error)
-            
+                return response
+
             try:
-                # We assume the response is a flask response or a dict that jsonify will handle.
-                # If it's a Response object, we need to handle it.
-                # However, usually we return dicts in this project.
-                # If it's a dict/list, we cache it.
                 if isinstance(response, (dict, list)):
                     redis_client.setex(cache_key, timeout, json.dumps(response))
-            except Exception as e:
+            except Exception:
                 pass
-                
+
             return response
         return decorated_function
     return decorator
 
 def invalidate_tenant_cache():
-    """Invalidates all cache for the current tenant."""
+    """Invalidate all cached responses for the current tenant in O(1).
+
+    Instead of scanning and deleting keys, we bump the version counter so all
+    existing cache keys (which embed the old version) become stale and are
+    ignored on the next read. They expire naturally via their TTL.
+    """
     tenant_id = getattr(g, 'tenant_id', None)
     if tenant_id:
-        pattern = f"cache:{tenant_id}:*"
-        for key in redis_client.scan_iter(pattern):
-            redis_client.delete(key)
+        try:
+            _bump_tenant_cache_version(tenant_id)
+        except Exception:
+            pass  # Redis unavailable — cache will serve stale until keys expire

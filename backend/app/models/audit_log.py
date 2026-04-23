@@ -1,19 +1,26 @@
-from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON
+from datetime import datetime, timezone
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 
 from ..core.database import Base
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True) # Nullable if system action
-    action = Column(String(50), nullable=False) # CREATE, UPDATE, DELETE, LOGIN, EXPORT
-    target_type = Column(String(50), nullable=False) # Nota, Aluno, Usuario, Ocorrencia
+    user_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
+    # C3: tenant isolation for audit logs
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
+    action = Column(String(50), nullable=False)
+    target_type = Column(String(50), nullable=False)
     target_id = Column(String(50), nullable=True)
-    details = Column(JSON, nullable=True) # Diff or snapshot
-    timestamp = Column(DateTime, default=datetime.now)
+    details = Column(JSON, nullable=True)
+    timestamp = Column(DateTime(timezone=True), default=_utcnow)
 
     usuario = relationship("Usuario")
 

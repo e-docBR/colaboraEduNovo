@@ -45,10 +45,6 @@ export const TenantsPage = () => {
     const user = useAppSelector((state) => state.auth.user);
     const { data: tenants, isLoading } = useListTenantsQuery();
 
-    if (user?.role !== "super_admin") {
-        return <Navigate to="/app" replace />;
-    }
-
     const [createTenant] = useCreateTenantMutation();
     const [addYear] = useAddAcademicYearToTenantMutation();
     const [updateTenant] = useUpdateTenantMutation();
@@ -58,12 +54,14 @@ export const TenantsPage = () => {
     const [openTenantDialog, setOpenTenantDialog] = useState(false);
     const [openEditDialog, setOpenEditDialog] = useState(false);
     const [openYearDialog, setOpenYearDialog] = useState(false);
+    const [createError, setCreateError] = useState<string | null>(null);
+    const [isCreating, setIsCreating] = useState(false);
 
     const [selectedTenant, setSelectedTenant] = useState<any>(null);
     const [newTenant, setNewTenant] = useState({
         name: "",
         slug: "",
-        initial_year: "2024",
+        initial_year: new Date().getFullYear().toString(),
         domain: "",
         admin_email: "",
         admin_password: ""
@@ -72,12 +70,17 @@ export const TenantsPage = () => {
     const [newYearLabel, setNewYearLabel] = useState("");
 
     const handleCreateTenant = async () => {
+        setCreateError(null);
+        setIsCreating(true);
         try {
             await createTenant(newTenant).unwrap();
             setOpenTenantDialog(false);
-            setNewTenant({ name: "", slug: "", initial_year: "2024", domain: "", admin_email: "", admin_password: "" });
-        } catch (e) {
-            console.error(e);
+            setNewTenant({ name: "", slug: "", initial_year: new Date().getFullYear().toString(), domain: "", admin_email: "", admin_password: "" });
+        } catch (e: any) {
+            const msg = e?.data?.error || e?.error || "Erro ao criar escola. Tente novamente.";
+            setCreateError(msg);
+        } finally {
+            setIsCreating(false);
         }
     };
 
@@ -127,6 +130,10 @@ export const TenantsPage = () => {
         t.name.toLowerCase().includes(search.toLowerCase()) ||
         t.slug.toLowerCase().includes(search.toLowerCase())
     );
+
+    if (user?.role !== "super_admin") {
+        return <Navigate to="/app" replace />;
+    }
 
     if (isLoading) return (
         <Box display="flex" justifyContent="center" py={10}>
@@ -333,7 +340,7 @@ export const TenantsPage = () => {
             {/* Dialog Provisionar (New) */}
             <Dialog
                 open={openTenantDialog}
-                onClose={() => setOpenTenantDialog(false)}
+                onClose={() => { setOpenTenantDialog(false); setCreateError(null); }}
                 maxWidth="sm"
                 fullWidth
                 PaperProps={{ sx: { borderRadius: 4, p: 2 } }}
@@ -375,7 +382,7 @@ export const TenantsPage = () => {
                         <Divider sx={{ my: 1 }} />
                         <Typography variant="overline" color="primary" fontWeight={800}>Acesso do Administrador</Typography>
                         <Alert icon={<SecurityIcon fontSize="inherit" />} severity="info">
-                            Estas credenciais serão usadas pelo primeiro gestor da escola.
+                            Estas credenciais serão usadas pelo primeiro gestor da escola. O login pode ser feito com o e-mail ou com o usuário gerado automaticamente.
                         </Alert>
                         <Grid container spacing={2}>
                             <Grid size={{ xs: 12 }}>
@@ -385,6 +392,11 @@ export const TenantsPage = () => {
                                     variant="filled"
                                     value={newTenant.admin_email}
                                     onChange={(e) => setNewTenant({ ...newTenant, admin_email: e.target.value })}
+                                    helperText={
+                                        newTenant.admin_email.includes("@")
+                                            ? `Usuário de login: ${newTenant.admin_email.split("@")[0]} (ou o e-mail completo)`
+                                            : "Informe o e-mail do administrador da escola"
+                                    }
                                 />
                             </Grid>
                             <Grid size={{ xs: 12 }}>
@@ -400,14 +412,21 @@ export const TenantsPage = () => {
                         </Grid>
                     </Stack>
                 </DialogContent>
+                {createError && (
+                    <Box px={4} pb={1}>
+                        <Alert severity="error" onClose={() => setCreateError(null)}>{createError}</Alert>
+                    </Box>
+                )}
                 <DialogActions sx={{ p: 4 }}>
-                    <Button onClick={() => setOpenTenantDialog(false)} color="inherit" sx={{ fontWeight: 700 }}>Cancelar</Button>
+                    <Button onClick={() => setOpenTenantDialog(false)} color="inherit" sx={{ fontWeight: 700 }} disabled={isCreating}>Cancelar</Button>
                     <Button
                         variant="contained"
                         onClick={handleCreateTenant}
+                        disabled={isCreating}
+                        startIcon={isCreating ? <CircularProgress size={16} sx={{ color: 'white' }} /> : undefined}
                         sx={{ px: 4, fontWeight: 800, bgcolor: TEAL_COLOR, '&:hover': { bgcolor: '#0d9488' } }}
                     >
-                        Confirmar Provisionamento
+                        {isCreating ? "Provisionando..." : "Confirmar Provisionamento"}
                     </Button>
                 </DialogActions>
             </Dialog>

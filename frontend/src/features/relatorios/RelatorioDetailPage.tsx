@@ -1,5 +1,6 @@
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import DownloadIcon from "@mui/icons-material/Download";
 import {
   Alert,
   Box,
@@ -26,6 +27,7 @@ import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { useGetNotasFiltrosQuery, useGetRelatorioQuery, useListTurmasQuery } from "../../lib/api";
 import { RELATORIOS_BY_SLUG, type RelatorioSlug } from "./config";
 import { useDerivedRelatorio } from "./selectors";
+import { useAppSelector } from "../../app/hooks";
 import {
   ResponsiveContainer,
   ScatterChart,
@@ -168,6 +170,42 @@ export const RelatorioDetailPage = () => {
     return issues;
   }, [hasAnyFilter, filters.serie, filters.turma, filters.turno, turmasList]);
 
+  const accessToken = useAppSelector((state) => state.auth.accessToken);
+  const academicYearId = useAppSelector((state) => state.app.academicYearId);
+  const tenantId = useAppSelector((state) => state.app.tenantId);
+
+  const handleExport = (format: "csv" | "xlsx") => {
+    if (!slug) return;
+    const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
+    const params = new URLSearchParams({ format });
+    if (sanitizedFilters.turno) params.set("turno", sanitizedFilters.turno);
+    if (sanitizedFilters.serie) params.set("serie", sanitizedFilters.serie);
+    if (sanitizedFilters.turma) params.set("turma", sanitizedFilters.turma);
+    if (sanitizedFilters.disciplina) params.set("disciplina", sanitizedFilters.disciplina);
+
+    const url = `${API_BASE}/relatorios/${slug}?${params.toString()}`;
+
+    // Use fetch to pass auth headers then trigger download
+    fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        ...(academicYearId ? { "x-academic-year-id": String(academicYearId) } : {}),
+        ...(tenantId ? { "X-Tenant-ID": String(tenantId) } : {})
+      }
+    })
+      .then((res) => res.blob())
+      .then((blob) => {
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = `relatorio_${slug}.${format}`;
+        document.body.appendChild(a);
+        a.click();
+        URL.revokeObjectURL(blobUrl);
+        document.body.removeChild(a);
+      });
+  };
+
   if (!definition) {
     return <Alert severity="warning">Relatório não encontrado.</Alert>;
   }
@@ -212,16 +250,39 @@ export const RelatorioDetailPage = () => {
 
   return (
     <Stack spacing={3}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center">
+      <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
         <Breadcrumbs>
           <Link component={RouterLink} to="/app/relatorios" underline="hover">
             Relatórios
           </Link>
           <Typography color="text.primary">{definition.title}</Typography>
         </Breadcrumbs>
-        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(-1)}>
-          Voltar
-        </Button>
+        <Stack direction="row" spacing={1}>
+          {hasRows && (
+            <>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<DownloadIcon />}
+                onClick={() => handleExport("csv")}
+              >
+                CSV
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                color="success"
+                startIcon={<DownloadIcon />}
+                onClick={() => handleExport("xlsx")}
+              >
+                Excel
+              </Button>
+            </>
+          )}
+          <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(-1)} size="small">
+            Voltar
+          </Button>
+        </Stack>
       </Stack>
 
       <Card>

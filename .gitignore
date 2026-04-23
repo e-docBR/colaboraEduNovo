@@ -13,6 +13,8 @@ instance/
 .venv/
 .env
 .env.*
+# Exceção: template de dev (sem segredos reais) deve ser commitado
+!.env.development
 .mypy_cache/
 pytest.cache/
 htmlcov/

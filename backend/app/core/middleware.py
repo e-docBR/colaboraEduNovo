@@ -20,17 +20,34 @@ def resolve_tenant_context():
     except JWTExtendedException:
         pass
 
-    # 1. Try to get tenant_id from Header (priority for context switching)
-    tenant_id = request.headers.get("X-Tenant-ID")
-    if tenant_id and tenant_id.isdigit():
-        tenant_id = int(tenant_id)
+    # 1. Get tenant_id from JWT (Source of Truth)
+    jwt_tenant_id = None
+    is_super_admin = False
+    try:
+        claims = get_jwt()
+        jwt_tenant_id = claims.get("tenant_id")
+        jwt_roles = claims.get("roles") or []
+        is_super_admin = "super_admin" in jwt_roles
+    except (NoAuthorizationError, RuntimeError):
+        pass
+
+    # 2. Try to get tenant_id from Header (Only allow for super_admin or if JWT is missing/optional)
+    header_tenant_id = request.headers.get("X-Tenant-ID")
+    
+    if header_tenant_id and header_tenant_id.isdigit():
+        candidate_id = int(header_tenant_id)
+        if is_super_admin:
+            # Super admins may context-switch tenants via header
+            tenant_id = candidate_id
+        elif jwt_tenant_id is not None:
+            # Authenticated non-super_admin: ignore header, trust JWT exclusively
+            tenant_id = jwt_tenant_id
+        else:
+            # No JWT present (public endpoints like /auth/login): accept header to resolve tenant
+            tenant_id = candidate_id
     else:
-        # 2. Try to get tenant_id from JWT
-        try:
-            claims = get_jwt()
-            tenant_id = claims.get("tenant_id")
-        except (NoAuthorizationError, RuntimeError):
-            tenant_id = None
+        tenant_id = jwt_tenant_id
+
 
     host = request.headers.get("Host", "").split(":")[0] # remove port
     
@@ -43,14 +60,14 @@ def resolve_tenant_context():
         
         if not tenant:
             tenant = service.resolve_tenant(host)
-        
-        # DEV MODE FALLBACK
-        if not tenant and (host == "localhost" or host == "127.0.0.1"):
-             tenant = service.repository.get(1)
-             if not tenant:
-                 # If tenant 1 doesn't exist, pick the first one available
-                 tenant = session.query(service.repository.model).first()
-        
+
+        # DEV MODE FALLBACK — only active in development environment
+        from app.core.config import settings
+        if not tenant and settings.environment == "development" and host in ("localhost", "127.0.0.1"):
+            tenant = service.repository.get(1)
+            if not tenant:
+                tenant = session.query(service.repository.model).first()
+
         if not tenant:
             return jsonify({"error": "Inquilino não identificado ou inválido"}), 404
         
@@ -62,26 +79,37 @@ def resolve_tenant_context():
         g.tenant_id = tenant.id
 
         # 2. Resolve Academic Year
-        # Priority: JWT claim -> Header -> Default current
+        # Priority: Header (explicit user choice) -> JWT claim -> Default current
         year_id = None
-        
-        # Try JWT first
-        try:
-            claims = get_jwt()
-            if claims and "academic_year_id" in claims:
-                year_id = claims["academic_year_id"]
-        except (NoAuthorizationError, RuntimeError):
-            pass
 
-        # Try Header if not in JWT
+        # Header takes priority: represents the user's explicit year selection in the UI
+        header_val = request.headers.get("X-Academic-Year-ID")
+        if header_val and header_val.isdigit():
+            year_id = int(header_val)
+
+        # Fallback to JWT claim (set at login time)
         if not year_id:
-            header_val = request.headers.get("X-Academic-Year-ID")
-            if header_val and header_val.isdigit():
-                year_id = int(header_val)
+            try:
+                claims = get_jwt()
+                if claims and "academic_year_id" in claims:
+                    year_id = claims["academic_year_id"]
+            except (NoAuthorizationError, RuntimeError):
+                pass
 
         if year_id:
-            g.academic_year_id = year_id
-        else:
+            # Validate the year actually belongs to this tenant before trusting it
+            from app.models.academic_year import AcademicYear as AcademicYearModel
+            valid_year = session.query(AcademicYearModel).filter(
+                AcademicYearModel.id == year_id,
+                AcademicYearModel.tenant_id == tenant.id,
+            ).first()
+            if valid_year:
+                g.academic_year_id = valid_year.id
+            else:
+                # Invalid or cross-tenant year — fall through to current year
+                year_id = None
+
+        if not year_id:
             # Logic to find the current active academic year for this tenant
             from app.models.academic_year import AcademicYear
             current_year = session.query(AcademicYear).filter(

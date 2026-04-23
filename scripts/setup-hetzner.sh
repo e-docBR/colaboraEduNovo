@@ -1,94 +1,117 @@
 #!/bin/bash
 
-# ColaboraFREI - Hetzner Auto-Setup Script
-# Este script automatiza a instalação do Docker, Nginx, Certbot e a configuração do sistema ColaboraFREI.
+# ColaboraEdu — Hetzner Auto-Setup Script
+# Configura Docker, firewall, variáveis e sobe o stack via docker compose.
+# SSL/TLS é gerenciado pelo Traefik com Let's Encrypt (ACME) — NÃO instala nginx nem certbot.
 
-set -e
+set -euo pipefail
 
-# Cores para output
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+YELLOW='\033[1;33m'
+NC='\033[0m'
 
-echo -e "${BLUE}=== Iniciando Setup ColaboraFREI na Hetzner ===${NC}"
+echo -e "${BLUE}=== ColaboraEdu — Setup Hetzner ===${NC}"
 
-# 1. Atualização do Sistema e Instalação de Dependências
-echo -e "${GREEN}[1/6] Atualizando sistema e instalando dependências...${NC}"
-sudo apt-get update
-sudo apt-get install -y docker.io docker-compose nginx certbot python3-certbot-nginx git curl
+# 1. Atualização do sistema
+echo -e "${GREEN}[1/6] Atualizando sistema...${NC}"
+sudo apt-get update -q
+sudo apt-get install -y -q curl git ufw
 
-# Garantir que o Docker inicie com o sistema
+# 2. Docker (método oficial, sem docker.io do apt que é legado)
+echo -e "${GREEN}[2/6] Instalando Docker Engine...${NC}"
+if ! command -v docker &>/dev/null; then
+    curl -fsSL https://get.docker.com | sudo bash
+    sudo usermod -aG docker "$USER"
+    echo -e "${YELLOW}⚠  Docker instalado. Você pode precisar fazer logout/login para usar 'docker' sem sudo.${NC}"
+fi
 sudo systemctl enable --now docker
 
-# 2. Configurações de Variáveis de Ambiente
-echo -e "${GREEN}[2/6] Configurando variáveis de ambiente...${NC}"
-read -p "Digite o domínio (ex: sistema.escola.com.br): " DOMAIN
-read -s -p "Digite uma senha forte para o Banco de Dados: " DB_PASSWORD
+# 3. Firewall UFW — apenas portas essenciais
+echo -e "${GREEN}[3/6] Configurando firewall (UFW)...${NC}"
+sudo ufw --force reset
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow ssh
+sudo ufw allow 80/tcp   # HTTP — Traefik (redirect para HTTPS)
+sudo ufw allow 443/tcp  # HTTPS — Traefik
+sudo ufw --force enable
+sudo ufw status verbose
+
+# 4. Variáveis de ambiente
+echo -e "${GREEN}[4/6] Configurando variáveis de ambiente...${NC}"
+read -rp "Domínio público (ex: app.escola.com.br): " DOMAIN
+read -rp "E-mail para Let's Encrypt (ACME): " ACME_EMAIL
+read -rsp "Senha do banco de dados (PostgreSQL): " DB_PASSWORD; echo ""
+read -rsp "Senha do Redis: " REDIS_PASSWORD; echo ""
+
+# Gera chaves secretas automaticamente
+SECRET_KEY=$(openssl rand -hex 32)
+JWT_SECRET_KEY=$(openssl rand -hex 32)
+
+cat > .env <<EOF
+# === Traefik / Domínio ===
+DOMAIN=${DOMAIN}
+ACME_EMAIL=${ACME_EMAIL}
+
+# === PostgreSQL ===
+POSTGRES_USER=colabora_user
+POSTGRES_PASSWORD=${DB_PASSWORD}
+POSTGRES_DB=colabora_edu
+
+# === Redis ===
+REDIS_PASSWORD=${REDIS_PASSWORD}
+
+# === Flask / Backend ===
+FLASK_ENV=production
+SECRET_KEY=${SECRET_KEY}
+JWT_SECRET_KEY=${JWT_SECRET_KEY}
+ALLOWED_ORIGINS=["https://${DOMAIN}"]
+BRAND_NAME=ColaboraEdu
+
+# === SMTP (preencha após setup) ===
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASSWORD=
+SMTP_FROM=noreply@${DOMAIN}
+
+# === WhatsApp Evolution API (opcional) ===
+WHATSAPP_API_URL=
+WHATSAPP_API_TOKEN=
+
+# === Backup (opcional — S3/Hetzner Object Storage) ===
+# BACKUP_S3_BUCKET=
+# BACKUP_AWS_ACCESS_KEY_ID=
+# BACKUP_AWS_SECRET_ACCESS_KEY=
+# BACKUP_S3_ENDPOINT=https://fsn1.your-objectstorage.com
+EOF
+
+echo -e "${GREEN}Arquivo .env criado.${NC}"
+
+# 5. Preparar volume do Let's Encrypt (necessário que acme.json exista com permissão correta)
+mkdir -p letsencrypt
+touch letsencrypt/acme.json
+chmod 600 letsencrypt/acme.json
+
+# 6. Subir os containers
+echo -e "${GREEN}[5/6] Iniciando containers via Docker Compose...${NC}"
+docker compose -f docker-compose.prod.yml up -d --build
+
+echo -e "${GREEN}[6/6] Aguardando backend iniciar e aplicando migrations...${NC}"
+sleep 20
+docker compose -f docker-compose.prod.yml exec -T backend flask --app app db upgrade || \
+    echo -e "${YELLOW}⚠  Migration retornou erro — verifique logs: docker compose logs backend${NC}"
+
 echo ""
-read -s -p "Digite uma SECRET_KEY (aperte enter para gerar uma aleatória): " USER_SECRET
+echo -e "${BLUE}=== Setup Concluído ===${NC}"
+echo -e "  Sistema:   ${GREEN}https://${DOMAIN}${NC}"
+echo -e "  Logs:      ${BLUE}docker compose -f docker-compose.prod.yml logs -f${NC}"
+echo -e "  Monit.:    ${GREEN}https://${DOMAIN}:3001${NC} (Uptime Kuma)"
+echo ""
+echo -e "${YELLOW}Próximos passos:"
+echo "  1. Configure as variáveis SMTP no .env e reinicie: docker compose -f docker-compose.prod.yml restart backend"
+echo "  2. Crie o super-admin: docker compose -f docker-compose.prod.yml exec backend flask --app app create-superadmin"
+echo "  3. Configure o pipeline CI/CD no GitHub (veja .github/workflows/deploy.yml)"
+echo -e "${NC}"
 
-if [ -z "$USER_SECRET" ]; then
-    USER_SECRET=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
-fi
-
-# Criar .env na raiz do projeto (ajuste se necessário)
-cat <<EOF > .env
-POSTGRES_PASSWORD=$DB_PASSWORD
-ALLOWED_ORIGINS=["https://$DOMAIN"]
-SECRET_KEY=$USER_SECRET
-FLASK_DEBUG=0
-EOF
-
-echo "Arquivo .env criado com sucesso."
-
-# 3. Configuração do Docker Compose de Produção
-echo -e "${GREEN}[3/6] Iniciando containers via Docker Compose...${NC}"
-docker-compose -f docker-compose.prod.yml up -d --build
-
-# 4. Inicialização do Banco de Dados
-echo -e "${GREEN}[4/6] Inicializando banco de dados...${NC}"
-# Aguarda o Postgres estar pronto
-echo "Aguardando 10 segundos para o Postgres estabilizar..."
-sleep 10
-docker-compose -f docker-compose.prod.yml exec -T backend flask --app app init-db
-
-# 5. Configuração do Nginx Host como Proxy Reverso
-echo -e "${GREEN}[5/6] Configurando Nginx como Proxy Reverso...${NC}"
-NGINX_CONF="/etc/nginx/sites-available/colaborafrei"
-
-sudo cat <<EOF > $NGINX_CONF
-server {
-    listen 80;
-    server_name $DOMAIN;
-
-    location / {
-        proxy_pass http://localhost:8090;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        
-        # Websockets support (se necessário para chat em tempo real futuramente)
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-}
-EOF
-
-sudo ln -sf $NGINX_CONF /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t && sudo systemctl restart nginx
-
-# 6. Configuração do SSL com Certbot
-echo -e "${GREEN}[6/6] Solicitando certificado SSL (HTTPS)...${NC}"
-echo "Certifique-se que o DNS para $DOMAIN já está apontando para o IP deste servidor."
-read -p "Deseja configurar o SSL agora? (s/n): " CONFIRM_SSL
-
-if [[ "$CONFIRM_SSL" =~ ^[Ss]$ ]]; then
-    sudo certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m suporte@$DOMAIN
-fi
-
-echo -e "${BLUE}=== Setup Concluído com Sucesso! ===${NC}"
-echo -e "Acesse o sistema em: ${GREEN}https://$DOMAIN${NC}"
-echo -e "Logs do sistema: ${BLUE}docker-compose -f docker-compose.prod.yml logs -f${NC}"

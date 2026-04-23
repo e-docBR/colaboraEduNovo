@@ -28,9 +28,24 @@ class UsuarioService:
                 raise UnauthorizedError("Usuário não pertence a esta escola")
 
         roles = [user.role] if user.role else []
+
+        # Resolve the current academic year for this tenant so it's embedded in the JWT
+        academic_year_id = None
+        if user.tenant_id:
+            from app.models.academic_year import AcademicYear
+            current_year = self.repository.session.execute(
+                select(AcademicYear).where(
+                    AcademicYear.tenant_id == user.tenant_id,
+                    AcademicYear.is_current == True,
+                )
+            ).scalar_one_or_none()
+            if current_year:
+                academic_year_id = current_year.id
+
         extra_claims = {
             "aluno_id": user.aluno_id,
-            "tenant_id": user.tenant_id
+            "tenant_id": user.tenant_id,
+            "academic_year_id": academic_year_id,
         }
         tokens = generate_tokens(identity=str(user.id), roles=roles, extra_claims=extra_claims)
         

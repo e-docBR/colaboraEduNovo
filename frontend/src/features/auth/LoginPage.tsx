@@ -337,7 +337,13 @@ export const LoginPage = () => {
                     control={<Checkbox checked={rememberMe} onChange={(event) => setRememberMe(event.target.checked)} />}
                     label="Lembrar-me"
                   />
-                  <Link href="mailto:suporte@colaboraedu.com" underline="hover">
+                  <Link
+                    component="button"
+                    type="button"
+                    underline="hover"
+                    onClick={() => navigate("/esqueci-senha")}
+                    sx={{ cursor: "pointer" }}
+                  >
                     Esqueci minha senha
                   </Link>
                 </Stack>

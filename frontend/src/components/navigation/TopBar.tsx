@@ -1,4 +1,4 @@
-import NotificationsIcon from "@mui/icons-material/Notifications";
+import { NotificationBell } from "../ui/NotificationBell";
 import SearchIcon from "@mui/icons-material/Search";
 import LogoutIcon from "@mui/icons-material/Logout";
 import LockResetIcon from "@mui/icons-material/LockReset";
@@ -6,9 +6,7 @@ import AddAPhotoIcon from "@mui/icons-material/AddAPhoto";
 import MenuIcon from "@mui/icons-material/Menu";
 import {
   Avatar,
-  Badge,
   Box,
-  Chip,
   Divider,
   IconButton,
   InputAdornment,
@@ -18,13 +16,13 @@ import {
   TextField,
   Typography
 } from "@mui/material";
-import { MouseEvent, useMemo, useState } from "react";
+import { MouseEvent, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { logout, updateUser } from "../../features/auth/authSlice";
 import { setAcademicYearId, setTenantId } from "../../features/app/appSlice";
-import { useUploadPhotoMutation, useListAcademicYearsQuery, useListPublicTenantsQuery, useListComunicadosQuery, useMarkComunicadoReadMutation, api } from "../../lib/api";
+import { useUploadPhotoMutation, useListAcademicYearsQuery, useListPublicTenantsQuery, api } from "../../lib/api";
 import { ThemeToggle } from "./ThemeToggle";
 
 const getInitials = (value?: string) =>
@@ -62,7 +60,7 @@ const AcademicYearSelector = () => {
       onChange={(e) => {
         const newId = Number(e.target.value);
         dispatch(setAcademicYearId(newId));
-        dispatch(api.util.invalidateTags(["Dashboard", "Alunos", "Notas", "Turmas", "Comunicados", "Ocorrencias", "Uploads"]));
+        dispatch(api.util.invalidateTags(["Dashboard", "Alunos", "Notas", "Turmas", "Comunicados", "Ocorrencias", "Uploads", "Graficos"]));
       }}
       sx={{
         minWidth: 100,
@@ -101,7 +99,7 @@ const TenantSelector = () => {
       onChange={(e) => {
         const newId = Number(e.target.value);
         dispatch(setTenantId(newId));
-        dispatch(api.util.invalidateTags(["Dashboard", "Alunos", "Notas", "Turmas", "Comunicados", "Ocorrencias", "Uploads"]));
+        dispatch(api.util.invalidateTags(["Dashboard", "Alunos", "Notas", "Turmas", "Comunicados", "Ocorrencias", "Uploads", "Graficos"]));
       }}
       sx={{
         minWidth: 150,
@@ -147,21 +145,7 @@ export const TopBar = ({ onMenuClick }: { onMenuClick?: () => void }) => {
   };
 
   const menuOpen = Boolean(anchorEl);
-  const [notifAnchorEl, setNotifAnchorEl] = useState<null | HTMLElement>(null);
 
-  const { data: comunicados } = useListComunicadosQuery();
-  const [markRead] = useMarkComunicadoReadMutation();
-
-  const unreadCount = useMemo(() => {
-    if (!comunicados) return 0;
-    // For admins, show notifications if they are new (sent in last 24h) or just show all active ones
-    // For students, show unread count
-    if (user?.role === "aluno") {
-      return comunicados.filter(c => !c.is_read).length;
-    }
-    // For staff, show count of non-archived ones
-    return comunicados.filter(c => !c.arquivado).length;
-  }, [comunicados, user]);
 
   const showSearch = ["/app", "/app/", "/app/alunos", "/app/turmas"].includes(location.pathname);
 
@@ -176,7 +160,8 @@ export const TopBar = ({ onMenuClick }: { onMenuClick?: () => void }) => {
   const handleLogout = () => {
     handleMenuClose();
     dispatch(logout());
-    window.location.href = "https://colaboraedu.cloud/";
+    // A7: use env var so staging/dev don't redirect to production
+    window.location.href = import.meta.env.VITE_LOGOUT_REDIRECT_URL ?? "/";
   };
 
   const handleAddPhoto = () => {
@@ -202,8 +187,7 @@ export const TopBar = ({ onMenuClick }: { onMenuClick?: () => void }) => {
     input.click();
   };
 
-  const handleNotifOpen = (event: MouseEvent<HTMLElement>) => setNotifAnchorEl(event.currentTarget);
-  const handleNotifClose = () => setNotifAnchorEl(null);
+
 
   return (
     <Box
@@ -261,94 +245,7 @@ export const TopBar = ({ onMenuClick }: { onMenuClick?: () => void }) => {
         <ThemeToggle />
 
         {/* Notifications */}
-        <IconButton
-          color="inherit"
-          size="small"
-          onClick={handleNotifOpen}
-          sx={{
-            transition: "all 0.2s",
-            "&:hover": {
-              bgcolor: "action.hover"
-            }
-          }}
-        >
-          <Badge color="error" variant="dot" invisible={unreadCount === 0}>
-            <NotificationsIcon fontSize="small" />
-          </Badge>
-        </IconButton>
-
-        <Menu
-          anchorEl={notifAnchorEl}
-          open={Boolean(notifAnchorEl)}
-          onClose={handleNotifClose}
-          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-          transformOrigin={{ vertical: "top", horizontal: "right" }}
-          slotProps={{
-            paper: {
-              sx: { mt: 1, minWidth: 320, maxWidth: 320, maxHeight: 400, borderRadius: 2 }
-            }
-          }}
-        >
-          <Box px={2} py={1.5} display="flex" justifyContent="space-between" alignItems="center">
-            <Typography variant="subtitle2" fontWeight={700}>Notificações</Typography>
-            {unreadCount > 0 && <Chip label={`${unreadCount} novas`} size="small" color="primary" sx={{ height: 20, fontSize: "0.7rem" }} />}
-          </Box>
-          <Divider />
-          <Box sx={{ maxHeight: 330, overflowY: "auto" }}>
-            {comunicados && comunicados.length > 0 ? (
-              comunicados.slice(0, 5).map((c) => (
-                <MenuItem
-                  key={c.id}
-                  onClick={() => {
-                    handleNotifClose();
-                    navigate("/app/comunicados");
-                  }}
-                  sx={{
-                    whiteSpace: "normal",
-                    py: 1.5,
-                    borderBottom: "1px solid",
-                    borderColor: "divider",
-                    bgcolor: (user?.role === "aluno" && !c.is_read) ? "action.hover" : "transparent"
-                  }}
-                >
-                  <Box>
-                    <Typography variant="body2" fontWeight={700} noWrap>{c.titulo}</Typography>
-                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
-                      {new Date(c.data_envio).toLocaleDateString()}
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{
-                        display: "-webkit-box",
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: "vertical",
-                        overflow: "hidden",
-                        lineHeight: 1.2
-                      }}
-                    >
-                      {c.conteudo}
-                    </Typography>
-                  </Box>
-                </MenuItem>
-              ))
-            ) : (
-              <Box p={4} textAlign="center">
-                <Typography variant="body2" color="text.secondary">Nenhuma notificação</Typography>
-              </Box>
-            )}
-          </Box>
-          <Divider />
-          <MenuItem
-            onClick={() => {
-              handleNotifClose();
-              navigate("/app/comunicados");
-            }}
-            sx={{ justifyContent: "center", py: 1 }}
-          >
-            <Typography variant="caption" color="primary.main" fontWeight={700}>Ver todas</Typography>
-          </MenuItem>
-        </Menu>
+        <NotificationBell />
 
         {/* User Menu */}
         <Box

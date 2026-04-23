@@ -1,14 +1,16 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from "@reduxjs/toolkit/query";
 
 import type { RootState } from "../app/store";
+import { setCredentials, logout } from "../features/auth/authSlice";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
 export interface ChatResponse {
   text: string;
   type: "text" | "table" | "chart";
-  data?: any;
-  chart_config?: any;
+  data?: Record<string, unknown> | Array<Record<string, unknown>>;
+  chart_config?: Record<string, unknown>;
 }
 
 
@@ -263,6 +265,59 @@ export type RelatorioQueryArgs = {
   disciplina?: string;
 };
 
+export type JobStatusResponse = {
+  /** Status strings returned by python-rq: queued | started | finished | failed | deferred | stopped */
+  status: 'queued' | 'started' | 'finished' | 'failed' | 'deferred' | 'stopped';
+  result?: {
+    count: number;
+    logs: string[];
+    year: string;
+  };
+  error?: string;
+  progress?: number;
+  job_id?: string;
+  enqueued_at?: string;
+  started_at?: string;
+  ended_at?: string;
+  meta?: Record<string, unknown>;
+};
+
+export type AuditLog = {
+  id: number;
+  action: string;
+  user: string;
+  target: string;
+  timestamp: string;
+  details?: Record<string, unknown>;
+};
+
+type AuditLogParams = {
+  page?: number;
+  per_page?: number;
+  action?: string;
+  target_type?: string;
+  user?: string;
+};
+
+type AuditLogResponse = {
+  items: AuditLog[];
+  total: number;
+  page: number;
+  per_page: number;
+};
+
+export type Tenant = {
+  id: number;
+  name: string;
+  slug: string;
+  is_active: boolean;
+  domain?: string;
+  created_at?: string;
+  academic_years?: Array<{ id: number; label: string; is_current: boolean }>;
+};
+
+export type AlunoUpdatePayload = { id: number } & Partial<AlunoSummary>;
+
 export type GraficoResponse<T = Record<string, unknown>> = {
   slug: string;
   dados: T[];
@@ -277,36 +332,119 @@ export type GraficoQueryArgs = {
   disciplina?: string;
 };
 
-const sanitizeParams = (params?: Record<string, unknown>) =>
+export type RiskPrediction = {
+  score: number;
+  status: "ALTO" | "MEDIO" | "BAIXO" | "ERRO";
+  factors?: {
+    media_geral: number;
+    disciplinas_abaixo_60: number;
+    total_faltas: number;
+  };
+};
+
+export type Intervention = {
+  priority: "HIGH" | "MEDIUM" | "LOW";
+  type: "ACADEMIC" | "BEHAVIORAL" | "EMERGENCY" | "MAINTENANCE";
+  title: string;
+  description: string;
+  impact: string;
+};
+
+export type StudentInterventionAnalysis = {
+  aluno_id: number;
+  aluno_nome: string;
+  turma?: string;
+  global_risk: "ALTO" | "MEDIO" | "BAIXO";
+  interventions: Intervention[];
+  stats: {
+    total_faltas: number;
+    disciplinas_abaixo_media: number;
+  };
+  status?: string;
+};
+
+const sanitizeParams = (params?: Record<string, string | number | boolean | undefined | null>) =>
   Object.fromEntries(
-    Object.entries(params ?? {}).filter(([, value]) => value !== undefined && value !== "")
+    Object.entries(params ?? {}).filter(([, value]) => value !== undefined && value !== "" && value !== null)
   );
+
+const rawBaseQuery = fetchBaseQuery({
+  baseUrl: API_BASE_URL,
+  prepareHeaders: (headers, { getState }) => {
+    const state = getState() as RootState;
+    const token = state.auth.accessToken;
+    if (token) {
+      headers.set("authorization", `Bearer ${token}`);
+    }
+
+    const academicYearId = state.app.academicYearId;
+    if (academicYearId) {
+      headers.set("x-academic-year-id", academicYearId.toString());
+    }
+
+    const tenantId = state.app.tenantId;
+    if (tenantId) {
+      headers.set("X-Tenant-ID", tenantId.toString());
+    }
+
+    return headers;
+  }
+});
+
+/**
+ * Wrapper that automatically retries requests with a refreshed access token
+ * when the server returns 401. Falls back to logout if refresh fails.
+ */
+const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (
+  args,
+  api,
+  extraOptions
+) => {
+  let result = await rawBaseQuery(args, api, extraOptions);
+
+  if (result.error?.status === 401) {
+    const state = api.getState() as RootState;
+    const refreshToken = state.auth.refreshToken;
+
+    if (refreshToken) {
+      // Attempt to get a new access token
+      const refreshResult = await rawBaseQuery(
+        {
+          url: "/auth/refresh",
+          method: "POST",
+          headers: { Authorization: `Bearer ${refreshToken}` }
+        },
+        api,
+        extraOptions
+      );
+
+      if (refreshResult.data) {
+        const data = refreshResult.data as { access_token: string; refresh_token: string };
+        const currentState = api.getState() as RootState;
+        api.dispatch(
+          setCredentials({
+            access_token: data.access_token,
+            refresh_token: data.refresh_token,
+            user: currentState.auth.user
+          })
+        );
+        // Retry the original request with the new token
+        result = await rawBaseQuery(args, api, extraOptions);
+      } else {
+        api.dispatch(logout());
+      }
+    } else {
+      api.dispatch(logout());
+    }
+  }
+
+  return result;
+};
 
 export const api = createApi({
   reducerPath: "boletinsApi",
-  baseQuery: fetchBaseQuery({
-    baseUrl: API_BASE_URL,
-    prepareHeaders: (headers, { getState }) => {
-      const state = getState() as RootState;
-      const token = state.auth.accessToken;
-      if (token) {
-        headers.set("authorization", `Bearer ${token}`);
-      }
-
-      const academicYearId = state.app.academicYearId;
-      if (academicYearId) {
-        headers.set("x-academic-year-id", academicYearId.toString());
-      }
-
-      const tenantId = state.app.tenantId;
-      if (tenantId) {
-        headers.set("X-Tenant-ID", tenantId.toString());
-      }
-
-      return headers;
-    }
-  }),
-  tagTypes: ["Dashboard", "Alunos", "Notas", "Uploads", "Turmas", "Usuarios", "Comunicados", "Ocorrencias"],
+  baseQuery: baseQueryWithReauth,
+  tagTypes: ["Dashboard", "Alunos", "Notas", "Uploads", "Turmas", "Usuarios", "Comunicados", "Ocorrencias", "Graficos"],
   endpoints: (builder) => ({
     login: builder.mutation<LoginResponse, LoginRequest>({
       query: (body) => ({
@@ -322,7 +460,20 @@ export const api = createApi({
       query: () => "/dashboard/kpis",
       providesTags: ["Dashboard"]
     }),
-    getTeacherDashboard: builder.query<{ distribution: Record<string, number>; alerts: any[]; classes_count: number; total_students: number; global_average: number; }, { q?: string; turno?: string; turma?: string } | void>({
+    getTeacherDashboard: builder.query<{ 
+      distribution: Record<string, number>; 
+      alerts: Array<{
+        id: number;
+        nome: string;
+        turma: string;
+        media: number;
+        risk_score: number;
+        risk_status: string;
+      }>; 
+      classes_count: number; 
+      total_students: number; 
+      global_average: number; 
+    }, { q?: string; turno?: string; turma?: string } | void>({
       query: (params) => ({
         url: "/dashboard/professor",
         params: sanitizeParams(params ?? undefined)
@@ -379,9 +530,10 @@ export const api = createApi({
       query: ({ slug, ...params }) => ({
         url: `/graficos/${slug}`,
         params: sanitizeParams(params)
-      })
+      }),
+      providesTags: (_result, _error, { slug }) => [{ type: "Graficos" as const, id: slug }]
     }),
-    getJobStatus: builder.query<{ status: string; result?: any; error?: string }, string>({
+    getJobStatus: builder.query<JobStatusResponse, string>({
       query: (jobId) => `/uploads/jobs/${jobId}`,
       keepUnusedDataFor: 0
     }),
@@ -407,6 +559,20 @@ export const api = createApi({
     changePassword: builder.mutation<void, { current_password: string; new_password: string }>({
       query: (body) => ({
         url: "/auth/change-password",
+        method: "POST",
+        body
+      })
+    }),
+    forgotPassword: builder.mutation<{ message: string }, { email: string }>({
+      query: (body) => ({
+        url: "/auth/forgot-password",
+        method: "POST",
+        body
+      })
+    }),
+    resetPassword: builder.mutation<{ message: string }, { token: string; new_password: string }>({
+      query: (body) => ({
+        url: "/auth/reset-password",
         method: "POST",
         body
       })
@@ -453,8 +619,11 @@ export const api = createApi({
       query: () => "/usuarios/me",
       providesTags: ["Usuarios"]
     }),
-    listComunicados: builder.query<{ id: number; titulo: string; conteudo: string; autor: string; data_envio: string; arquivado?: boolean; target_type?: string; target_value?: string; is_read?: boolean }[], void>({
-      query: () => "/comunicados",
+    listComunicados: builder.query<{ items: { id: number; titulo: string; conteudo: string; autor: string; data_envio: string; arquivado?: boolean; target_type?: string; target_value?: string; is_read?: boolean }[]; meta: { page: number; per_page: number; total: number } }, { page?: number; per_page?: number } | void>({
+      query: (params) => ({
+        url: "/comunicados",
+        params: sanitizeParams(params ?? undefined)
+      }),
       providesTags: ["Comunicados"]
     }),
     markComunicadoRead: builder.mutation<void, number>({
@@ -525,8 +694,11 @@ export const api = createApi({
       })
     }),
 
-    listAuditLogs: builder.query<{ id: number; action: string; user_id: number; target_type: string; timestamp: string; details?: any }[], void>({
-      query: () => "/audit-logs",
+    listAuditLogs: builder.query<AuditLogResponse, AuditLogParams | void>({
+      query: (params) => ({
+        url: "/audit-logs",
+        params: sanitizeParams(params ?? undefined)
+      }),
       keepUnusedDataFor: 0
     }),
     createAluno: builder.mutation<AlunoSummary, Partial<AlunoSummary>>({
@@ -537,13 +709,13 @@ export const api = createApi({
       }),
       invalidatesTags: ["Alunos", "Dashboard", "Turmas"]
     }),
-    updateAluno: builder.mutation<AlunoSummary, { id: number } & Partial<AlunoSummary>>({
+    updateAluno: builder.mutation<AlunoSummary, AlunoUpdatePayload>({
       query: ({ id, ...body }) => ({
         url: `/alunos/${id}`,
         method: "PATCH",
         body
       }),
-      invalidatesTags: (result, _error, { id }) => ["Alunos", { type: "Alunos", id }, "Dashboard", "Turmas"]
+      invalidatesTags: (_result, _error, { id }) => ["Alunos", { type: "Alunos", id }, "Dashboard", "Turmas"]
     }),
     deleteAluno: builder.mutation<void, number>({
       query: (id) => ({
@@ -558,9 +730,9 @@ export const api = createApi({
     }),
 
     // Super Admin Endpoints
-    listTenants: builder.query<any[], void>({
+    listTenants: builder.query<Tenant[], void>({
       query: () => "/admin/tenants",
-      providesTags: ["Usuarios"] // Or a new 'Admin' tag
+      providesTags: ["Usuarios"] 
     }),
     createTenant: builder.mutation<void, { name: string; slug: string; initial_year: string; domain?: string; admin_email?: string; admin_password?: string }>({
       query: (body) => ({
@@ -592,6 +764,19 @@ export const api = createApi({
         method: "DELETE"
       }),
       invalidatesTags: ["Usuarios"]
+    }),
+    getInterventions: builder.query<StudentInterventionAnalysis, number | string>({
+      query: (alunoId) => `/ai/interventions/${alunoId}`
+    }),
+    getStudentRisk: builder.query<RiskPrediction, number>({
+      query: (alunoId) => `/ai/risk/${alunoId}`
+    }),
+    getBulkInterventions: builder.mutation<{ count: number; results: StudentInterventionAnalysis[] }, { student_ids: number[] }>({
+      query: (body) => ({
+        url: "/ai/bulk-interventions",
+        method: "POST",
+        body
+      })
     })
   })
 });
@@ -613,6 +798,8 @@ export const {
   useUpdateNotaMutation,
   useGetNotasFiltrosQuery,
   useChangePasswordMutation,
+  useForgotPasswordMutation,
+  useResetPasswordMutation,
   useUploadPhotoMutation,
   useListUsuariosQuery,
   useCreateUsuarioMutation,
@@ -638,6 +825,9 @@ export const {
   useCreateTenantMutation,
   useAddAcademicYearToTenantMutation,
   useUpdateTenantMutation,
-  useDeleteTenantMutation
+  useDeleteTenantMutation,
+  useGetInterventionsQuery,
+  useGetStudentRiskQuery,
+  useGetBulkInterventionsMutation
 } = api;
 

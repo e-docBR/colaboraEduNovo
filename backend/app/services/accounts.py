@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import re
+import secrets
+import string
 from unicodedata import normalize
 
 from loguru import logger
@@ -21,6 +23,24 @@ def _sanitize_first_name(full_name: str | None) -> str:
     return safe or "aluno"
 
 
+def _generate_initial_password() -> str:
+    """Gera uma senha aleatória segura para uso inicial.
+    Formato: 3 letras maiúsculas + 3 dígitos + 2 caracteres especiais = 8 chars mínimos.
+    """
+    alphabet_upper = string.ascii_uppercase
+    digits = string.digits
+    special = "!@#$%"
+    password = (
+        "".join(secrets.choice(alphabet_upper) for _ in range(3))
+        + "".join(secrets.choice(digits) for _ in range(3))
+        + "".join(secrets.choice(special) for _ in range(2))
+    )
+    # Embaralha para não ter padrão previsível
+    chars = list(password)
+    secrets.SystemRandom().shuffle(chars)
+    return "".join(chars)
+
+
 def build_aluno_username(aluno: Aluno) -> str:
     prefix = _sanitize_first_name(aluno.nome)
     return f"{prefix}{aluno.matricula}".lower()
@@ -28,6 +48,8 @@ def build_aluno_username(aluno: Aluno) -> str:
 
 def ensure_aluno_user(session: Session, aluno: Aluno) -> Usuario:
     """Garante que exista um usuário vinculado ao aluno informado."""
+    from sqlalchemy.exc import IntegrityError
+
     username = build_aluno_username(aluno)
     # 1. First try to find by username (matricula-based) to avoid duplicates across years
     usuario = session.query(Usuario).filter(Usuario.username == username).first()
@@ -44,17 +66,26 @@ def ensure_aluno_user(session: Session, aluno: Aluno) -> Usuario:
     if usuario:
         return usuario
 
-    usuario = Usuario(
-        username=username,
-        password_hash=hash_password(aluno.matricula),
-        role="aluno",
-        aluno_id=aluno.id,
-        tenant_id=aluno.tenant_id,
-        must_change_password=True,
-    )
-    session.add(usuario)
-    session.flush() # Ensure it's visible to subsequent queries in the same transaction
-    logger.info("Usuário aluno {} criado automaticamente para o tenant {}", username, aluno.tenant_id)
+    try:
+        initial_password = _generate_initial_password()
+        usuario = Usuario(
+            username=username,
+            password_hash=hash_password(initial_password),
+            role="aluno",
+            aluno_id=aluno.id,
+            tenant_id=aluno.tenant_id,
+            must_change_password=True,
+        )
+        session.add(usuario)
+        session.flush()  # Ensure it's visible to subsequent queries in the same transaction
+        logger.info("Usuário aluno {} criado automaticamente para o tenant {}", username, aluno.tenant_id)
+    except IntegrityError:
+        # Concurrent request already created the user — rollback the savepoint and re-fetch
+        session.rollback()
+        usuario = session.query(Usuario).filter(Usuario.username == username).first()
+        if not usuario:
+            usuario = session.execute(select(Usuario).where(Usuario.aluno_id == aluno.id)).scalar_one_or_none()
+
     return usuario
 
 

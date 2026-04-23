@@ -1,389 +1,424 @@
-# Guia de Deployment - ColaboraFREI
+# Guia de Deployment — ColaboraEdu
 
-## 📋 Índice
+## Índice
 
 1. [Pré-requisitos](#pré-requisitos)
-2. [Deployment com Docker (Recomendado)](#deployment-com-docker-recomendado)
-3. [Deployment Manual](#deployment-manual)
-4. [Configuração de Ambiente](#configuração-de-ambiente)
-5. [Troubleshooting](#troubleshooting)
-6. [Manutenção](#manutenção)
+2. [Desenvolvimento Local](#desenvolvimento-local)
+3. [Produção com Docker + Traefik](#produção-com-docker--traefik)
+4. [Variáveis de Ambiente](#variáveis-de-ambiente)
+5. [Inicialização do Sistema](#inicialização-do-sistema)
+6. [Configuração de E-mail (SMTP)](#configuração-de-e-mail-smtp)
+7. [Backup e Manutenção](#backup-e-manutenção)
+8. [Troubleshooting](#troubleshooting)
 
 ---
 
-## 🔧 Pré-requisitos
+## Pré-requisitos
 
-### Para Deployment com Docker
-- **Docker Engine**: 24.0+
-- **Docker Compose**: 2.20+
-- **Memória RAM**: Mínimo 2GB disponível
-- **Espaço em Disco**: Mínimo 5GB disponível
+### Para Docker (recomendado)
+- Docker Engine 24.0+
+- Docker Compose 2.20+
+- Mínimo 2GB RAM, 10GB disco
 
-### Para Deployment Manual
-- **Python**: 3.12+
-- **Node.js**: 18+
-- **PostgreSQL**: 15+
-- **Redis**: 7+
-- **npm** ou **pnpm**
+### Para instalação manual
+- Python 3.12+
+- Node.js 18+
+- PostgreSQL 15+
+- Redis 7+
 
 ---
 
-## 🐳 Deployment com Docker (Recomendado)
+## Desenvolvimento Local
 
-### Modo Desenvolvimento
+### Com Docker
 
 ```bash
-# 1. Clone o repositório
+# 1. Clone e configure
 git clone <repository-url>
-cd colaboraFREI
+cd colaboraEdu
+cp .env.example .env  # Edite com valores locais
 
-# 2. Inicie os containers
+# 2. Inicie os serviços
 docker-compose up -d --build
 
-# 3. Verifique o status
-docker-compose ps
-
-# 4. Acesse a aplicação
-# Frontend: http://localhost:5173
-# Backend: http://localhost:5000
-```
-
-### Modo Produção
-
-```bash
-# 1. Configure as variáveis de ambiente
-export POSTGRES_PASSWORD="sua_senha_segura"
-
-# 2. Inicie os containers de produção
-docker-compose -f docker-compose.prod.yml up -d --build
-
-# 3. Verifique o status
-docker-compose -f docker-compose.prod.yml ps
-
-# 4. Acesse a aplicação
-# Frontend: http://localhost:8090
-```
-
-### Comandos Úteis
-
-```bash
-# Ver logs em tempo real
-docker-compose logs -f
-
-# Ver logs de um serviço específico
-docker-compose logs -f backend
-docker-compose logs -f frontend
-
-# Reiniciar um serviço
-docker-compose restart backend
-
-# Parar todos os containers
-docker-compose down
-
-# Parar e remover volumes (⚠️ APAGA DADOS)
-docker-compose down -v
-
-# Executar comandos no container
+# 3. Inicialize banco e super-admin
 docker-compose exec backend flask --app app init-db
+docker-compose exec backend flask --app app create-admin
+
+# 4. (Opcional) Dados de demo
 docker-compose exec backend flask --app app seed-demo
+
+# Acesso:
+# Frontend: http://localhost:5173
+# Backend:  http://localhost:5000
 ```
 
----
+### Manual (sem Docker)
 
-## 🔨 Deployment Manual
-
-### 1. Backend (Flask)
-
+**Backend:**
 ```bash
 cd backend
-
-# Criar ambiente virtual
 python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-# ou
-.venv\Scripts\activate  # Windows
+source .venv/bin/activate  # Linux/Mac — no Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
 
-# Instalar dependências
-pip install -e .[dev]
+# Crie .env no diretório backend/ com as variáveis necessárias
+# (veja seção Variáveis de Ambiente abaixo)
 
-# Configurar variáveis de ambiente
-cp .env.example .env
-# Edite o arquivo .env com suas configurações
-
-# Inicializar banco de dados
 flask --app app init-db
-
-# (Opcional) Carregar dados de demonstração
-flask --app app seed-demo
-
-# Iniciar servidor de desenvolvimento
 flask --app app run --debug --host 0.0.0.0 --port 5000
-
-# Para produção, use Gunicorn
-gunicorn --bind 0.0.0.0:5000 "app:create_app()"
 ```
 
-### 2. Frontend (React/Vite)
-
+**Frontend:**
 ```bash
 cd frontend
-
-# Instalar dependências
 npm install
-# ou
-pnpm install
-
-# Configurar variáveis de ambiente (opcional)
-echo "VITE_API_BASE_URL=http://localhost:5000/api/v1" > .env
-
-# Iniciar servidor de desenvolvimento
-npm run dev -- --host --port 5173
-
-# Para produção, fazer build
-npm run build
-# Os arquivos estarão em dist/
+npm run dev
 ```
 
-### 3. Banco de Dados (PostgreSQL)
-
-```bash
-# Criar banco de dados
-createdb colabora_edu
-
-# Ou via psql
-psql -U postgres
-CREATE DATABASE colabora_edu;
-\q
-```
-
-### 4. Redis
-
-```bash
-# Iniciar Redis
-redis-server
-
-# Ou com Docker
-docker run -d -p 6379:6379 redis:7-alpine
-```
-
-### 5. Worker (Background Jobs)
-
+**Worker (jobs assíncronos):**
 ```bash
 cd backend
 source .venv/bin/activate
-
-# Iniciar worker
 rq worker default --url redis://localhost:6379/0
 ```
 
 ---
 
-## ⚙️ Configuração de Ambiente
+## Produção com Docker + Traefik
 
-### Variáveis de Ambiente - Backend
+O arquivo `docker-compose.prod.yml` provisiona:
+- **Traefik v2** — proxy reverso com TLS automático (Let's Encrypt)
+- **PostgreSQL 15** — banco de dados com senha
+- **Redis 7** — cache e filas com senha e persistência
+- **Backend** — Gunicorn (2 workers, 4 threads)
+- **Worker** — RQ worker para processamento assíncrono
+- **Frontend** — build Nginx otimizado
 
-Crie um arquivo `.env` no diretório `backend/`:
+### Passos de Deploy
 
-```env
-# Flask
-FLASK_APP=app
-FLASK_DEBUG=1  # 0 para produção
-SECRET_KEY=sua_chave_secreta_aqui
+```bash
+# 1. Configure o ambiente
+cp .env.example .env
+nano .env  # preencha TODAS as variáveis (veja seção abaixo)
 
-# Database
-DATABASE_URL=postgresql://postgres:password@localhost:5432/colabora_edu
+# 2. Aponte o DNS do seu domínio para o IP do servidor
+# (A record: seu-dominio.com → IP do servidor)
 
-# Redis
-REDIS_URL=redis://localhost:6379/0
+# 3. Inicie os containers
+docker-compose -f docker-compose.prod.yml up -d --build
 
-# CORS
-ALLOWED_ORIGINS=["http://localhost:5173", "http://127.0.0.1:5173"]
+# 4. Aguarde o Traefik obter o certificado SSL (1-2 minutos)
+docker-compose -f docker-compose.prod.yml logs -f traefik
 
-# Upload
-UPLOAD_FOLDER=/data/uploads
-MAX_CONTENT_LENGTH=16777216  # 16MB
+# 5. Inicialize o banco de dados
+docker-compose -f docker-compose.prod.yml exec backend flask --app app init-db
+
+# 6. Crie o super-admin inicial
+docker-compose -f docker-compose.prod.yml exec backend flask --app app create-admin \
+  --username admin \
+  --email admin@suaescola.com.br
+
+# O comando imprime a senha gerada aleatoriamente — salve-a!
+
+# 7. Verifique o status
+docker-compose -f docker-compose.prod.yml ps
+curl https://seu-dominio.com/api/v1/health
 ```
 
-### Variáveis de Ambiente - Frontend
+### Atualização em Produção
 
-Crie um arquivo `.env` no diretório `frontend/`:
+```bash
+# 1. Backup preventivo
+docker-compose -f docker-compose.prod.yml exec postgres \
+  pg_dump -U ${POSTGRES_USER} ${POSTGRES_DB} > backup_pre_update_$(date +%Y%m%d).sql
 
-```env
-VITE_API_BASE_URL=http://localhost:5000/api/v1
-```
+# 2. Atualizar código
+git pull origin main
 
-### Variáveis de Ambiente - Docker Compose
+# 3. Rebuild e restart
+docker-compose -f docker-compose.prod.yml up -d --build
 
-Para produção, você pode criar um arquivo `.env` na raiz do projeto:
-
-```env
-POSTGRES_PASSWORD=senha_super_segura
-ALLOWED_ORIGINS=["https://seu-dominio.com"]
+# 4. Executar migrações (se houver)
+docker-compose -f docker-compose.prod.yml exec backend flask --app app db upgrade
 ```
 
 ---
 
-## 🔍 Troubleshooting
+## Variáveis de Ambiente
 
-### Problema: Containers não iniciam
+Copie `.env.example` para `.env` e preencha os valores. Abaixo estão as variáveis por categoria.
+
+### Infra / Traefik
+
+| Variável | Obrigatória | Descrição |
+|----------|-------------|-----------|
+| `DOMAIN` | Sim | Domínio público sem `https://` (ex: `app.suaescola.com.br`) |
+| `ACME_EMAIL` | Sim | E-mail para o certificado Let's Encrypt |
+
+### PostgreSQL
+
+| Variável | Obrigatória | Descrição |
+|----------|-------------|-----------|
+| `POSTGRES_USER` | Sim | Usuário do banco (ex: `colabora_user`) |
+| `POSTGRES_PASSWORD` | Sim | Senha forte — `openssl rand -hex 32` |
+| `POSTGRES_DB` | Sim | Nome do banco (ex: `colabora_edu`) |
+
+### Redis
+
+| Variável | Obrigatória | Descrição |
+|----------|-------------|-----------|
+| `REDIS_PASSWORD` | Sim | Senha do Redis — `openssl rand -hex 24` |
+
+### Flask / Backend
+
+| Variável | Obrigatória | Descrição |
+|----------|-------------|-----------|
+| `SECRET_KEY` | Sim | Chave Flask — mín. 32 chars, `openssl rand -hex 32` |
+| `JWT_SECRET_KEY` | Sim | Chave JWT — mín. 32 chars, `openssl rand -hex 32` |
+| `FLASK_ENV` | Sim | `production` em produção, `development` em dev |
+| `FRONTEND_URL` | Sim | URL pública do frontend (para links nos e-mails) |
+| `BRAND_NAME` | Não | Nome da plataforma (padrão: `ColaboraEdu`) |
+| `ALLOWED_ORIGINS` | Não | JSON array de origens CORS (padrão: `["https://{DOMAIN}"]`) |
+| `COMMERCIAL_MODE` | Não | `saas` (multi-escola) ou `dedicated` (escola única) |
+
+### SMTP (obrigatório para recuperação de senha)
+
+| Variável | Obrigatória | Descrição |
+|----------|-------------|-----------|
+| `SMTP_SERVER` | Sim | Servidor SMTP (ex: `smtp.gmail.com`) |
+| `SMTP_PORT` | Sim | Porta SMTP (ex: `587` para TLS) |
+| `SMTP_USER` | Sim | Usuário SMTP |
+| `SMTP_PASSWORD` | Sim | Senha SMTP (use App Password no Gmail) |
+| `SMTP_FROM` | Sim | Endereço remetente (ex: `noreply@suaescola.com.br`) |
+
+### WhatsApp (opcional)
+
+| Variável | Obrigatória | Descrição |
+|----------|-------------|-----------|
+| `WHATSAPP_API_URL` | Não | URL da Evolution API |
+| `WHATSAPP_API_TOKEN` | Não | Token da Evolution API |
+
+---
+
+## Inicialização do Sistema
+
+### Criar Super-Admin
 
 ```bash
-# Verificar logs
-docker-compose logs
+# Cria super-admin com senha gerada automaticamente
+flask --app app create-admin
 
-# Limpar containers antigos
-docker-compose down -v
-docker system prune -a
-
-# Reconstruir
-docker-compose up -d --build
+# Ou especificando parâmetros
+flask --app app create-admin \
+  --username meuadmin \
+  --email admin@suaescola.com.br \
+  --password "MinhaSenh@Forte123"
 ```
 
-### Problema: Erro de conexão com banco de dados
+O super-admin tem `tenant_id = NULL` e acesso a todas as escolas.
+
+### Criar Primeira Escola (Tenant)
+
+Após fazer login com o super-admin, acesse `/app/admin/escolas` para criar a primeira escola. Você pode também usar a CLI:
 
 ```bash
-# Verificar se o PostgreSQL está rodando
-docker-compose ps postgres
-
-# Verificar logs do PostgreSQL
-docker-compose logs postgres
-
-# Testar conexão
-docker-compose exec postgres psql -U postgres -d colabora_edu
+flask --app app create-tenant --name "Escola Municipal X" --slug "escola-x"
 ```
 
-### Problema: Frontend não conecta ao Backend
-
-1. Verifique se o backend está rodando: `curl http://localhost:5000/health`
-2. Verifique as configurações de CORS no backend
-3. Verifique a variável `VITE_API_BASE_URL` no frontend
-
-### Problema: Erro nas migrações
+### Criar Admin da Escola
 
 ```bash
-# Inicializar banco manualmente
-docker-compose exec backend flask --app app init-db
-
-# Ou criar migração
-docker-compose exec backend flask db init
-docker-compose exec backend flask db migrate -m "Initial migration"
-docker-compose exec backend flask db upgrade
-```
-
-### Problema: Worker não processa jobs
-
-```bash
-# Verificar se Redis está rodando
-docker-compose ps redis
-
-# Verificar logs do worker
-docker-compose logs worker
-
-# Reiniciar worker
-docker-compose restart worker
+flask --app app create-admin \
+  --username admin_escola_x \
+  --email admin@escolax.com.br \
+  --tenant-slug escola-x
 ```
 
 ---
 
-## 🔧 Manutenção
+## Configuração de E-mail (SMTP)
+
+A recuperação de senha e notificações usam SMTP. Configure no `.env`:
+
+### Gmail (App Password)
+
+1. Ative autenticação de 2 fatores na conta Google
+2. Acesse `myaccount.google.com` → Segurança → Senhas de app
+3. Gere uma senha de app para "E-mail"
+4. Use essa senha em `SMTP_PASSWORD`
+
+```env
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=noreply@suaescola.com.br
+SMTP_PASSWORD=xxxx xxxx xxxx xxxx   # App Password gerada
+SMTP_FROM=noreply@suaescola.com.br
+```
+
+### SendGrid
+
+```env
+SMTP_SERVER=smtp.sendgrid.net
+SMTP_PORT=587
+SMTP_USER=apikey
+SMTP_PASSWORD=SG.xxxxxxxxxxxx
+SMTP_FROM=noreply@suaescola.com.br
+```
+
+### Testar envio de e-mail
+
+```bash
+docker-compose exec backend flask --app app shell
+>>> from app.core.config import settings
+>>> print(settings.smtp_server, settings.smtp_user)
+```
+
+---
+
+## Backup e Manutenção
 
 ### Backup do Banco de Dados
 
 ```bash
-# Backup com Docker
-docker-compose exec postgres pg_dump -U postgres colabora_edu > backup_$(date +%Y%m%d).sql
+# Backup manual
+docker-compose -f docker-compose.prod.yml exec postgres \
+  pg_dump -U ${POSTGRES_USER} ${POSTGRES_DB} \
+  > backup_$(date +%Y%m%d_%H%M%S).sql
 
-# Restaurar backup
-docker-compose exec -T postgres psql -U postgres colabora_edu < backup_20260113.sql
+# Restaurar
+docker-compose -f docker-compose.prod.yml exec -T postgres \
+  psql -U ${POSTGRES_USER} ${POSTGRES_DB} \
+  < backup_20260410_120000.sql
 ```
 
-### Atualização do Sistema
+### Backup Automático (cron)
+
+Adicione ao crontab do servidor:
 
 ```bash
-# 1. Fazer backup
-docker-compose exec postgres pg_dump -U postgres colabora_edu > backup_pre_update.sql
-
-# 2. Parar containers
-docker-compose down
-
-# 3. Atualizar código
-git pull origin main
-
-# 4. Reconstruir e iniciar
-docker-compose up -d --build
-
-# 5. Verificar logs
-docker-compose logs -f
-```
-
-### Limpeza de Logs
-
-```bash
-# Limpar logs do Docker
-docker-compose logs --no-log-prefix > logs_backup.txt
-docker system prune -a --volumes
-
-# Limpar uploads antigos (cuidado!)
-docker-compose exec backend find /data/uploads -type f -mtime +90 -delete
+# Backup diário às 2h da manhã
+0 2 * * * cd /opt/colaboraedu && docker-compose -f docker-compose.prod.yml exec -T postgres \
+  pg_dump -U colabora_user colabora_edu \
+  | gzip > /backups/db_$(date +\%Y\%m\%d).sql.gz
 ```
 
 ### Monitoramento
 
 ```bash
-# Ver uso de recursos
+# Status dos serviços
+docker-compose -f docker-compose.prod.yml ps
+
+# Logs em tempo real
+docker-compose -f docker-compose.prod.yml logs -f
+
+# Saúde da API
+curl https://seu-dominio.com/api/v1/health
+
+# Recursos dos containers
 docker stats
+```
 
-# Ver logs em tempo real
-docker-compose logs -f --tail=100
+### Limpeza
 
-# Verificar saúde dos serviços
-docker-compose ps
-curl http://localhost:5000/health
+```bash
+# Remover imagens antigas (não remove containers ativos)
+docker image prune -a
+
+# Limpar uploads antigos (mais de 90 dias)
+docker-compose -f docker-compose.prod.yml exec backend \
+  find /data/uploads -type f -mtime +90 -name "*.pdf" -delete
 ```
 
 ---
 
-## 🚀 Deployment em Produção
+## Troubleshooting
 
-### Checklist de Segurança
+### Containers não iniciam
 
-- [ ] Alterar `SECRET_KEY` para valor aleatório e seguro
-- [ ] Alterar senha do PostgreSQL (`POSTGRES_PASSWORD`)
-- [ ] Configurar `FLASK_DEBUG=0`
-- [ ] Configurar CORS com domínios específicos
-- [ ] Usar HTTPS (configurar reverse proxy como Nginx)
-- [ ] Configurar firewall (permitir apenas portas necessárias)
-- [ ] Configurar backup automático do banco de dados
-- [ ] Configurar logs centralizados
-- [ ] Implementar rate limiting
-- [ ] Configurar monitoramento (ex: Prometheus + Grafana)
+```bash
+docker-compose -f docker-compose.prod.yml logs
+docker-compose -f docker-compose.prod.yml down
+docker-compose -f docker-compose.prod.yml up -d --build
+```
 
-### Exemplo de Configuração Nginx
+### Erro de conexão com banco
 
-```nginx
-server {
-    listen 80;
-    server_name seu-dominio.com;
+```bash
+# Verificar status do PostgreSQL
+docker-compose -f docker-compose.prod.yml ps postgres
 
-    location / {
-        proxy_pass http://localhost:8090;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
+# Testar conexão
+docker-compose -f docker-compose.prod.yml exec postgres \
+  psql -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c "SELECT 1"
 
-    location /api {
-        proxy_pass http://localhost:5000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-}
+# Verificar variáveis de ambiente do backend
+docker-compose -f docker-compose.prod.yml exec backend env | grep DATABASE
+```
+
+### SSL/TLS não funciona
+
+```bash
+# Verificar se o DNS aponta para o servidor
+dig +short seu-dominio.com
+
+# Verificar logs do Traefik
+docker-compose -f docker-compose.prod.yml logs traefik | grep -i acme
+
+# O certificado é obtido automaticamente na primeira requisição HTTP
+# Aguarde 1-2 minutos após o primeiro acesso
+```
+
+### Backend retorna 401 em todas as requisições
+
+Provavelmente o Redis está indisponível. O sistema está em modo fail-closed — todos os tokens são tratados como revogados quando o Redis não responde.
+
+```bash
+docker-compose -f docker-compose.prod.yml ps redis
+docker-compose -f docker-compose.prod.yml logs redis
+docker-compose -f docker-compose.prod.yml restart redis
+```
+
+### Worker não processa PDFs
+
+```bash
+docker-compose -f docker-compose.prod.yml logs worker
+docker-compose -f docker-compose.prod.yml restart worker
+
+# Verificar fila
+docker-compose -f docker-compose.prod.yml exec redis \
+  redis-cli -a ${REDIS_PASSWORD} llen rq:queue:default
+```
+
+### Erro de migrações
+
+```bash
+# Ver status das migrações
+docker-compose -f docker-compose.prod.yml exec backend \
+  flask --app app db current
+
+# Aplicar migrações pendentes
+docker-compose -f docker-compose.prod.yml exec backend \
+  flask --app app db upgrade
+
+# Em último caso, recriar o banco (APAGA TODOS OS DADOS)
+docker-compose -f docker-compose.prod.yml exec backend \
+  flask --app app init-db
 ```
 
 ---
 
-## 📞 Suporte
+## Checklist de Segurança para Produção
 
-Para problemas ou dúvidas:
-- Consulte a documentação completa em `/docs`
-- Verifique os logs: `docker-compose logs -f`
-- Abra uma issue no repositório do projeto
+- [ ] `SECRET_KEY` com pelo menos 32 caracteres aleatórios
+- [ ] `JWT_SECRET_KEY` com pelo menos 32 caracteres aleatórios
+- [ ] `POSTGRES_PASSWORD` forte e única
+- [ ] `REDIS_PASSWORD` forte e única
+- [ ] `FLASK_ENV=production`
+- [ ] HTTPS ativo (Traefik com Let's Encrypt)
+- [ ] `ALLOWED_ORIGINS` configurado apenas com domínios próprios
+- [ ] SMTP configurado para recuperação de senha
+- [ ] Backup automático do banco configurado
+- [ ] `.env` não versionado no git (verificar `.gitignore`)
+- [ ] Firewall: apenas portas 80 e 443 abertas externamente
+- [ ] Super-admin com senha trocada após primeiro login

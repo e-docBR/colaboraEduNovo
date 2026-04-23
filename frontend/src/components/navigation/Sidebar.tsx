@@ -9,6 +9,7 @@ import UploadFileIcon from "@mui/icons-material/UploadFile";
 import ManageAccountsIcon from "@mui/icons-material/ManageAccounts";
 import NotificationsIcon from "@mui/icons-material/Notifications";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
 import { NavLink } from "react-router-dom";
 import { useMemo } from "react";
 import { useAppSelector } from "../../app/hooks";
@@ -59,6 +60,10 @@ export const Sidebar = ({ mobile }: { mobile?: boolean }) => {
 
     if (isAdmin || user?.role === "professor" || user?.role === "orientador" || user?.role === "diretor") {
       base.push({ label: "Visão Professor", icon: <InsightsIcon />, path: `${appBasePath}/professor` });
+    }
+
+    if (isAdmin || user?.role === "coordenador") {
+      base.push({ label: "Intervenções IA", icon: <AutoFixHighIcon />, path: `${appBasePath}/ia/intervencoes-em-lote` });
     }
 
     base.splice(1, 0, { label: "Comunicados", icon: <NotificationsIcon />, path: `${appBasePath}/comunicados` });

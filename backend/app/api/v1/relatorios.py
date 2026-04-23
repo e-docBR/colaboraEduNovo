@@ -5,6 +5,7 @@ from sqlalchemy import func
 from loguru import logger
 
 from ...core.database import session_scope
+from ...core.cache import cache_response
 from ...models import Aluno, Nota
 
 
@@ -459,6 +460,7 @@ def register(parent: Blueprint) -> None:
 
     @bp.get("/relatorios/<string:slug>")
     @jwt_required()
+    @cache_response(timeout=300, key_prefix="relatorios")
     def get_relatorio(slug: str):
         if "aluno" in (get_jwt().get("roles") or []):
             return jsonify({"error": "Acesso restrito"}), 403
@@ -477,6 +479,52 @@ def register(parent: Blueprint) -> None:
         with session_scope() as session:
             try:
                 result = builder(session, **params)
+                data_list = result["data"] if isinstance(result, dict) and "data" in result else result
+                
+                export_format = request.args.get("format")
+                if export_format in ("csv", "xlsx") and data_list:
+                    import io
+                    import csv
+                    from flask import Response, send_file
+                    
+                    if not isinstance(data_list, list) or len(data_list) == 0 or not isinstance(data_list[0], dict):
+                        return jsonify({"error": "Nenhum dado para exportar"}), 400
+                        
+                    keys = list(data_list[0].keys())
+                    
+                    if export_format == "csv":
+                        si = io.StringIO()
+                        writer = csv.DictWriter(si, fieldnames=keys)
+                        writer.writeheader()
+                        writer.writerows(data_list)
+                        
+                        return Response(
+                            si.getvalue(),
+                            mimetype="text/csv",
+                            headers={"Content-disposition": f"attachment; filename=relatorio_{slug}.csv"}
+                        )
+                        
+                    elif export_format == "xlsx":
+                        import openpyxl
+                        wb = openpyxl.Workbook()
+                        ws = wb.active
+                        ws.title = "Relatório"
+                        
+                        ws.append(keys)
+                        for row in data_list:
+                            ws.append([row.get(key) for key in keys])
+                            
+                        output = io.BytesIO()
+                        wb.save(output)
+                        output.seek(0)
+                        
+                        return send_file(
+                            output,
+                            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            as_attachment=True,
+                            download_name=f"relatorio_{slug}.xlsx"
+                        )
+
                 if isinstance(result, dict) and "data" in result:
                     return jsonify({
                         "relatorio": slug,

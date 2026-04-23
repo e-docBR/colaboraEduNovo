@@ -53,7 +53,8 @@ import { useAppSelector } from "../../app/hooks";
 
 export const ComunicadosPage = () => {
     const theme = useTheme();
-    const { data: comunicados, isLoading } = useListComunicadosQuery();
+    const { data: comunicadosData, isLoading } = useListComunicadosQuery();
+    const comunicados = comunicadosData?.items;
     const [createComunicado, { isLoading: isCreating }] = useCreateComunicadoMutation();
     const [updateComunicado] = useUpdateComunicadoMutation();
     const [deleteComunicado] = useDeleteComunicadoMutation();

@@ -40,6 +40,8 @@ import HomeIcon from "@mui/icons-material/Home";
 import DescriptionIcon from "@mui/icons-material/Description";
 import GroupIcon from "@mui/icons-material/Group";
 import SchoolIcon from "@mui/icons-material/School";
+import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
+import { AIInterventionBoard } from "../dashboard/AIInterventionBoard";
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -259,6 +261,7 @@ export const AlunoDetailPage = () => {
         <Tabs value={tabValue} onChange={handleTabChange} color="secondary">
           <Tab icon={<SchoolIcon fontSize="small" />} iconPosition="start" label="Acadêmico" />
           <Tab icon={<PersonIcon fontSize="small" />} iconPosition="start" label="Dados Pessoais" />
+          <Tab icon={<AutoFixHighIcon fontSize="small" />} iconPosition="start" label="IA Insights" />
         </Tabs>
       </Box>
 
@@ -423,6 +426,10 @@ export const AlunoDetailPage = () => {
             </Card>
           </Grid>
         </Grid>
+      </CustomTabPanel>
+
+      <CustomTabPanel value={tabValue} index={2}>
+        <AIInterventionBoard studentIds={[Number(alunoId)]} />
       </CustomTabPanel>
 
       {editingNota && (

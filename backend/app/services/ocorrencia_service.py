@@ -37,10 +37,13 @@ class OcorrenciaService:
         from flask import g
         dt = datetime.now()
         if data.data_registro:
-             try:
+            try:
                 dt = datetime.fromisoformat(data.data_registro)
-             except:
-                pass
+            except ValueError as exc:
+                raise ValueError(
+                    f"data_registro inválido: '{data.data_registro}'. "
+                    "Use o formato ISO-8601 (ex: '2024-05-15T14:30:00')."
+                ) from exc
 
         payload = {
             "aluno_id": data.aluno_id,
@@ -61,11 +64,11 @@ class OcorrenciaService:
         if data.notificar_responsaveis:
             from ..core.queue import queue
             from ..core.tasks import notify_occurrence_task
-            queue.enqueue(notify_occurrence_task, novo.id)
-            # Update status to Pending
+            # Marca como pendente antes de enfileirar (sem commit — o session_scope faz isso)
             novo.notificacao_status = "Pendente"
             self.repository.session.add(novo)
-            self.repository.session.commit()
+            self.repository.session.flush()
+            queue.enqueue(notify_occurrence_task, novo.id)
 
         # Audit
         log_action(
@@ -90,7 +93,7 @@ class OcorrenciaService:
         )
 
     def update(self, id: int, data: OcorrenciaUpdate) -> Optional[OcorrenciaSchema]:
-        existing = self.repository.get(id)
+        existing = self.repository.get_scoped(id)
         if not existing:
             return None
 
@@ -120,14 +123,14 @@ class OcorrenciaService:
         )
 
     def delete(self, id: int) -> bool:
-        success = self.repository.delete(id)
+        success = self.repository.delete_scoped(id)
         if success:
             log_action(
-                self.repository.session, 
-                self.user_id, 
-                "DELETE", 
-                "Ocorrencia", 
-                id, 
+                self.repository.session,
+                self.user_id,
+                "DELETE",
+                "Ocorrencia",
+                id,
                 {"deleted": True}
             )
         return success

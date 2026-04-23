@@ -42,41 +42,65 @@ def register(parent: Blueprint) -> None:
     @jwt_required()
     @super_admin_required
     def create_tenant():
-        data = request.get_json()
-        if not data.get("name") or not data.get("slug"):
+        data = request.get_json() or {}
+        name = (data.get("name") or "").strip()
+        slug = (data.get("slug") or "").strip()
+        if not name or not slug:
             return jsonify({"error": "Nome e slug são obrigatórios"}), 400
-            
-        with session_scope() as session:
-            tenant = Tenant(
-                name=data["name"],
-                slug=data["slug"],
-                domain=data.get("domain")
-            )
-            session.add(tenant)
-            session.flush() # Get ID
-            
-            # Create first academic year by default
-            year = AcademicYear(
-                tenant_id=tenant.id,
-                label=data.get("initial_year", "2024"),
-                is_current=True
-            )
-            session.add(year)
-            
-            # Create root admin user if provided
-            if data.get("admin_email") and data.get("admin_password"):
-                from app.core.security import hash_password
-                admin_user = Usuario(
-                    username=data["admin_email"].split('@')[0],
-                    email=data["admin_email"],
-                    password_hash=hash_password(data["admin_password"]),
-                    role="admin",
-                    tenant_id=tenant.id,
-                    is_active=True
-                )
-                session.add(admin_user)
 
-            return jsonify({"message": "Escola e administrador criados com sucesso", "id": tenant.id}), 201
+        # Normalize empty string domain to None to avoid unique constraint conflicts
+        domain = data.get("domain") or None
+
+        # 2. Check for duplicate admin email (cross-tenant, so bypass tenant filter)
+        if data.get("admin_email"):
+            with SessionLocal() as check_session:
+                existing_user = check_session.query(Usuario).filter(
+                    Usuario.email == data["admin_email"]
+                ).execution_options(include_all_tenants=True).first()
+            if existing_user:
+                return jsonify({"error": f"Já existe um usuário com o e-mail '{data['admin_email']}'"}), 409
+
+        # 3. Create everything in a single transaction.
+        # The UNIQUE constraint on tenant.slug catches concurrent duplicates without
+        # a pre-check race condition.
+        try:
+            from sqlalchemy.exc import IntegrityError
+            with session_scope() as session:
+                tenant = Tenant(name=name, slug=slug, domain=domain)
+                session.add(tenant)
+                session.flush()  # Get ID before inserting children
+
+                session.add(AcademicYear(
+                    tenant_id=tenant.id,
+                    label=str(data.get("initial_year") or "2025"),
+                    is_current=True,
+                ))
+
+                if data.get("admin_email") and data.get("admin_password"):
+                    from app.core.security import hash_password
+                    # A3: username unique per tenant — no race condition possible since
+                    # this is the first user in a brand-new tenant. DB constraint guards it.
+                    username = data["admin_email"].split("@")[0]
+                    session.add(Usuario(
+                        username=username,
+                        email=data["admin_email"],
+                        password_hash=hash_password(data["admin_password"]),
+                        role="admin",
+                        tenant_id=tenant.id,
+                        is_active=True,
+                        must_change_password=True,
+                    ))
+
+                tenant_id = tenant.id
+
+        except IntegrityError:
+            return jsonify({"error": f"Já existe uma escola com o slug '{slug}'"}), 409
+        except Exception as exc:
+            from loguru import logger
+            logger.error(f"Erro ao criar tenant '{slug}': {exc}")
+            return jsonify({"error": "Erro interno ao criar escola. Verifique os dados e tente novamente."}), 500
+
+        return jsonify({"message": "Escola e administrador criados com sucesso", "id": tenant_id}), 201
 
     @bp.route("/tenants/<int:tenant_id>/years", methods=["POST"])
     @jwt_required()

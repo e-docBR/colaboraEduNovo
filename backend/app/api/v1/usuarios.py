@@ -6,13 +6,11 @@ from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
 from pathlib import Path
-from werkzeug.utils import secure_filename
 
 from ...core.config import settings
 from ...core.database import session_scope
 from ...core.security import hash_password
 from ...models import Aluno, Usuario
-from ...services.accounts import ensure_all_aluno_users
 
 
 def serialize_usuario(usuario: Usuario) -> dict[str, object]:
@@ -59,21 +57,21 @@ def register(parent: Blueprint) -> None:
         role_filter = request.args.get("role")
 
         with session_scope() as session:
-            ensure_all_aluno_users(session)
-            session.flush()  # Ensure new users have IDs before querying
-            
             query = (
                 session.query(Usuario)
                 .options(joinedload(Usuario.aluno))
                 .outerjoin(Aluno)
             )
             if query_text:
-                like = f"%{query_text}%"
+                # Escape LIKE metacharacters before wrapping in wildcards to
+                # prevent users crafting patterns that bypass intent (e.g. "%" or "_").
+                escaped = query_text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                like = f"%{escaped}%"
                 query = query.filter(
                     or_(
-                        Usuario.username.ilike(like),
-                        Aluno.nome.ilike(like),
-                        Aluno.matricula.ilike(like),
+                        Usuario.username.ilike(like, escape="\\"),
+                        Aluno.nome.ilike(like, escape="\\"),
+                        Aluno.matricula.ilike(like, escape="\\"),
                     )
                 )
             if role_filter:
@@ -116,9 +114,20 @@ def register(parent: Blueprint) -> None:
         if not username or not password:
             return jsonify({"error": "Usuário e senha são obrigatórios"}), 400
 
+        from app.core.validators import validate_password_strength
+        try:
+            validate_password_strength(password)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
         from flask import g
         with session_scope() as session:
-            existing = session.query(Usuario).filter(Usuario.username == username).first()
+            # A1: username check scoped to tenant
+            existing = (
+                session.query(Usuario)
+                .filter(Usuario.username == username, Usuario.tenant_id == g.tenant_id)
+                .first()
+            )
             if existing:
                 return jsonify({"error": "Usuário já existe"}), 409
 
@@ -150,8 +159,23 @@ def register(parent: Blueprint) -> None:
         if not payload:
             return jsonify({"error": "Nenhum dado informado"}), 400
 
+        current_user_id = int(get_jwt_identity())
+        current_claims = get_jwt()
+        current_roles = current_claims.get("roles", [])
+        is_super_admin = "super_admin" in current_roles
+
+        # C4: prevent self-promotion
+        if current_user_id == usuario_id and ("role" in payload or "is_admin" in payload):
+            return jsonify({"error": "Não é possível alterar seu próprio papel ou permissões"}), 403
+
+        from flask import g
         with session_scope() as session:
-            usuario = session.get(Usuario, usuario_id)
+            # C1: tenant-scoped lookup
+            usuario = (
+                session.query(Usuario)
+                .filter(Usuario.id == usuario_id, Usuario.tenant_id == g.tenant_id)
+                .first()
+            )
             if not usuario:
                 return jsonify({"error": "Usuário não encontrado"}), 404
 
@@ -160,9 +184,14 @@ def register(parent: Blueprint) -> None:
                 new_username = new_username.strip()
                 if not new_username:
                     return jsonify({"error": "Usuário inválido"}), 400
+                # A1: username check scoped to tenant
                 existing = (
                     session.query(Usuario)
-                    .filter(Usuario.username == new_username, Usuario.id != usuario.id)
+                    .filter(
+                        Usuario.username == new_username,
+                        Usuario.tenant_id == g.tenant_id,
+                        Usuario.id != usuario.id,
+                    )
                     .first()
                 )
                 if existing:
@@ -170,9 +199,16 @@ def register(parent: Blueprint) -> None:
                 usuario.username = new_username
 
             if "role" in payload:
-                usuario.role = payload.get("role") or usuario.role
+                new_role = payload.get("role") or usuario.role
+                # C4: only super_admin can grant admin/super_admin roles
+                if new_role in ("super_admin", "admin") and not is_super_admin:
+                    return jsonify({"error": "Permissão insuficiente para atribuir este papel"}), 403
+                usuario.role = new_role
 
             if "is_admin" in payload:
+                # C4: only super_admin can grant admin flag
+                if bool(payload.get("is_admin")) and not is_super_admin:
+                    return jsonify({"error": "Apenas super_admin pode conceder privilégios de administrador"}), 403
                 usuario.is_admin = bool(payload.get("is_admin"))
 
             if "must_change_password" in payload:
@@ -189,15 +225,20 @@ def register(parent: Blueprint) -> None:
                     usuario.aluno_id = aluno.id
 
             if payload.get("password"):
+                from app.core.validators import validate_password_strength
+                try:
+                    validate_password_strength(payload["password"])
+                except ValueError as exc:
+                    return jsonify({"error": str(exc)}), 400
                 usuario.password_hash = hash_password(payload["password"])
                 usuario.must_change_password = payload.get("must_change_password", True)
 
             session.add(usuario)
             session.flush()
             session.refresh(usuario)
-            payload = serialize_usuario(usuario)
+            result = serialize_usuario(usuario)
 
-        return jsonify(payload)
+        return jsonify(result)
 
     @bp.delete("/usuarios/<int:usuario_id>")
     @jwt_required()
@@ -209,8 +250,14 @@ def register(parent: Blueprint) -> None:
         if current_user_id == usuario_id:
             return jsonify({"error": "Não é possível remover o próprio usuário"}), 400
 
+        from flask import g
         with session_scope() as session:
-            usuario = session.get(Usuario, usuario_id)
+            # C1: tenant-scoped lookup
+            usuario = (
+                session.query(Usuario)
+                .filter(Usuario.id == usuario_id, Usuario.tenant_id == g.tenant_id)
+                .first()
+            )
             if not usuario:
                 return jsonify({"error": "Usuário não encontrado"}), 404
             session.delete(usuario)
@@ -226,12 +273,34 @@ def register(parent: Blueprint) -> None:
         file = request.files["file"]
         if not file.filename:
             return jsonify({"error": "Nome de arquivo inválido"}), 400
-            
+
+        # Enforce file size limit (5 MB) before reading full content
+        MAX_PHOTO_BYTES = 5 * 1024 * 1024
+        file.seek(0, 2)  # seek to end
+        file_size = file.tell()
+        file.seek(0)
+        if file_size > MAX_PHOTO_BYTES:
+            return jsonify({"error": "Arquivo muito grande. Máximo permitido: 5 MB"}), 413
+
+        ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp'}
+        ALLOWED_MIMES = {'image/jpeg', 'image/png', 'image/webp'}
+
+        ext = Path(file.filename).suffix.lower()
+        if ext not in ALLOWED_EXTENSIONS or file.mimetype not in ALLOWED_MIMES:
+            return jsonify({"error": "Tipo de arquivo não permitido"}), 400
+
+        # Verificar magic bytes
+        header = file.read(16)
+        file.seek(0)
+        if not header.startswith((b'\xff\xd8', b'\x89PNG', b'RIFF')):
+            return jsonify({"error": "Arquivo de imagem inválido"}), 400
+
         user_id = get_jwt_identity()
-        import time
-        ts = int(time.time())
-        filename = secure_filename(f"user_{user_id}_{ts}_{file.filename}")
-        
+        import uuid
+        # Use random UUID for filename to prevent enumeration and path guessing
+        safe_ext = ext if ext in ALLOWED_EXTENSIONS else '.jpg'
+        filename = f"user_{user_id}_{uuid.uuid4().hex}{safe_ext}"
+
         # Ensure directory exists
         photos_dir = Path(settings.upload_folder) / "photos"
         photos_dir.mkdir(parents=True, exist_ok=True)

@@ -1,449 +1,334 @@
-# Arquitetura do Sistema - ColaboraFREI
+# Arquitetura do Sistema — ColaboraEdu
 
-## 📐 Visão Geral
+## Visão Geral
 
-O ColaboraFREI é uma plataforma moderna de gestão escolar construída com arquitetura de microserviços, utilizando tecnologias web modernas e containerização Docker.
+O ColaboraEdu é uma plataforma SaaS multi-tenant de gestão escolar. A arquitetura suporta múltiplas escolas com isolamento total de dados, autenticação JWT com refresh silencioso, processamento assíncrono de PDFs via fila Redis/RQ e análise inteligente com IA.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        USUÁRIOS                              │
-│  (Alunos, Professores, Administradores, Responsáveis)       │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    FRONTEND (React/Vite)                     │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │  Dashboard   │  │  Boletins    │  │  Ocorrências │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │  Comunicados │  │  AI Chat     │  │  Relatórios  │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-└────────────────────┬────────────────────────────────────────┘
-                     │ REST API
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    BACKEND (Flask)                           │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │              API Routes (v1)                         │   │
-│  │  /auth  /alunos  /turmas  /notas  /ocorrencias      │   │
-│  │  /comunicados  /relatorios  /usuarios               │   │
-│  └────────────────┬─────────────────────────────────────┘   │
-│                   │                                          │
-│  ┌────────────────▼─────────────────────────────────────┐   │
-│  │           Services Layer                             │   │
-│  │  AlunoService  TurmaService  OcorrenciaService       │   │
-│  │  UsuarioService  TenantService                       │   │
-│  └────────────────┬─────────────────────────────────────┘   │
-│                   │                                          │
-│  ┌────────────────▼─────────────────────────────────────┐   │
-│  │         Repositories Layer                           │   │
-│  │  AlunoRepository  TurmaRepository  etc.              │   │
-│  └────────────────┬─────────────────────────────────────┘   │
-│                   │                                          │
-│  ┌────────────────▼─────────────────────────────────────┐   │
-│  │            Models (SQLAlchemy)                       │   │
-│  │  Aluno  Turma  Nota  Ocorrencia  Usuario  Tenant    │   │
-│  └──────────────────────────────────────────────────────┘   │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-        ┌────────────┴────────────┐
-        ▼                         ▼
-┌──────────────────┐      ┌──────────────────┐
-│   PostgreSQL     │      │      Redis       │
-│  (Banco Dados)   │      │  (Cache/Queue)   │
-└──────────────────┘      └──────────────────┘
-                                  │
-                                  ▼
-                          ┌──────────────────┐
-                          │   RQ Worker      │
-                          │ (Background Jobs)│
-                          └──────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                            USUÁRIOS                                  │
+│  (Alunos, Professores, Coordenadores, Diretores, Super-Admin)       │
+└──────────────────┬──────────────────────────┬───────────────────────┘
+                   │ Web Browser               │ Mobile (Expo)
+                   ▼                           ▼
+┌──────────────────────────────┐  ┌──────────────────────────────┐
+│  Frontend Web (React/MUI)    │  │  App Mobile (React Native)   │
+│  Redux Toolkit + RTK Query   │  │  Zustand + TanStack Query    │
+│  Silent token refresh        │  │                              │
+└──────────┬───────────────────┘  └──────────────┬───────────────┘
+           │                                     │
+           │           HTTPS / REST API          │
+           ▼                                     ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                      Traefik (Proxy Reverso)                        │
+│                    TLS automático (Let's Encrypt)                   │
+└──────────────────────────────┬──────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    BACKEND (Flask 3 / Python 3.12)                  │
+│                                                                     │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │  Middleware de Tenant (before_request)                        │  │
+│  │  Resolve tenant: JWT claim > Header X-Tenant-ID > Host       │  │
+│  └──────────────────────────┬────────────────────────────────────┘  │
+│                             │                                       │
+│  ┌──────────────────────────▼────────────────────────────────────┐  │
+│  │  API Routes (Blueprint api_v1)                                │  │
+│  │  /auth  /alunos  /turmas  /notas  /ocorrencias                │  │
+│  │  /comunicados  /relatorios  /graficos  /usuarios              │  │
+│  │  /uploads  /audit  /ia  /super-admin                         │  │
+│  └──────────────────────────┬────────────────────────────────────┘  │
+│                             │                                       │
+│  ┌──────────────────────────▼────────────────────────────────────┐  │
+│  │  Services Layer                                               │  │
+│  │  AIChat  AIPredictor  Analytics  InterventionService          │  │
+│  └──────────────────────────┬────────────────────────────────────┘  │
+│                             │                                       │
+│  ┌──────────────────────────▼────────────────────────────────────┐  │
+│  │  Models (SQLAlchemy 2.0)                                      │  │
+│  │  Tenant  AcademicYear  Usuario  Aluno  Nota                   │  │
+│  │  Ocorrencia  Comunicado  AuditLog  Upload                     │  │
+│  └──────────────────────────┬────────────────────────────────────┘  │
+└─────────────────────────────┼───────────────────────────────────────┘
+                              │
+               ┌──────────────┴──────────────┐
+               ▼                             ▼
+┌──────────────────────┐          ┌──────────────────────┐
+│   PostgreSQL 15      │          │      Redis 7         │
+│  (Dados principais)  │          │  Cache / Jobs /      │
+│  Row-level tenant    │          │  JWT blocklist /     │
+│  isolation via ORM   │          │  Password reset      │
+└──────────────────────┘          └──────────┬───────────┘
+                                             │
+                                             ▼
+                                  ┌──────────────────────┐
+                                  │   RQ Worker          │
+                                  │  Ingestão de PDF     │
+                                  │  Notificações        │
+                                  └──────────────────────┘
 ```
 
 ---
 
-## 🏗️ Componentes Principais
+## Multi-Tenancy
 
-### 1. Frontend (React + Vite)
+### Modelo
 
-**Tecnologias:**
-- React 18
-- TypeScript
-- Vite (Build tool)
-- TanStack Query (React Query)
-- Recharts (Gráficos)
-- Tailwind CSS
-- Shadcn/ui (Componentes)
+Cada escola é um registro na tabela `tenants` com `slug` único (ex: `escola-central`). Todo registro de dado (aluno, nota, usuário, etc.) carrega `tenant_id` como FK obrigatória.
 
-**Estrutura de Diretórios:**
-```
-frontend/
-├── src/
-│   ├── components/        # Componentes reutilizáveis
-│   │   ├── ui/           # Componentes base (shadcn)
-│   │   └── layout/       # Layout components
-│   ├── features/         # Features modulares
-│   │   ├── ai-chat/      # Chat com IA
-│   │   ├── dashboard/    # Dashboard principal
-│   │   ├── relatorios/   # Relatórios
-│   │   └── ...
-│   ├── lib/              # Utilitários
-│   │   ├── api.ts        # Cliente API
-│   │   └── utils.ts      # Funções auxiliares
-│   ├── pages/            # Páginas da aplicação
-│   └── main.tsx          # Entry point
-├── public/               # Assets estáticos
-└── package.json
+### Resolução de Tenant (Middleware)
+
+O middleware `before_request` resolve o tenant nesta ordem de prioridade:
+
+1. **JWT claim** `tenant_id` — usuário autenticado carrega o tenant no token
+2. **Header** `X-Tenant-ID` — para chamadas server-to-server
+3. **Host header** — mapeamento de domínio customizado por escola
+4. **Fallback localhost** — apenas em `FLASK_ENV=development`
+
+Super-admin tem `tenant_id = NULL` no JWT e bypassa o filtro automático.
+
+### Isolamento Automático (ORM Event Listener)
+
+```python
+# core/extensions.py — do_orm_execute
+# Injeta WHERE tenant_id = X AND academic_year_id = Y em TODAS as queries
+# automaticamente, sem necessidade de filtros manuais nos endpoints.
 ```
 
-**Principais Features:**
-- Dashboard interativo com gráficos
-- Gestão de alunos e turmas
-- Sistema de notas e boletins
-- Registro de ocorrências disciplinares
-- Sistema de comunicados
-- Chat com IA para análise de dados
-- Portal do aluno
-- Relatórios e exportações
+O `academic_year_id` também é propagado pelo JWT para que todas as queries sejam isoladas por ano letivo.
 
 ---
 
-### 2. Backend (Flask)
+## Autenticação e Autorização
 
-**Tecnologias:**
-- Python 3.12
-- Flask 3.x
-- SQLAlchemy (ORM)
-- Flask-Migrate (Migrações)
-- Flask-CORS
-- Flask-JWT-Extended (Autenticação)
-- Pydantic (Validação)
-- RQ (Background Jobs)
+### JWT
 
-**Estrutura de Diretórios:**
-```
-backend/
-├── app/
-│   ├── __init__.py       # Factory pattern
-│   ├── api/              # API endpoints
-│   │   └── v1/
-│   │       ├── auth.py
-│   │       ├── alunos.py
-│   │       ├── turmas.py
-│   │       ├── notas.py
-│   │       ├── ocorrencias.py
-│   │       └── ...
-│   ├── models/           # SQLAlchemy models
-│   │   ├── aluno.py
-│   │   ├── turma.py
-│   │   ├── nota.py
-│   │   ├── ocorrencia.py
-│   │   ├── usuario.py
-│   │   └── tenant.py
-│   ├── services/         # Business logic
-│   │   ├── aluno_service.py
-│   │   ├── turma_service.py
-│   │   ├── ocorrencia_service.py
-│   │   └── ...
-│   ├── repositories/     # Data access layer
-│   ├── schemas/          # Pydantic schemas
-│   ├── core/             # Core utilities
-│   │   ├── database.py
-│   │   ├── exceptions.py
-│   │   ├── handlers.py
-│   │   └── middleware.py
-│   └── utils/            # Helper functions
-├── migrations/           # Alembic migrations
-├── tests/                # Unit tests
-└── pyproject.toml        # Dependencies
-```
+- **Access token**: TTL 30 minutos, carrega `roles`, `tenant_id`, `academic_year_id`, `aluno_id`
+- **Refresh token**: TTL 30 dias
+- **Blocklist**: tokens revogados armazenados no Redis com chave `blocklist:{jti}`
+- **Fail-closed**: se o Redis estiver indisponível, todos os tokens são tratados como revogados
 
-**Arquitetura em Camadas:**
+### Refresh Silencioso (Web)
 
-1. **API Layer** (`api/v1/`): Endpoints REST
-2. **Service Layer** (`services/`): Lógica de negócio
-3. **Repository Layer** (`repositories/`): Acesso a dados
-4. **Model Layer** (`models/`): Modelos de dados
-5. **Schema Layer** (`schemas/`): Validação e serialização
+RTK Query usa um wrapper `baseQueryWithReauth`: ao receber 401, tenta automaticamente `POST /auth/refresh` antes de fazer logout. O usuário não percebe a renovação do token.
+
+### RBAC — Roles Canônicas
+
+| Role | Descrição |
+|------|-----------|
+| `super_admin` | Gerencia todas as escolas (sem tenant) |
+| `admin` | Administrador da escola |
+| `diretor` | Diretor escolar |
+| `coordenador` | Coordenação pedagógica |
+| `orientador` | Orientação educacional |
+| `professor` | Acesso a turmas e alunos atribuídos |
+| `aluno` | Acesso apenas ao próprio boletim |
+
+### Segurança Implementada
+
+- Rate limiting em endpoints sensíveis (`/auth/login`, `/auth/change-password`, `/auth/forgot-password`)
+- Security headers HTTP via `after_request`: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Strict-Transport-Security` (apenas produção), `Referrer-Policy`, `Permissions-Policy`
+- Senhas: mínimo 8 caracteres, ao menos 1 maiúscula e 1 número (Pydantic validator)
+- Geração segura de senhas temporárias via `secrets.token_urlsafe(16)`
+- Recuperação de senha: token Redis TTL 1h, uso único, sem enumeração de e-mails
+- Sourcemaps desabilitados em produção (`build.sourcemap = false` no Vite)
 
 ---
 
-### 3. Banco de Dados (PostgreSQL)
+## Componentes Principais
 
-**Modelo de Dados Principal:**
+### Frontend Web (React 18)
 
-```sql
--- Tenants (Multi-tenancy)
+**Stack:** React 18, TypeScript, Vite, Material UI v6, Redux Toolkit + RTK Query, Recharts
+
+```
+frontend/src/
+├── app/              # Store Redux, rotas (React Router v6), hooks globais
+│   ├── store.ts
+│   ├── routes.tsx    # createBrowserRouter com guards de autenticação
+│   └── hooks.ts
+├── components/       # Componentes reutilizáveis
+│   ├── navigation/   # Sidebar, TopBar, NotificationBell
+│   └── ui/           # Componentes UI genéricos
+├── features/         # Features por domínio (co-localização de tudo)
+│   ├── auth/         # Login, ChangePassword, ForgotPassword, ResetPassword
+│   ├── dashboard/    # Dashboard, TeacherDashboard, AIInterventionBoard
+│   ├── alunos/       # AlunosPage, AlunoDetailPage, MeuBoletimPage
+│   ├── notas/        # NotasPage (boletim editável)
+│   ├── comunicados/  # ComunicadosPage (paginado)
+│   ├── ocorrencias/  # OcorrenciasPage
+│   ├── relatorios/   # RelatoriosPage, RelatorioDetailPage
+│   ├── graficos/     # GraficosPage
+│   ├── usuarios/     # UsuariosPage, AuditLogsPage
+│   └── super-admin/  # TenantsPage
+└── lib/
+    └── api.ts        # Todas as mutations/queries RTK Query + baseQueryWithReauth
+```
+
+### Backend (Flask 3)
+
+**Stack:** Flask 3, SQLAlchemy 2, Pydantic v2, Flask-JWT-Extended, Flask-Limiter, Flask-Mail
+
+```
+backend/app/
+├── __init__.py       # App factory, security headers, blueprints
+├── api/v1/           # Endpoints REST (um arquivo por domínio)
+│   ├── auth.py       # Login, refresh, logout, change-password, forgot/reset-password
+│   ├── alunos.py
+│   ├── notas.py
+│   ├── ocorrencias.py
+│   ├── comunicados.py
+│   ├── relatorios.py
+│   ├── graficos.py
+│   ├── usuarios.py
+│   ├── turmas.py
+│   ├── audit.py
+│   ├── ai.py
+│   └── __init__.py   # Blueprint + PUBLIC_ENDPOINTS set
+├── models/           # SQLAlchemy models (TenantYearMixin em todos)
+├── services/         # Lógica de negócio
+│   ├── ai_chat.py
+│   ├── ai_predictor.py
+│   ├── analytics.py
+│   └── intervention_service.py
+├── schemas/          # Pydantic v2 (validação de request/response)
+├── core/
+│   ├── config.py     # Pydantic BaseSettings (lê de variáveis de ambiente)
+│   ├── middleware.py # Resolução de tenant/ano letivo
+│   ├── security.py   # JWT blocklist (fail-closed)
+│   ├── cache.py      # Cliente Redis
+│   ├── extensions.py # ORM event listener (isolamento multi-tenant)
+│   └── decorators.py # @require_roles, etc.
+└── templates/
+    └── documents/bulletin.html  # Template do boletim PDF
+```
+
+### App Mobile (React Native / Expo)
+
+**Stack:** React Native 0.81, Expo, Zustand, TanStack Query
+
+```
+mobile/
+└── app/
+    ├── (tabs)/       # Telas principais com navegação por abas
+    └── _layout.tsx   # Layout e navegação raiz
+```
+
+---
+
+## Banco de Dados
+
+### Modelo Simplificado
+
+```
 tenants
-├── id (PK)
-├── nome
-├── slug
-└── ativo
+├── id, slug, nome, domain, ativo, settings (JSON)
+└── → academic_years (1:N)
 
--- Usuários
+academic_years
+├── id, tenant_id, year, ativo
+└── [todos os dados são isolados por tenant_id + academic_year_id]
+
 usuarios
-├── id (PK)
-├── tenant_id (FK)
-├── username
-├── password_hash
-├── role (admin/professor/aluno)
-└── aluno_id (FK, nullable)
+├── id, tenant_id, username, email, password_hash
+├── role (super_admin/admin/diretor/coordenador/orientador/professor/aluno)
+├── must_change_password, aluno_id (FK nullable)
+└── foto_url
 
--- Alunos
 alunos
-├── id (PK)
-├── tenant_id (FK)
-├── nome
-├── matricula
-├── turma_id (FK)
-└── responsavel_*
+├── id, tenant_id, academic_year_id
+├── nome, matricula, turma (string), turno, serie
+├── status_especial (Cancelado/Transferido/Desistente)
+└── responsavel_nome, responsavel_telefone, responsavel_email
 
--- Turmas
-turmas
-├── id (PK)
-├── tenant_id (FK)
-├── nome
-├── ano
-└── serie
-
--- Notas
 notas
-├── id (PK)
-├── tenant_id (FK)
-├── aluno_id (FK)
+├── id, tenant_id, academic_year_id, aluno_id
 ├── disciplina
-├── trimestre_1/2/3
-├── media_final
-├── faltas
-└── status
+├── trimestre1, trimestre2, trimestre3 (Numeric, nullable)
+├── total (média dos trimestres preenchidos — null se todos null)
+├── faltas, status (APR/REP/REC/APCC)
+└── [sem tabela Turma separada — turma é campo string em aluno/nota]
 
--- Ocorrências
 ocorrencias
-├── id (PK)
-├── tenant_id (FK)
-├── aluno_id (FK)
-├── tipo
-├── descricao
-├── data
-└── autor_id (FK)
+├── id, tenant_id, academic_year_id, aluno_id
+├── tipo, severidade, descricao, data
+├── acoes_tomadas, instrucoes_responsavel
+└── autor_id (FK -> usuarios)
 
--- Comunicados
 comunicados
-├── id (PK)
-├── tenant_id (FK)
-├── titulo
-├── conteudo
-├── tipo_destinatario
-├── turma_id (FK, nullable)
-├── aluno_id (FK, nullable)
-└── data_criacao
+├── id, tenant_id, academic_year_id
+├── titulo, conteudo, tipo_destinatario
+├── turma_id (nullable), aluno_id (nullable)
+├── fixado, autor_id
+└── leituras (N:M -> usuarios via comunicado_leituras)
 
--- Audit Logs
 audit_logs
-├── id (PK)
-├── tenant_id (FK)
-├── usuario_id (FK)
-├── acao
-├── entidade
-├── detalhes
-└── timestamp
+└── id, tenant_id, usuario_id, acao, entidade, entidade_id, detalhes, timestamp
 ```
 
-**Índices Importantes:**
-- `idx_alunos_tenant_id`
-- `idx_notas_aluno_id`
-- `idx_ocorrencias_aluno_id`
-- `idx_usuarios_username`
+> **Nota:** Não existe uma tabela `turmas` separada. Turma é um campo `string` nos modelos `Aluno` e `Nota`, derivado dos PDFs de boletim importados.
 
 ---
 
-### 4. Redis
-
-**Uso:**
-- **Cache**: Resultados de queries frequentes
-- **Queue**: Fila de jobs assíncronos (RQ)
-- **Session Storage**: Sessões de usuário
-
-**Filas:**
-- `default`: Jobs gerais
-- `pdf_processing`: Processamento de PDFs
-- `email`: Envio de emails (futuro)
-
----
-
-### 5. Worker (RQ)
-
-**Responsabilidades:**
-- Processamento assíncrono de PDFs
-- Geração de relatórios pesados
-- Cálculos em lote
-- Envio de notificações (futuro)
-
----
-
-## 🔐 Segurança
-
-### Autenticação e Autorização
-
-1. **JWT Tokens**: Autenticação stateless
-2. **Role-Based Access Control (RBAC)**:
-   - `admin`: Acesso total
-   - `professor`: Visualização e edição limitada
-   - `aluno`: Apenas visualização própria
-
-3. **Multi-tenancy**: Isolamento de dados por tenant
-
-### Proteções Implementadas
-
-- CORS configurado
-- SQL Injection prevention (SQLAlchemy ORM)
-- XSS protection (sanitização de inputs)
-- CSRF tokens (em desenvolvimento)
-- Rate limiting (planejado)
-- Password hashing (bcrypt)
-
----
-
-## 🔄 Fluxo de Dados
-
-### Exemplo: Registro de Ocorrência
+## Fluxo de Ingestão de PDF
 
 ```
-1. Frontend (ChatWidget.tsx)
-   └─> POST /api/v1/ocorrencias
-       │
-2. Backend (ocorrencias.py)
-   └─> OcorrenciaService.create()
-       │
-3. Service Layer
-   └─> Validação de dados
-   └─> Verificação de permissões
-   └─> Repository.save()
-       │
-4. Repository Layer
-   └─> SQLAlchemy ORM
-       │
-5. Database
-   └─> INSERT INTO ocorrencias
-   └─> INSERT INTO audit_logs
-       │
-6. Response
-   └─> JSON com ocorrência criada
-       │
-7. Frontend
-   └─> Atualização da UI
-   └─> Invalidação do cache (React Query)
+1. Usuário faz upload via POST /uploads
+   └─> Arquivo salvo em /data/uploads/{tenant_slug}/
+
+2. Job enfileirado no Redis (RQ)
+
+3. Worker processa em background:
+   ├─> Extrai alunos, turmas e notas do PDF
+   ├─> Cria/atualiza registros no banco (upsert por matrícula)
+   ├─> Cria AcademicYear automaticamente se necessário
+   └─> Normaliza nome de turmas (formato "Xº LETRA", suporte a EJA)
+
+4. Frontend monitora status via polling
 ```
 
 ---
 
-## 📊 Padrões de Design
+## Recuperação de Senha
 
-### 1. Repository Pattern
-Abstração da camada de dados para facilitar testes e manutenção.
+```
+1. POST /auth/forgot-password {email}
+   ├─> Gera token = secrets.token_urlsafe(32)
+   ├─> Armazena Redis: pwd_reset:{token} = user_id  (TTL 3600s)
+   ├─> Envia e-mail: {FRONTEND_URL}/redefinir-senha?token={token}
+   └─> Sempre retorna 200 (sem enumeração de e-mails)
 
-### 2. Service Layer Pattern
-Lógica de negócio separada dos controllers.
+2. Usuário clica no link → ResetPasswordPage
 
-### 3. Factory Pattern
-Criação da aplicação Flask usando factory.
-
-### 4. Dependency Injection
-Injeção de dependências nos services.
-
-### 5. DTO Pattern
-Uso de Pydantic schemas para transferência de dados.
-
----
-
-## 🚀 Performance
-
-### Otimizações Implementadas
-
-1. **Frontend**:
-   - Code splitting (Vite)
-   - Lazy loading de componentes
-   - React Query para cache
-   - Debounce em buscas
-
-2. **Backend**:
-   - Eager loading (SQLAlchemy)
-   - Paginação em todas as listagens
-   - Índices de banco de dados
-   - Connection pooling
-
-3. **Database**:
-   - Índices otimizados
-   - Queries otimizadas
-   - EXPLAIN ANALYZE para análise
-
----
-
-## 📈 Escalabilidade
-
-### Horizontal Scaling
-
-- **Frontend**: Servir via CDN
-- **Backend**: Múltiplas instâncias atrás de load balancer
-- **Database**: Read replicas
-- **Redis**: Redis Cluster
-- **Workers**: Múltiplos workers
-
-### Vertical Scaling
-
-- Aumentar recursos de containers
-- Otimizar queries
-- Aumentar connection pool
-
----
-
-## 🔧 Monitoramento (Planejado)
-
-- **Logs**: Estruturados em JSON
-- **Métricas**: Prometheus + Grafana
-- **APM**: Sentry para error tracking
-- **Health Checks**: Endpoints `/health`
-
----
-
-## 📝 Convenções de Código
-
-### Backend (Python)
-
-- PEP 8 style guide
-- Type hints obrigatórios
-- Docstrings em funções públicas
-- Testes unitários com pytest
-
-### Frontend (TypeScript)
-
-- ESLint + Prettier
-- Componentes funcionais
-- Hooks customizados
-- PropTypes com TypeScript
-
----
-
-## 🔄 CI/CD (Planejado)
-
-```yaml
-Pipeline:
-1. Lint & Format Check
-2. Unit Tests
-3. Integration Tests
-4. Build Docker Images
-5. Push to Registry
-6. Deploy to Staging
-7. E2E Tests
-8. Deploy to Production
+3. POST /auth/reset-password {token, new_password}
+   ├─> Valida token no Redis
+   ├─> Valida complexidade da senha
+   ├─> DELETE Redis (uso único)
+   └─> Atualiza password_hash + must_change_password=False
 ```
 
 ---
 
-## 📚 Referências
+## Performance
 
-- [Flask Documentation](https://flask.palletsprojects.com/)
-- [React Documentation](https://react.dev/)
-- [SQLAlchemy Documentation](https://docs.sqlalchemy.org/)
-- [Docker Documentation](https://docs.docker.com/)
+### Frontend
+- Code splitting por rota (Vite)
+- RTK Query com cache inteligente e invalidação por tags
+- Sourcemaps desabilitados em produção
+
+### Backend
+- Connection pooling (SQLAlchemy)
+- Paginação em todas as listagens
+- Cache Redis para queries pesadas de relatórios
+- Background jobs para operações longas (PDF, e-mails)
+
+---
+
+## Escalabilidade
+
+Para escalar horizontalmente:
+- **Backend**: múltiplas instâncias atrás do Traefik (stateless via JWT + Redis)
+- **Workers**: múltiplos workers RQ (as filas são compartilhadas via Redis)
+- **Banco**: read replicas para relatórios pesados
+- **Redis**: Redis Sentinel ou Cluster para alta disponibilidade

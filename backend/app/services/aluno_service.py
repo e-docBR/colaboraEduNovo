@@ -105,11 +105,10 @@ class AlunoService:
         )
 
     def update_aluno(self, aluno_id: int, data: dict) -> Optional[AlunoListSchema]:
-        aluno = self.repository.get(aluno_id)
+        aluno = self.repository.get_scoped(aluno_id)
         if not aluno:
             return None
-        
-        # Note: simplistic diff, just use data
+
         updated = self.repository.update(aluno, data)
         log_action(self.repository.session, self.user_id, "UPDATE", "Aluno", aluno_id, data)
         return AlunoListSchema(
@@ -122,7 +121,7 @@ class AlunoService:
         )
 
     def delete_aluno(self, aluno_id: int) -> bool:
-        success = self.repository.delete(aluno_id)
+        success = self.repository.delete_scoped(aluno_id)
         if success:
             log_action(self.repository.session, self.user_id, "DELETE", "Aluno", aluno_id)
         return success

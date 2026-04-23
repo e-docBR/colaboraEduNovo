@@ -3,6 +3,7 @@ from sqlalchemy import select, func, desc, case
 from sqlalchemy.orm import Session
 from ..models import Aluno, Nota, Comunicado, Ocorrencia
 from ..core.database import SessionLocal
+from .intervention_service import intervention_service
 
 from loguru import logger
 from typing import TypedDict, List, Any, Optional
@@ -27,7 +28,8 @@ class AIAnalystEngine:
             'dropout_radar': [r'abandono', r'evas[ãa]o', r'desistir', r'radar'],
             'evolution': [r'melhorou', r'evolu', r'progresso', r'subiu', r'piorou', r'queda'],
             'missing_grades': [r'sem not[as]', r'faltando', r'incompleto', r'pend[êe]ncia'],
-            'class_comparison': [r'diferen[çc]a.*turma', r'ranking.*turma', r'turma.*melhor']
+            'class_comparison': [r'diferen[çc]a.*turma', r'ranking.*turma', r'turma.*melhor'],
+            'pedagogical_interventions': [r'ajuda', r'interven[çc][ãa]o', r'pedag[óo]gico', r'precisa de que', r'como melhorar']
         }
 
 
@@ -141,6 +143,10 @@ class AIAnalystEngine:
             # 13. SPECIAL INTENT: Missing Grades
             if any(re.search(p, message_lower) for p in self.intent_patterns['missing_grades']):
                 return self._analyze_missing_grades(session, filters)
+
+            # 14. PEDAGOGICAL INTENT: Interventions
+            if any(re.search(p, message_lower) for p in self.intent_patterns['pedagogical_interventions']):
+                return self._analyze_interventions(session, filters)
 
             # Default conversational fallback
             return {
@@ -479,6 +485,33 @@ class AIAnalystEngine:
             "text": "Estes alunos podem estar com o boletim incompleto (menos de 5 disciplinas lançadas):",
             "type": "table",
             "data": [{"Aluno": r.nome, "Turma": r.turma, "Notas": r.num_notas} for r in results]
+        }
+
+    def _analyze_interventions(self, session: Session, filters: dict) -> AIResponse:
+        """Provide pedagogical suggestions for a student or group."""
+        aluno_nome = filters.get('aluno_nome')
+        if not aluno_nome:
+            return {"text": "Para sugerir uma intervenção, preciso saber o nome do aluno. Ex: 'Como ajudar o aluno Carlos?'", "type": "text", "data": None}
+            
+        aluno = session.execute(select(Aluno).where(Aluno.nome.ilike(f"%{aluno_nome}%"))).scalar()
+        if not aluno:
+             return {"text": f"Não encontrei o aluno '{aluno_nome}'.", "type": "text", "data": None}
+             
+        analysis = intervention_service.analyze_student(session, aluno.id)
+        
+        if not analysis.get('interventions'):
+             return {"text": f"O aluno {aluno.nome} está com bom desempenho e sem alertas pedagógicos no momento.", "type": "text", "data": None}
+             
+        # Format interventions into text
+        intro = f"Análise Pedagógica para {aluno.nome} ({aluno.turma}):\n\n"
+        details = ""
+        for i in analysis['interventions']:
+            details += f"• **[{i['priority']}] {i['title']}**: {i['description']}\n"
+            
+        return {
+            "text": intro + details,
+            "type": "text",
+            "data": analysis
         }
 
 

@@ -4,6 +4,7 @@ from flask_jwt_extended import get_jwt, jwt_required
 from urllib.parse import unquote
 
 from ...core.database import session_scope
+from ...core.decorators import require_roles
 from ...services.turma_service import TurmaService
 
 
@@ -12,9 +13,8 @@ def register(parent: Blueprint) -> None:
 
     @bp.get("/turmas")
     @jwt_required()
+    @require_roles("admin", "super_admin", "coordenador", "diretor", "orientador", "professor")
     def list_turmas():
-        if "aluno" in (get_jwt().get("roles") or []):
-            return jsonify({"error": "Acesso restrito"}), 403
             
         with session_scope() as session:
             service = TurmaService(session)
@@ -23,9 +23,8 @@ def register(parent: Blueprint) -> None:
 
     @bp.get("/turmas/<path:turma_nome>/alunos")
     @jwt_required()
+    @require_roles("admin", "super_admin", "coordenador", "diretor", "orientador", "professor")
     def list_alunos_por_turma(turma_nome: str):
-        if "aluno" in (get_jwt().get("roles") or []):
-            return jsonify({"error": "Acesso restrito"}), 403
             
         turma_decoded = unquote(turma_nome)
         

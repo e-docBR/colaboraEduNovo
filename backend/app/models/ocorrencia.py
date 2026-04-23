@@ -1,10 +1,14 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
-from sqlalchemy import String, Text, DateTime, ForeignKey
+from sqlalchemy import Index, String, Text, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..core.database import Base
 from .base_mixin import TenantYearMixin
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 class Ocorrencia(Base, TenantYearMixin):
     __tablename__ = "ocorrencias"
@@ -16,10 +20,11 @@ class Ocorrencia(Base, TenantYearMixin):
     observacao_pais: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     gravidade: Mapped[str] = mapped_column(String(20), default="LEVE") # LEVE, MEDIA, GRAVE, GRAVISSIMA
     acao_tomada: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    data_registro: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    data_registro: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     
-    aluno_id: Mapped[int] = mapped_column(ForeignKey("alunos.id"), nullable=False)
-    autor_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False)
+    # A5: cascade delete when aluno is removed; set NULL when author is removed
+    aluno_id: Mapped[int] = mapped_column(ForeignKey("alunos.id", ondelete="CASCADE"), nullable=False)
+    autor_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True)
     
     # Status de envio de notificação (Pendente, Enviado, Erro)
     notificacao_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
@@ -27,6 +32,11 @@ class Ocorrencia(Base, TenantYearMixin):
     aluno = relationship("Aluno")
     autor = relationship("Usuario")
 
+    __table_args__ = (
+        # M1: composite indexes for ORM tenant/year filters
+        Index("idx_ocorrencia_tenant_year", "tenant_id", "academic_year_id"),
+        Index("idx_ocorrencia_aluno", "aluno_id"),
+    )
 
     def to_dict(self):
         return {
