@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.1] - 2026-04-23
+
+### Bugs Corrigidos
+- **Upload de PDF (`IndentationError`)**: Corrigido recuo incorreto no `ingestion.py` que impedia o processamento de PDFs em background.
+- **Constraints de Situação no Banco de Dados**: Expandido `CheckConstraint` da tabela `notas` para aceitar novos códigos reais de escolas (`EMC`, `EMR`, `AFC`, `DPC`, `TRN`, `ABA`).
+- **Normalização de Situação**: Adicionado o helper `_normalize_situacao` para tratar códigos desconhecidos no PDF sem quebrar a ingestão inteira e criar aliases como `APROVADO` para `APR`.
+- **Sincronização de Anos Letivos (Frontend vs Backend)**: Identificado por que usuários recém importados de um ano anterior não apareciam na interface caso o filtro estivesse fixado em um ano letivo diferente (ex. importação em 2025 vs seleção de 2026).
+
 ## [1.5.0] - 2026-04-10
 
 ### Segurança
