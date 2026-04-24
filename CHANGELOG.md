@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0] - 2026-04-23
+
+### Novas Funcionalidades
+- **Sistema de Notificações Integrado**: Envio de notificações de ocorrências por E-mail (SMTP) e WhatsApp (Evolution API) de forma assíncrona usando Redis Queue (RQ) e um worker dedicado.
+- **Contato de Responsáveis**: Adicionados campos `email_responsavel` e `telefone_responsavel` ao cadastro de alunos (e schemas/API) para direcionamento adequado das notificações.
+- **Melhorias na UI (Autenticação e Landing Page)**: Atualização visual significativa das páginas `LoginPage.tsx` e `LandingPage.tsx` para um design mais moderno e conversivo.
+- **Gestão de Ocorrências Aprimorada**: A página `OcorrenciasPage.tsx` agora suporta acionamento do envio de notificações com rastreamento visual de status de entrega (Pendente, Enviado, Parcial, Falha).
+- **Suporte Docker e RQ Worker**: Serviço `worker` incluído no `docker-compose.yml` para lidar com a fila assíncrona.
+- **Documentação**: Novo guia `NOTIFICACOES.md` com instruções detalhadas de configuração para SMTP e WhatsApp (Evolution API).
+
 ## [1.5.1] - 2026-04-23
 
 ### Novas Funcionalidades

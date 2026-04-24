@@ -36,6 +36,10 @@ class AlunoBase(BaseModel):
     situacao_anterior: Optional[str] = None
     email: Optional[str] = None
 
+    # Contato do responsável — usado para notificações de ocorrências
+    email_responsavel: Optional[str] = None
+    telefone_responsavel: Optional[str] = None
+
     model_config = ConfigDict(from_attributes=True)
 
 class AlunoListSchema(AlunoBase):
@@ -77,6 +81,8 @@ class AlunoUpdate(BaseModel):
     inep: Optional[str] = None
     situacao_anterior: Optional[str] = None
     email: Optional[str] = None
+    email_responsavel: Optional[str] = None
+    telefone_responsavel: Optional[str] = None
 
 class AlunoPaginatedResponse(BaseModel):
     items: List[AlunoListSchema]

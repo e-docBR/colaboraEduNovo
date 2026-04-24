@@ -1,4 +1,4 @@
-import { Box, Button, MenuItem, TextField, Divider, Grid } from "@mui/material";
+import { Alert, Box, Button, MenuItem, TextField, Divider, Grid, Typography } from "@mui/material";
 import { useEffect, useState } from "react";
 import { AlunoSummary } from "../../lib/api";
 
@@ -271,6 +271,45 @@ export const AlunoForm = ({ initialData, onSubmit, onCancel, isLoading }: AlunoF
                         value={formData.situacao_anterior ?? ""}
                         onChange={handleChange}
                         size="small"
+                    />
+                </Grid>
+            </Grid>
+
+            <Divider sx={{ my: 2 }}>Contato do Responsável</Divider>
+
+            <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
+                <Typography variant="caption">
+                    Preencha os campos abaixo para que as notificações de ocorrências sejam enviadas
+                    diretamente ao pai/mãe/responsável, e não ao aluno.
+                </Typography>
+            </Alert>
+
+            <Grid container spacing={2}>
+                <Grid item xs={12} md={6}>
+                    <TextField
+                        margin="normal"
+                        fullWidth
+                        label="Email do Responsável"
+                        name="email_responsavel"
+                        type="email"
+                        value={formData.email_responsavel ?? ""}
+                        onChange={handleChange}
+                        size="small"
+                        placeholder="email@exemplo.com"
+                        helperText="Usado para envio de notificações por e-mail"
+                    />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                    <TextField
+                        margin="normal"
+                        fullWidth
+                        label="WhatsApp do Responsável"
+                        name="telefone_responsavel"
+                        value={formData.telefone_responsavel ?? ""}
+                        onChange={handleChange}
+                        size="small"
+                        placeholder="(73) 99999-9999"
+                        helperText="Número com DDD — usado para envio de WhatsApp"
                     />
                 </Grid>
             </Grid>

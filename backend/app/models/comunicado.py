@@ -12,9 +12,8 @@ class Comunicado(Base, TenantYearMixin):
 
     titulo: Mapped[str] = mapped_column(String(200), nullable=False)
     conteudo: Mapped[str] = mapped_column(Text, nullable=False)
-    # M4: server_default avoids the datetime.now-at-import-time bug
     data_envio: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True), server_default=func.now(), default=func.now()
     )
     
     autor_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False)

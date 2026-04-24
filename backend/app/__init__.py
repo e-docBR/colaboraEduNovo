@@ -27,10 +27,12 @@ def create_app() -> Flask:
         # SMTP Settings
         MAIL_SERVER=settings.smtp_server,
         MAIL_PORT=settings.smtp_port,
-        MAIL_USE_TLS=True,
+        MAIL_USE_TLS=settings.smtp_use_tls,
+        MAIL_USE_SSL=settings.smtp_use_ssl,
         MAIL_USERNAME=settings.smtp_user,
         MAIL_PASSWORD=settings.smtp_password,
-        MAIL_DEFAULT_SENDER=settings.smtp_from
+        MAIL_DEFAULT_SENDER=settings.smtp_from,
+        MAIL_SUPPRESS_SEND=(not settings.smtp_user),  # silencia quando SMTP não configurado
     )
 
     CORS(app, resources={r"/api/*": {"origins": settings.allowed_origins}})

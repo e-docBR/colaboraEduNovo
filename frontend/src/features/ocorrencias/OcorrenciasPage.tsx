@@ -1,4 +1,5 @@
 import {
+    Alert,
     Box,
     Button,
     Card,
@@ -14,6 +15,7 @@ import {
     InputLabel,
     MenuItem,
     Select,
+    Snackbar,
     Stack,
     TextField,
     Typography,
@@ -27,7 +29,6 @@ import {
     Avatar,
     useTheme,
     Fade,
-    Pagination,
     Checkbox,
     FormControlLabel
 } from "@mui/material";
@@ -43,15 +44,16 @@ import ScheduleIcon from "@mui/icons-material/Schedule";
 import BlockIcon from "@mui/icons-material/Block";
 import InfoIcon from "@mui/icons-material/Info";
 import AddIcon from "@mui/icons-material/Add";
-import PersonIcon from "@mui/icons-material/Person";
 import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
+import NotificationsIcon from "@mui/icons-material/Notifications";
 
 import {
     useCreateOcorrenciaMutation,
     useListOcorrenciasQuery,
     useListAlunosQuery,
     useUpdateOcorrenciaMutation,
-    useDeleteOcorrenciaMutation
+    useDeleteOcorrenciaMutation,
+    useRenotificarOcorrenciaMutation
 } from "../../lib/api";
 import { useAppSelector } from "../../app/hooks";
 
@@ -77,9 +79,14 @@ export const OcorrenciasPage = () => {
     const [createOcorrencia, { isLoading: isCreating }] = useCreateOcorrenciaMutation();
     const [updateOcorrencia] = useUpdateOcorrenciaMutation();
     const [deleteOcorrencia] = useDeleteOcorrenciaMutation();
+    const [renotificarOcorrencia] = useRenotificarOcorrenciaMutation();
 
     const user = useAppSelector((state) => state.auth.user);
     const isStaff = user?.role !== "aluno";
+
+    const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: "success" | "error" }>({
+        open: false, message: "", severity: "success"
+    });
 
     const [open, setOpen] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
@@ -99,6 +106,22 @@ export const OcorrenciasPage = () => {
 
     const [dataRegistro, setDataRegistro] = useState(new Date().toISOString().split("T")[0]);
     const [filterTurma, setFilterTurma] = useState<string>("");
+
+    const alunoSelecionado = useMemo(
+        () => alunosData?.items?.find((a) => a.id === alunoId) || null,
+        [alunosData, alunoId]
+    );
+
+    const buildNotificationPreview = () => {
+        const tipoLabel = TIPO_CONFIG[tipo]?.label || tipo;
+        const gravidadeLabel = GRAVIDADE_CONFIG[gravidade]?.label || gravidade;
+        const dataStr = dataRegistro ? new Date(dataRegistro + "T00:00:00").toLocaleDateString("pt-BR") : "—";
+        const nomeAluno = alunoSelecionado?.nome || "—";
+        let msg = `Prezados Pais/Responsáveis,\n\nInformamos o registro de uma ocorrência para o(a) aluno(a) ${nomeAluno}.\n\n📅 Data: ${dataStr}\n📝 Tipo: ${tipoLabel}\n⚠️ Gravidade: ${gravidadeLabel}\n📄 Descrição: ${descricao || "—"}`;
+        if (observacaoPais) msg += `\n\n💡 Ação necessária: ${observacaoPais}`;
+        msg += `\n\nAtenciosamente,\nCoordenação Pedagógica`;
+        return msg;
+    };
 
     const turmas = useMemo(() => {
         if (!alunosData?.items) return [];
@@ -208,6 +231,17 @@ export const OcorrenciasPage = () => {
             resolvida: !menuOcorrencia.resolvida
         });
         handleCloseMenu();
+    };
+
+    const handleRenotify = async () => {
+        if (!menuOcorrencia) return;
+        handleCloseMenu();
+        try {
+            await renotificarOcorrencia(menuOcorrencia.id).unwrap();
+            setSnackbar({ open: true, message: "Notificação reenviada! Status: Pendente", severity: "success" });
+        } catch {
+            setSnackbar({ open: true, message: "Erro ao reenviar notificação", severity: "error" });
+        }
     };
 
     if (!isStaff && !isLoading && (!ocorrencias || ocorrencias.length === 0)) {
@@ -467,12 +501,27 @@ export const OcorrenciasPage = () => {
                     <ListItemIcon><CheckCircleIcon fontSize="small" color={menuOcorrencia?.resolvida ? "disabled" : "success"} /></ListItemIcon>
                     {menuOcorrencia?.resolvida ? "Reabrir" : "Marcar como Resolvido"}
                 </MuiMenuItem>
+                <MuiMenuItem onClick={handleRenotify}>
+                    <ListItemIcon><NotificationsIcon fontSize="small" color="primary" /></ListItemIcon>
+                    Reenviar Notificação
+                </MuiMenuItem>
                 <Divider />
                 <MuiMenuItem onClick={handleDelete}>
                     <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon>
                     <Typography color="error" variant="body2" fontWeight={600}>Excluir</Typography>
                 </MuiMenuItem>
             </Menu>
+
+            <Snackbar
+                open={snackbar.open}
+                autoHideDuration={4000}
+                onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+                anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+            >
+                <Alert severity={snackbar.severity} onClose={() => setSnackbar((s) => ({ ...s, open: false }))} sx={{ borderRadius: 2 }}>
+                    {snackbar.message}
+                </Alert>
+            </Snackbar>
 
             <Dialog
                 open={open}
@@ -615,22 +664,39 @@ export const OcorrenciasPage = () => {
                                 />
 
                                 {!editingId && (
-                                    <Box p={1.5} sx={{ bgcolor: "error.50", borderRadius: 3, border: "1px solid", borderColor: "error.100" }}>
-                                        <FormControlLabel
-                                            control={
-                                                <Checkbox
-                                                    checked={notificarResponsaveis}
-                                                    onChange={(e) => setNotificarResponsaveis(e.target.checked)}
-                                                    color="error"
-                                                />
-                                            }
-                                            label={
-                                                <Box>
-                                                    <Typography variant="body2" fontWeight={700} color="error.dark">Notificar Responsáveis</Typography>
-                                                    <Typography variant="caption" color="text.secondary">Dispara Email e WhatsApp imediatamente</Typography>
+                                    <Box>
+                                        {alunoId && !alunoSelecionado?.email_responsavel && !alunoSelecionado?.email && !alunoSelecionado?.telefone_responsavel && !alunoSelecionado?.telefones && (
+                                            <Alert severity="warning" sx={{ borderRadius: 2, mb: 1 }}>
+                                                Este aluno não possui email nem telefone cadastrado (do aluno ou do responsável). A notificação não será enviada.
+                                            </Alert>
+                                        )}
+                                        <Box p={1.5} sx={{ bgcolor: "error.50", borderRadius: 3, border: "1px solid", borderColor: "error.100" }}>
+                                            <FormControlLabel
+                                                control={
+                                                    <Checkbox
+                                                        checked={notificarResponsaveis}
+                                                        onChange={(e) => setNotificarResponsaveis(e.target.checked)}
+                                                        color="error"
+                                                    />
+                                                }
+                                                label={
+                                                    <Box>
+                                                        <Typography variant="body2" fontWeight={700} color="error.dark">Notificar Responsáveis</Typography>
+                                                        <Typography variant="caption" color="text.secondary">Dispara Email e WhatsApp imediatamente</Typography>
+                                                    </Box>
+                                                }
+                                            />
+                                            {notificarResponsaveis && (
+                                                <Box mt={1.5} p={1.5} sx={{ bgcolor: "background.paper", borderRadius: 2, border: "1px dashed", borderColor: "error.200" }}>
+                                                    <Typography variant="caption" fontWeight={700} color="text.secondary" display="block" gutterBottom>
+                                                        PRÉVIA DA MENSAGEM
+                                                    </Typography>
+                                                    <Typography variant="caption" sx={{ whiteSpace: "pre-line", fontFamily: "monospace", fontSize: "0.72rem", color: "text.primary" }}>
+                                                        {buildNotificationPreview()}
+                                                    </Typography>
                                                 </Box>
-                                            }
-                                        />
+                                            )}
+                                        </Box>
                                     </Box>
                                 )}
                             </Stack>

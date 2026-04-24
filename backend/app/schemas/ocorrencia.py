@@ -21,12 +21,14 @@ class OcorrenciaUpdate(BaseModel):
     observacao_pais: Optional[str] = None
     gravidade: Optional[str] = None
     acao_tomada: Optional[str] = None
+    resolvida: Optional[bool] = None
 
 class OcorrenciaSchema(OcorrenciaBase):
     id: int
     aluno_id: int
     autor_id: int
-    
+    resolvida: bool = False
+
     # Extra fields for display
     aluno_nome: str
     autor_nome: str

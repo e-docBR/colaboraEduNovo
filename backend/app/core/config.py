@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     # SMTP Settings
     smtp_server: str = Field(default="smtp.gmail.com", alias="SMTP_SERVER")
     smtp_port: int = Field(default=587, alias="SMTP_PORT")
+    smtp_use_tls: bool = Field(default=True, alias="SMTP_USE_TLS")   # STARTTLS — porta 587
+    smtp_use_ssl: bool = Field(default=False, alias="SMTP_USE_SSL")  # SSL direto — porta 465
     smtp_user: str = Field(default="", alias="SMTP_USER")
     smtp_password: str = Field(default="", alias="SMTP_PASSWORD")
     smtp_from: str = Field(default="suporte@colaboraedu.com", alias="SMTP_FROM")
@@ -28,6 +30,7 @@ class Settings(BaseSettings):
     # WhatsApp Settings (Webhook/Evolution API)
     whatsapp_api_url: str = Field(default="", alias="WHATSAPP_API_URL")
     whatsapp_api_token: str = Field(default="", alias="WHATSAPP_API_TOKEN")
+    whatsapp_instance: str = Field(default="", alias="WHATSAPP_INSTANCE")
     # Commercial Settings
     commercial_mode: str = Field(default="saas", alias="COMMERCIAL_MODE") # saas or dedicated
     enable_registration: bool = Field(default=True, alias="ENABLE_REGISTRATION")

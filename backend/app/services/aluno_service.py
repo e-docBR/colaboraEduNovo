@@ -89,7 +89,10 @@ class AlunoService:
             nis=aluno.nis,
             inep=aluno.inep,
             situacao_anterior=aluno.situacao_anterior,
-            email=aluno.email
+            email=aluno.email,
+            # Contato do responsável
+            email_responsavel=aluno.email_responsavel,
+            telefone_responsavel=aluno.telefone_responsavel,
         )
 
     def create_aluno(self, data: dict) -> AlunoListSchema:

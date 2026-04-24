@@ -37,6 +37,10 @@ class Aluno(Base, TenantYearMixin):
     situacao_anterior: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
+    # Contato do responsável (usado para notificações de ocorrências)
+    email_responsavel: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    telefone_responsavel: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
     # M3: audit timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)

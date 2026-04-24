@@ -110,4 +110,23 @@ def register(parent: Blueprint) -> None:
 
         return jsonify({"message": "Removido com sucesso"}), 200
 
+    _NOTIFY_ROLES = frozenset(["admin", "super_admin", "coordenador", "diretor", "orientador"])
+
+    @bp.post("/ocorrencias/<int:ocorrencia_id>/notificar")
+    @jwt_required()
+    def renotificar_ocorrencia(ocorrencia_id: int):
+        claims = get_jwt()
+        roles = claims.get("roles", [])
+        if not _NOTIFY_ROLES.intersection(roles):
+            return jsonify({"error": "Acesso negado"}), 403
+
+        user_id = int(get_jwt_identity())
+
+        with session_scope() as session:
+            service = OcorrenciaService(session, user_id)
+            success = service.renotificar(ocorrencia_id)
+            if not success:
+                return jsonify({"error": "Ocorrência não encontrada"}), 404
+            return jsonify({"message": "Notificação reenviada", "status": "Pendente"}), 200
+
     parent.register_blueprint(bp)

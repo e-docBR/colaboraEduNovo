@@ -32,6 +32,18 @@ services:
       REDIS_URL: redis://redis:6379/0
       ALLOWED_ORIGINS: '["http://localhost:5173", "http://127.0.0.1:5173"]'
       UPLOAD_FOLDER: /data/uploads
+      SECRET_KEY: ${SECRET_KEY:-dev-key}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-jwt}
+      SMTP_SERVER: ${SMTP_SERVER:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      SMTP_USE_SSL: ${SMTP_USE_SSL:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-suporte@colaboraedu.com}
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-}
+      WHATSAPP_API_TOKEN: ${WHATSAPP_API_TOKEN:-}
+      WHATSAPP_INSTANCE: ${WHATSAPP_INSTANCE:-}
     ports:
       - "5000:5000"
     depends_on:
@@ -55,11 +67,24 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-colabora_edu}
       REDIS_URL: redis://redis:6379/0
       UPLOAD_FOLDER: /data/uploads
+      SECRET_KEY: ${SECRET_KEY:-dev-key}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-jwt}
+      SMTP_SERVER: ${SMTP_SERVER:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      SMTP_USE_SSL: ${SMTP_USE_SSL:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-suporte@colaboraedu.com}
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-}
+      WHATSAPP_API_TOKEN: ${WHATSAPP_API_TOKEN:-}
+      WHATSAPP_INSTANCE: ${WHATSAPP_INSTANCE:-}
     depends_on:
       redis:
         condition: service_healthy
       postgres:
         condition: service_healthy
+    restart: unless-stopped
     networks:
       - app_network
 

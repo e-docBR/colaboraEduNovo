@@ -429,6 +429,39 @@ export const AlunoDetailPage = () => {
               </CardContent>
             </Card>
           </Grid>
+
+          {/* Contato do Responsável */}
+          <Grid item xs={12}>
+            <Card sx={{ border: "1px solid", borderColor: (data.email_responsavel || data.telefone_responsavel) ? "success.light" : "warning.light" }}>
+              <CardContent>
+                <Stack direction="row" spacing={1} alignItems="center" mb={2}>
+                  <GroupIcon color={(data.email_responsavel || data.telefone_responsavel) ? "success" : "warning"} />
+                  <Typography variant="h6" fontWeight={600}>
+                    Contato do Responsável
+                  </Typography>
+                  {!data.email_responsavel && !data.telefone_responsavel && (
+                    <Chip label="Não cadastrado" size="small" color="warning" variant="outlined" />
+                  )}
+                </Stack>
+                {!data.email_responsavel && !data.telefone_responsavel && (
+                  <Alert severity="warning" sx={{ mb: 2, borderRadius: 2 }}>
+                    Sem contato do responsável. Notificações de ocorrências usarão o email/telefone do aluno como fallback.
+                    Edite o aluno para adicionar os dados.
+                  </Alert>
+                )}
+                <Grid container spacing={3}>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="caption" color="text.secondary">Email do Responsável</Typography>
+                    <Typography fontWeight={500}>{data.email_responsavel || "-"}</Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="caption" color="text.secondary">WhatsApp do Responsável</Typography>
+                    <Typography fontWeight={500}>{data.telefone_responsavel || "-"}</Typography>
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+          </Grid>
         </Grid>
       </CustomTabPanel>
 

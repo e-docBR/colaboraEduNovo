@@ -155,6 +155,8 @@ export type AlunoSummary = {
   inep?: string | null;
   situacao_anterior?: string | null;
   email?: string | null;
+  email_responsavel?: string | null;
+  telefone_responsavel?: string | null;
 };
 
 
@@ -484,7 +486,11 @@ export const api = createApi({
       query: (alunoId) => ({
         url: `/alunos/${alunoId}`
       }),
-      providesTags: (_result, _error, alunoId) => ["Alunos", { type: "Alunos", id: alunoId }]
+      providesTags: (_result, _error, alunoId) => [
+        "Alunos",
+        { type: "Alunos", id: Number(alunoId) },
+        { type: "Alunos", id: String(alunoId) }
+      ]
     }),
     listAlunos: builder.query<ListAlunosResponse, ListAlunosParams | void>({
       query: (params) => ({
@@ -701,6 +707,13 @@ export const api = createApi({
       }),
       invalidatesTags: ["Ocorrencias"]
     }),
+    renotificarOcorrencia: builder.mutation<{ message: string; status: string }, number>({
+      query: (id) => ({
+        url: `/ocorrencias/${id}/notificar`,
+        method: "POST"
+      }),
+      invalidatesTags: ["Ocorrencias"]
+    }),
     chat: builder.mutation<ChatResponse, { message: string }>({
       query: (body) => ({
         url: "/chat",
@@ -730,7 +743,13 @@ export const api = createApi({
         method: "PATCH",
         body
       }),
-      invalidatesTags: (_result, _error, { id }) => ["Alunos", { type: "Alunos", id }, "Dashboard", "Turmas"]
+      invalidatesTags: (_result, _error, { id }) => [
+        "Alunos",
+        { type: "Alunos", id: Number(id) },
+        { type: "Alunos", id: String(id) },
+        "Dashboard",
+        "Turmas"
+      ]
     }),
     deleteAluno: builder.mutation<void, number>({
       query: (id) => ({
@@ -832,6 +851,7 @@ export const {
   useCreateOcorrenciaMutation,
   useUpdateOcorrenciaMutation,
   useDeleteOcorrenciaMutation,
+  useRenotificarOcorrenciaMutation,
   useChatMutation,
   useListAuditLogsQuery,
   useCreateAlunoMutation,

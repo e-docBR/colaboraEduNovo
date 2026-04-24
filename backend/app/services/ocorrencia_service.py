@@ -26,6 +26,10 @@ class OcorrenciaService:
                 autor_id=o.autor_id,
                 tipo=o.tipo,
                 descricao=o.descricao,
+                observacao_pais=o.observacao_pais,
+                gravidade=o.gravidade or "LEVE",
+                acao_tomada=o.acao_tomada,
+                resolvida=bool(o.resolvida) if o.resolvida is not None else False,
                 data_registro=o.data_registro,
                 notificacao_status=o.notificacao_status,
                 aluno_nome=o.aluno.nome if o.aluno else "Desconhecido",
@@ -134,3 +138,23 @@ class OcorrenciaService:
                 {"deleted": True}
             )
         return success
+
+    def renotificar(self, ocorrencia_id: int) -> bool:
+        oc = self.repository.get_scoped(ocorrencia_id)
+        if not oc:
+            return False
+        from ..core.queue import queue
+        from ..core.tasks import notify_occurrence_task
+        oc.notificacao_status = "Pendente"
+        self.repository.session.add(oc)
+        self.repository.session.flush()
+        queue.enqueue(notify_occurrence_task, oc.id)
+        log_action(
+            self.repository.session,
+            self.user_id,
+            "RENOTIFY",
+            "Ocorrencia",
+            oc.id,
+            {}
+        )
+        return True
