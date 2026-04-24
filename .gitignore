@@ -13,6 +13,7 @@ instance/
 .venv/
 .env
 .env.*
+evo_.env
 # Exceção: template de dev (sem segredos reais) deve ser commitado
 !.env.development
 .mypy_cache/

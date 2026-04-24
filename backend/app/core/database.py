@@ -50,7 +50,9 @@ def receive_do_orm_execute(orm_execute_state):
     # 1. Check if we are in a request context with a tenant
     try:
         current_tenant = g.tenant_id
-    except (RuntimeError, AttributeError):
+    except (RuntimeError, AttributeError) as exc:
+        from loguru import logger
+        logger.debug("No tenant context in ORM execute hook ({}); skipping tenant filter", exc)
         current_tenant = None
 
     if current_tenant is None:

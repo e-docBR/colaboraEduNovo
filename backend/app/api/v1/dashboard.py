@@ -25,11 +25,14 @@ def register(parent: Blueprint) -> None:
     @jwt_required()
     @cache_response(timeout=300, key_prefix="dashboard_professor")
     def fetch_teacher_dashboard():
-        query = request.args.get("q")
-        turno = request.args.get("turno")
-        turma = request.args.get("turma")
+        query = (request.args.get("q") or "")[:100]  # cap search term length
+        turno_raw = request.args.get("turno") or None
+        turma_raw = request.args.get("turma") or None
+        _VALID_TURNOS = {None, "Matutino", "Vespertino", "Noturno", "Integral"}
+        turno = turno_raw if turno_raw in _VALID_TURNOS else None
+        turma = (turma_raw or "")[:30] or None  # cap turma length
         with session_scope() as session:
-            data = build_teacher_dashboard(session, query, turno, turma)
+            data = build_teacher_dashboard(session, query or None, turno, turma)
         return data
 
     parent.register_blueprint(bp)

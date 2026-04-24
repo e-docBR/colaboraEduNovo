@@ -1,6 +1,8 @@
 from flask import Blueprint, jsonify, request, g
 from flask_jwt_extended import jwt_required, get_jwt
-from app.core.database import SessionLocal, session_scope
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+from app.core.database import session_scope
 from app.models.tenant import Tenant
 from app.models.academic_year import AcademicYear
 from app.models.usuario import Usuario
@@ -23,8 +25,13 @@ def register(parent: Blueprint) -> None:
     @jwt_required()
     @super_admin_required
     def list_tenants():
-        with SessionLocal() as session:
-            tenants = session.query(Tenant).all()
+        with session_scope() as session:
+            tenants = (
+                session.execute(
+                    select(Tenant).options(selectinload(Tenant.academic_years))
+                    .execution_options(include_all_tenants=True)
+                ).scalars().all()
+            )
             return jsonify([
                 {
                     "id": t.id,
@@ -53,7 +60,7 @@ def register(parent: Blueprint) -> None:
 
         # 2. Check for duplicate admin email (cross-tenant, so bypass tenant filter)
         if data.get("admin_email"):
-            with SessionLocal() as check_session:
+            with session_scope() as check_session:
                 existing_user = check_session.query(Usuario).filter(
                     Usuario.email == data["admin_email"]
                 ).execution_options(include_all_tenants=True).first()

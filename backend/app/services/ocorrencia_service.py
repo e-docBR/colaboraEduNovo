@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.repositories.ocorrencia_repository import OcorrenciaRepository
@@ -11,16 +11,21 @@ class OcorrenciaService:
         self.repository = OcorrenciaRepository(session)
         self.user_id = user_id
 
-    def list_ocorrencias(self, aluno_id: Optional[int] = None) -> List[OcorrenciaSchema]:
+    def list_ocorrencias(
+        self,
+        aluno_id: Optional[int] = None,
+        page: int = 1,
+        per_page: int = 50,
+    ) -> dict:
+        """Return paginated occurrences.
+
+        Access-control decisions (which aluno_id is visible) must be made by
+        the caller before invoking this method.
         """
-        Lists occurrences. Access control should be handled by the caller/controller 
-        to decide IF the user can see this aluno_id, but the service handles the filtering.
-        """
-        results = self.repository.list_filtered(aluno_id)
-        
-        schemas = []
-        for o in results:
-            schemas.append(OcorrenciaSchema(
+        items, total = self.repository.list_filtered(aluno_id, page=page, per_page=per_page)
+
+        schemas = [
+            OcorrenciaSchema(
                 id=o.id,
                 aluno_id=o.aluno_id,
                 autor_id=o.autor_id,
@@ -33,9 +38,11 @@ class OcorrenciaService:
                 data_registro=o.data_registro,
                 notificacao_status=o.notificacao_status,
                 aluno_nome=o.aluno.nome if o.aluno else "Desconhecido",
-                autor_nome=o.autor.username if o.autor else "Sistema"
-            ))
-        return schemas
+                autor_nome=o.autor.username if o.autor else "Sistema",
+            )
+            for o in items
+        ]
+        return {"items": schemas, "meta": {"page": page, "per_page": per_page, "total": total}}
 
     def create(self, data: OcorrenciaCreate) -> OcorrenciaSchema:
         from flask import g

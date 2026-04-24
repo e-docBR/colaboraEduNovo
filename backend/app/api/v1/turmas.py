@@ -1,6 +1,6 @@
 """Turmas endpoints."""
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import get_jwt, jwt_required
+from flask_jwt_extended import jwt_required
 from urllib.parse import unquote
 
 from ...core.database import session_scope
@@ -40,7 +40,7 @@ def register(parent: Blueprint) -> None:
 
     @bp.patch("/turmas/<path:turma_slug>")
     @jwt_required()
-    @require_roles("admin", "super_admin", "coordenador", "diretor")
+    @require_roles("admin", "super_admin")
     def rename_turma(turma_slug: str):
         slug_decoded = unquote(turma_slug)
         data = request.get_json() or {}
@@ -61,7 +61,7 @@ def register(parent: Blueprint) -> None:
 
     @bp.delete("/turmas/<path:turma_slug>")
     @jwt_required()
-    @require_roles("admin", "super_admin", "diretor")
+    @require_roles("admin", "super_admin")
     def delete_turma(turma_slug: str):
         slug_decoded = unquote(turma_slug)
 

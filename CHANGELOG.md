@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.2] - 2026-04-24
+
+### Segurança e Governança
+- **Controle de Acesso Centralizado (RBAC)**: Consolidação de todos os roles no novo `core/roles.py` (`STAFF_ROLES`, `MANAGER_ROLES`, etc.), reforçando restrições (`require_roles("admin", "super_admin")`) em rotas sensíveis como edição de notas, exclusão de turmas e manipulação de usuários.
+- **Proteção Cross-Tenant**: Garantia de que confirmações de leitura de comunicados respeitem rigidamente o `tenant_id` do usuário logado durante atualizações via ORM.
+- **Validações e Sanitizações Reforçadas**: Adicionados checks de `max_length` no login (50 caracteres) e limite dinâmico de caracteres para buscas nas APIs, prevenindo payloads excessivos e DDoS.
+
+### Novas Funcionalidades
+- **Exportação Avançada (CSV/XLSX)**: Criado endpoint dedicado (`/exports`) para exportação fluida de relatórios de alunos e notas, com roteamento incluído no blueprint de rotas.
+- **Monitoramento e Observabilidade**: Introduzido endpoint restrito `/health/detailed` para visualização em tempo real do estado do PostgreSQL, Redis, Fila RQ e integridade das migrações do Alembic.
+
+### Bugs Corrigidos
+- **Tratamento de Exceções no Chat AI**: Reformulado o manuseio de erros no `chat.py` para retornar mensagens construtivas e fallback JSON estruturado em vez de HTTP 500 perante falhas no LLM.
+
 ## [1.6.1] - 2026-04-23
 
 ### Segurança e Performance

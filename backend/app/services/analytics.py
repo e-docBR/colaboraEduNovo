@@ -146,24 +146,29 @@ def build_teacher_dashboard(session: Session, query: str | None = None, turno: s
     # We can't easily apply WHERE after GROUP BY/HAVING in this structure without subqueries or careful ordering.
     # Instead, we apply filters to the JOIN source.
     # Re-writing query:
-    stm_risk = select(Aluno, func.avg(Nota.total).label("media")).join(Nota)
+    stm_risk = select(
+        Aluno,
+        func.avg(Nota.total).label("media"),
+        func.sum(Nota.faltas).label("faltas"),
+    ).join(Nota)
     stm_risk = apply_filters(stm_risk)
     stm_risk = stm_risk.group_by(Aluno.id).having(func.avg(Nota.total) < 60).order_by("media").limit(10)
 
     risky_students = session.execute(stm_risk).all()
-    
+
     alerts = []
     from .ai_predictor import predict_risk
 
-    for aluno, media in risky_students:
+    for aluno, media, faltas in risky_students:
         prediction = predict_risk(aluno.id, session)
         alerts.append({
             "id": aluno.id,
             "nome": aluno.nome,
             "turma": aluno.turma,
-            "media": round(media, 1),
+            "media": round(float(media), 1),
+            "faltas": int(faltas or 0),
             "risk_score": prediction.get("score", 0.0),
-            "risk_status": prediction.get("status", "BAIXO")
+            "risk_status": prediction.get("status", "BAIXO"),
         })
 
     # 3. Classes Count

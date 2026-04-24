@@ -469,11 +469,14 @@ def register(parent: Blueprint) -> None:
         if not builder:
             return jsonify({"error": "Relatório não encontrado"}), 404
 
+        def _cap(val, max_len=50):
+            return (val or "")[:max_len] or None
+
         params = {
-            "turno": request.args.get("turno"),
-            "serie": request.args.get("serie"),
-            "turma": request.args.get("turma"),
-            "disciplina": request.args.get("disciplina")
+            "turno": _cap(request.args.get("turno"), 20),
+            "serie": _cap(request.args.get("serie"), 5),
+            "turma": _cap(request.args.get("turma"), 30),
+            "disciplina": _cap(request.args.get("disciplina"), 50),
         }
 
         with session_scope() as session:

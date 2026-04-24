@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, g
 from flask_jwt_extended import jwt_required
-from app.core.database import SessionLocal
+from app.core.database import session_scope
 from app.models.academic_year import AcademicYear
 from app.core.middleware import tenant_required
 
@@ -11,7 +11,7 @@ def register(parent: Blueprint) -> None:
     @jwt_required()
     @tenant_required()
     def list_academic_years():
-        with SessionLocal() as session:
+        with session_scope() as session:
             years = session.query(AcademicYear).filter(
                 AcademicYear.tenant_id == g.tenant_id
             ).order_by(AcademicYear.label.desc()).all()

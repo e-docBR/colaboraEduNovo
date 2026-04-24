@@ -3,6 +3,7 @@ from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from sqlalchemy import desc, or_
 
 from ...core.database import session_scope
+from ...core.roles import STAFF_ROLES, MANAGER_ROLES, COMUNICADO_WRITE_ROLES
 from ...models import Comunicado, Aluno, ComunicadoLeitura
 
 def register(parent: Blueprint) -> None:
@@ -23,10 +24,13 @@ def register(parent: Blueprint) -> None:
         offset = (page - 1) * per_page
 
         with session_scope() as session:
-            is_staff = any(r in ["admin", "super_admin", "professor", "coordenador", "diretor", "orientador"] for r in roles)
+            is_staff = bool(STAFF_ROLES.intersection(roles))
+            incluir_arquivados = is_staff and request.args.get("arquivados") == "true"
 
             if is_staff:
                 base_query = session.query(Comunicado).order_by(desc(Comunicado.data_envio))
+                if not incluir_arquivados:
+                    base_query = base_query.filter(Comunicado.arquivado == False)  # noqa: E712
             else:
                 aluno_id = claims.get("aluno_id")
                 turma_slug = None
@@ -41,7 +45,12 @@ def register(parent: Blueprint) -> None:
                 if aluno_id:
                     filters.append((Comunicado.target_type == "ALUNO") & (Comunicado.target_value == str(aluno_id)))
 
-                base_query = session.query(Comunicado).filter(or_(*filters)).order_by(desc(Comunicado.data_envio))
+                base_query = (
+                    session.query(Comunicado)
+                    .filter(or_(*filters))
+                    .filter(Comunicado.arquivado == False)  # noqa: E712
+                    .order_by(desc(Comunicado.data_envio))
+                )
 
             total = base_query.count()
             results = base_query.offset(offset).limit(per_page).all()
@@ -73,7 +82,7 @@ def register(parent: Blueprint) -> None:
     def create_comunicado():
         claims = get_jwt()
         roles = claims.get("roles", [])
-        if not any(r in ["admin", "super_admin", "professor", "coordenador", "diretor", "orientador"] for r in roles):
+        if not COMUNICADO_WRITE_ROLES.intersection(roles):
             return jsonify({"error": "Acesso negado"}), 403
 
         data = request.json or {}
@@ -104,6 +113,10 @@ def register(parent: Blueprint) -> None:
                     target_value = str(int(target_value))
                 except (ValueError, TypeError):
                     return jsonify({"error": "target_value deve ser um ID numérico de aluno quando target_type é 'ALUNO'"}), 400
+            elif target_type == "TURMA":
+                target_value = str(target_value).strip()
+                if len(target_value) > 100:
+                    return jsonify({"error": "target_value muito longo para TURMA"}), 400
         else:
             # TODOS: target_value não faz sentido
             target_value = None
@@ -134,8 +147,7 @@ def register(parent: Blueprint) -> None:
         roles = claims.get("roles", [])
         user_id = int(get_jwt_identity())
 
-        is_staff = any(r in ["admin", "super_admin", "professor", "coordenador", "diretor", "orientador"] for r in roles)
-        if not is_staff:
+        if not COMUNICADO_WRITE_ROLES.intersection(roles):
             return jsonify({"error": "Acesso negado"}), 403
 
         data = request.json or {}
@@ -150,7 +162,7 @@ def register(parent: Blueprint) -> None:
                 return jsonify({"error": "Comunicado não encontrado"}), 404
 
             # Professors can only edit their own announcements; admins/coords/directors can edit any
-            is_manager = any(r in ["admin", "super_admin", "coordenador", "diretor", "orientador"] for r in roles)
+            is_manager = bool(MANAGER_ROLES.intersection(roles))
             if not is_manager and comunicado.autor_id != user_id:
                 return jsonify({"error": "Você só pode editar seus próprios comunicados"}), 403
 
@@ -185,8 +197,10 @@ def register(parent: Blueprint) -> None:
             if not comunicado:
                 return jsonify({"error": "Comunicado não encontrado"}), 404
 
-            # Permission check: Admin/Coord or Author
-            has_permission = any(r in ["admin", "super_admin", "coordenador", "diretor", "orientador"] for r in roles) or comunicado.autor_id == user_id
+            # Permission check: must be in write roles AND (manager OR own comunicado)
+            if not COMUNICADO_WRITE_ROLES.intersection(roles):
+                return jsonify({"error": "Acesso negado"}), 403
+            has_permission = bool(MANAGER_ROLES.intersection(roles)) or comunicado.autor_id == user_id
             if not has_permission:
                 return jsonify({"error": "Acesso negado"}), 403
 
@@ -199,6 +213,16 @@ def register(parent: Blueprint) -> None:
     def mark_read(comunicado_id: int):
         user_id = int(get_jwt_identity())
         with session_scope() as session:
+            # Verify comunicado belongs to the user's tenant before recording read status.
+            # The ORM auto-filter only applies to SELECT queries, not MERGE/INSERT, so
+            # an explicit tenant check here is required to prevent cross-tenant writes.
+            comunicado = (
+                session.query(Comunicado)
+                .filter(Comunicado.id == comunicado_id, Comunicado.tenant_id == g.tenant_id)
+                .first()
+            )
+            if not comunicado:
+                return jsonify({"error": "Comunicado não encontrado"}), 404
             leitura = ComunicadoLeitura(comunicado_id=comunicado_id, usuario_id=user_id)
             session.merge(leitura)
         return jsonify({"message": "Lido"}), 200

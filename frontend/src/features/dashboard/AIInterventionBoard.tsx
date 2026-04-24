@@ -9,7 +9,8 @@ import {
     Skeleton,
     Grid2 as Grid,
     useTheme,
-    Tooltip
+    Tooltip,
+    Alert
 } from "@mui/material";
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
 import LightbulbIcon from "@mui/icons-material/Lightbulb";
@@ -24,7 +25,7 @@ interface AIInterventionBoardProps {
 
 export const AIInterventionBoard: React.FC<AIInterventionBoardProps> = ({ studentIds }) => {
     const theme = useTheme();
-    const [trigger, { data, isLoading }] = useGetBulkInterventionsMutation();
+    const [trigger, { data, isLoading, isError }] = useGetBulkInterventionsMutation();
 
     useEffect(() => {
         if (studentIds.length > 0) {
@@ -49,9 +50,25 @@ export const AIInterventionBoard: React.FC<AIInterventionBoardProps> = ({ studen
         );
     }
 
+    if (isError) {
+        return (
+            <Box mt={4}>
+                <Alert severity="info" sx={{ borderRadius: 2 }}>
+                    Análise pedagógica inteligente não disponível no momento.
+                </Alert>
+            </Box>
+        );
+    }
+
     const interventions = data?.results || [];
 
     if (interventions.length === 0) return null;
+
+    const globalRiskColor = (risk: string) => {
+        if (risk === "ALTO") return theme.palette.error.main;
+        if (risk === "MEDIO") return theme.palette.warning.main;
+        return theme.palette.info.main;
+    };
 
     return (
         <Box mt={6}>
@@ -78,78 +95,101 @@ export const AIInterventionBoard: React.FC<AIInterventionBoardProps> = ({ studen
             </Stack>
 
             <Grid container spacing={2}>
-                {interventions.map((student: any) => (
-                    student.interventions.map((action: any, idx: number) => (
-                        <Grid size={{ xs: 12, md: 4, lg: 3 }} key={`${student.id}-${idx}`}>
-                            <Card
-                                elevation={0}
-                                sx={{
-                                    height: "100%",
-                                    p: 2.5,
-                                    border: "1px solid",
-                                    borderColor: "divider",
-                                    borderRadius: 3,
-                                    background: `linear-gradient(135deg, ${theme.palette.background.paper} 0%, ${theme.palette.background.default} 100%)`,
-                                    position: "relative",
-                                    overflow: "hidden",
-                                    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                                    "&:hover": {
-                                        borderColor: theme.palette.primary.main + "50",
-                                        transform: "translateY(-4px)",
-                                        boxShadow: "0 12px 24px -10px rgba(0,0,0,0.15)",
-                                    }
-                                }}
-                            >
-                                {/* Priority Indicator — backend returns "HIGH"/"MEDIUM"/"LOW" */}
-                                <Box
+                {interventions.flatMap((student: any) =>
+                    student.interventions.map((action: any, idx: number) => {
+                        const studentName = student.aluno_nome ?? "";
+                        const initial = studentName ? studentName[0].toUpperCase() : "?";
+                        const firstName = studentName.split(" ")[0] || "Aluno";
+                        const riskColor = globalRiskColor(student.global_risk ?? "BAIXO");
+
+                        return (
+                            <Grid size={{ xs: 12, md: 4, lg: 3 }} key={`${student.aluno_id}-${idx}`}>
+                                <Card
+                                    elevation={0}
                                     sx={{
-                                        position: "absolute",
-                                        top: 0,
-                                        right: 0,
-                                        width: "4px",
                                         height: "100%",
-                                        bgcolor: action.priority === "HIGH" ? "error.main" :
-                                                 action.priority === "MEDIUM" ? "warning.main" : "info.main"
+                                        p: 2.5,
+                                        border: "1px solid",
+                                        borderColor: "divider",
+                                        borderRadius: 3,
+                                        background: `linear-gradient(135deg, ${theme.palette.background.paper} 0%, ${theme.palette.background.default} 100%)`,
+                                        position: "relative",
+                                        overflow: "hidden",
+                                        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                                        "&:hover": {
+                                            borderColor: theme.palette.primary.main + "50",
+                                            transform: "translateY(-4px)",
+                                            boxShadow: "0 12px 24px -10px rgba(0,0,0,0.15)",
+                                        }
                                     }}
-                                />
+                                >
+                                    {/* Priority Indicator */}
+                                    <Box
+                                        sx={{
+                                            position: "absolute",
+                                            top: 0,
+                                            right: 0,
+                                            width: "4px",
+                                            height: "100%",
+                                            bgcolor: action.priority === "HIGH" ? "error.main" :
+                                                     action.priority === "MEDIUM" ? "warning.main" : "info.main"
+                                        }}
+                                    />
 
-                                <Stack spacing={1.5}>
-                                    <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-                                        <Typography variant="caption" fontWeight={700} color="primary" sx={{ textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                                            {action.title}
-                                        </Typography>
-                                        <Tooltip title={action.priority}>
-                                            {action.priority === "HIGH" ? <ErrorIcon color="error" fontSize="small" /> :
-                                             action.priority === "MEDIUM" ? <WarningIcon color="warning" fontSize="small" /> :
-                                             <InfoIcon color="info" fontSize="small" />}
-                                        </Tooltip>
-                                    </Stack>
-
-                                    <Typography variant="body2" color="text.primary" fontWeight={500} sx={{
-                                        display: '-webkit-box',
-                                        WebkitLineClamp: 3,
-                                        WebkitBoxOrient: 'vertical',
-                                        overflow: 'hidden',
-                                        lineHeight: 1.5
-                                    }}>
-                                        {action.description}
-                                    </Typography>
-
-                                    <Box mt="auto" pt={2}>
-                                        <Stack direction="row" spacing={1} alignItems="center">
-                                            <Avatar sx={{ width: 24, height: 24, fontSize: "0.75rem", bgcolor: theme.palette.primary.main }}>
-                                                {student.nome[0]}
-                                            </Avatar>
-                                            <Typography variant="caption" color="text.secondary" fontWeight={600}>
-                                                {student.nome.split(' ')[0]}
+                                    <Stack spacing={1.5}>
+                                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+                                            <Typography variant="caption" fontWeight={700} color="primary" sx={{ textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                                                {action.title}
                                             </Typography>
+                                            <Tooltip title={action.priority}>
+                                                {action.priority === "HIGH" ? <ErrorIcon color="error" fontSize="small" /> :
+                                                 action.priority === "MEDIUM" ? <WarningIcon color="warning" fontSize="small" /> :
+                                                 <InfoIcon color="info" fontSize="small" />}
+                                            </Tooltip>
                                         </Stack>
-                                    </Box>
-                                </Stack>
-                            </Card>
-                        </Grid>
-                    ))
-                )).flat()}
+
+                                        <Typography variant="body2" color="text.primary" fontWeight={500} sx={{
+                                            display: '-webkit-box',
+                                            WebkitLineClamp: 3,
+                                            WebkitBoxOrient: 'vertical',
+                                            overflow: 'hidden',
+                                            lineHeight: 1.5
+                                        }}>
+                                            {action.description}
+                                        </Typography>
+
+                                        <Box mt="auto" pt={2}>
+                                            <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+                                                <Stack direction="row" spacing={1} alignItems="center">
+                                                    <Avatar sx={{ width: 24, height: 24, fontSize: "0.75rem", bgcolor: theme.palette.primary.main }}>
+                                                        {initial}
+                                                    </Avatar>
+                                                    <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                                                        {firstName}
+                                                    </Typography>
+                                                </Stack>
+                                                {student.global_risk && (
+                                                    <Chip
+                                                        label={student.global_risk}
+                                                        size="small"
+                                                        sx={{
+                                                            height: 18,
+                                                            fontSize: "0.6rem",
+                                                            fontWeight: 700,
+                                                            bgcolor: riskColor + "20",
+                                                            color: riskColor,
+                                                            borderRadius: 1
+                                                        }}
+                                                    />
+                                                )}
+                                            </Stack>
+                                        </Box>
+                                    </Stack>
+                                </Card>
+                            </Grid>
+                        );
+                    })
+                )}
             </Grid>
         </Box>
     );

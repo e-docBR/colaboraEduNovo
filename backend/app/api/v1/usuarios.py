@@ -113,6 +113,8 @@ def register(parent: Blueprint) -> None:
 
         if not username or not password:
             return jsonify({"error": "Usuário e senha são obrigatórios"}), 400
+        if len(username) > 50:
+            return jsonify({"error": "Usuário deve ter no máximo 50 caracteres"}), 400
 
         from app.core.validators import validate_password_strength
         try:
@@ -184,6 +186,8 @@ def register(parent: Blueprint) -> None:
                 new_username = new_username.strip()
                 if not new_username:
                     return jsonify({"error": "Usuário inválido"}), 400
+                if len(new_username) > 50:
+                    return jsonify({"error": "Usuário deve ter no máximo 50 caracteres"}), 400
                 # A1: username check scoped to tenant
                 existing = (
                     session.query(Usuario)

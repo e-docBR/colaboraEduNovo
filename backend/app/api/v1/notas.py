@@ -57,8 +57,8 @@ def register(parent: Blueprint) -> None:
                 query = query.filter(Nota.tenant_id == tenant_id)
             if year_id:
                 query = query.filter(Nota.academic_year_id == year_id)
-                
-            disciplinas_raw = query.all()
+
+            disciplinas_raw = query.limit(200).all()
             disciplinas_set = set()
             
             for (disc,) in disciplinas_raw:
@@ -83,7 +83,7 @@ def register(parent: Blueprint) -> None:
         turno = request.args.get("turno")
         disciplina = request.args.get("disciplina")
         page = max(1, int(request.args.get("page", 1)))
-        per_page = min(500, int(request.args.get("per_page", 20)))
+        per_page = min(100, int(request.args.get("per_page", 20)))
 
         from flask import g
         tenant_id = getattr(g, "tenant_id", None)
@@ -131,7 +131,29 @@ def register(parent: Blueprint) -> None:
 
         payload = request.get_json() or {}
         allowed_fields = {"trimestre1", "trimestre2", "trimestre3", "total", "faltas", "situacao"}
-        updates = {k: v for k, v in payload.items() if k in allowed_fields}
+        _grade_fields = {"trimestre1", "trimestre2", "trimestre3", "total"}
+        updates = {}
+        for k, v in payload.items():
+            if k not in allowed_fields:
+                continue
+            if k in _grade_fields:
+                if v is not None:
+                    try:
+                        updates[k] = float(v)
+                    except (ValueError, TypeError):
+                        return jsonify({"error": f"'{k}' deve ser um número"}), 400
+                else:
+                    updates[k] = None
+            elif k == "faltas":
+                if v is not None:
+                    try:
+                        updates[k] = int(v)
+                    except (ValueError, TypeError):
+                        return jsonify({"error": "'faltas' deve ser um inteiro"}), 400
+                else:
+                    updates[k] = 0
+            else:
+                updates[k] = v
         if not updates:
             return jsonify({"error": "Nenhum campo válido informado"}), 400
 
@@ -159,16 +181,15 @@ def register(parent: Blueprint) -> None:
             for key, value in updates.items():
                 setattr(nota, key, value)
             
-            # Auto-calculate total if not explicitly provided and trimesters changed.
-            # Only non-None trimester values count — a missing grade is not a zero.
-            if "total" not in updates:
-                if any(k in updates for k in ["trimestre1", "trimestre2", "trimestre3"]):
-                    values = [
-                        float(v)
-                        for v in [nota.trimestre1, nota.trimestre2, nota.trimestre3]
-                        if v is not None
-                    ]
-                    nota.total = sum(values) / len(values) if values else None
+            # Recalculate total whenever any trimester changes, unless caller sent total explicitly.
+            # Only non-None values count — a missing grade is not treated as zero.
+            if "total" not in updates and any(k in updates for k in ["trimestre1", "trimestre2", "trimestre3"]):
+                values = [
+                    float(v)
+                    for v in [nota.trimestre1, nota.trimestre2, nota.trimestre3]
+                    if v is not None
+                ]
+                nota.total = round(sum(values) / len(values), 2) if values else None
 
             session.add(nota)
             session.flush()

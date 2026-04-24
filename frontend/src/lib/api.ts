@@ -682,6 +682,7 @@ export const api = createApi({
         url: "/ocorrencias",
         params: aluno_id ? { aluno_id } : undefined
       }),
+      transformResponse: (raw: any) => Array.isArray(raw) ? raw : (raw?.items ?? []),
       providesTags: ["Ocorrencias"]
     }),
     createOcorrencia: builder.mutation<void, { aluno_id: number; tipo: string; descricao: string; data_registro?: string; resolvida?: boolean; notificar_responsaveis?: boolean; observacao_pais?: string; gravidade?: string; acao_tomada?: string }>({

@@ -125,6 +125,17 @@ RTK Query usa um wrapper `baseQueryWithReauth`: ao receber 401, tenta automatica
 | `professor` | Acesso a turmas e alunos atribuídos |
 | `aluno` | Acesso apenas ao próprio boletim |
 
+**Constantes centralizadas em `core/roles.py`:**
+
+```python
+STAFF_ROLES     # admin, super_admin, professor, coordenador, diretor, orientador
+MANAGER_ROLES   # admin, super_admin, coordenador, diretor, orientador
+ADMIN_ROLES     # admin, super_admin
+UPLOAD_ROLES    # staff que pode fazer upload de PDFs
+```
+
+Todos os endpoints importam dessas constantes — nunca defina listas de roles inline.
+
 ### Segurança Implementada
 
 - Rate limiting em endpoints sensíveis (`/auth/login`, `/auth/change-password`, `/auth/forgot-password`)
@@ -177,8 +188,9 @@ backend/app/
 │   ├── auth.py       # Login, refresh, logout, change-password, forgot/reset-password
 │   ├── alunos.py
 │   ├── notas.py
-│   ├── ocorrencias.py
+│   ├── ocorrencias.py   # paginado (page/per_page)
 │   ├── comunicados.py
+│   ├── exports.py    # GET /exports/alunos e /exports/notas (CSV + XLSX)
 │   ├── relatorios.py
 │   ├── graficos.py
 │   ├── usuarios.py
@@ -189,16 +201,17 @@ backend/app/
 ├── models/           # SQLAlchemy models (TenantYearMixin em todos)
 ├── services/         # Lógica de negócio
 │   ├── ai_chat.py
-│   ├── ai_predictor.py
-│   ├── analytics.py
+│   ├── ai_predictor.py   # modelo joblib por tenant + SHA-256 integrity
+│   ├── analytics.py      # build_teacher_dashboard + build_dashboard_metrics
 │   └── intervention_service.py
 ├── schemas/          # Pydantic v2 (validação de request/response)
 ├── core/
 │   ├── config.py     # Pydantic BaseSettings (lê de variáveis de ambiente)
 │   ├── middleware.py # Resolução de tenant/ano letivo
+│   ├── database.py   # engine, session_scope(), ORM event listener (isolamento)
 │   ├── security.py   # JWT blocklist (fail-closed)
-│   ├── cache.py      # Cliente Redis
-│   ├── extensions.py # ORM event listener (isolamento multi-tenant)
+│   ├── cache.py      # Redis cache com role-segmented keys (evita cache poisoning)
+│   ├── roles.py      # Constantes de roles — STAFF_ROLES, MANAGER_ROLES, etc.
 │   └── decorators.py # @require_roles, etc.
 └── templates/
     └── documents/bulletin.html  # Template do boletim PDF
@@ -310,6 +323,51 @@ audit_logs
 
 ---
 
+## Cache (Redis)
+
+### Estratégia de chave
+
+```
+{prefix}:{tenant_id}:v{version}:{year_id}:{role_category}:{path}:{query_string}
+```
+
+- **`version`** — contador incremental por tenant; `invalidate_tenant_cache()` faz `INCR` atômico em O(1), tornando todas as chaves antigas obsoletas sem varredura (`SCAN`).
+- **`role_category`** — segmenta respostas por nível de permissão (`super_admin`, `admin`, `manager`, `professor`, `aluno`, `anon`). Evita que uma resposta de staff seja servida a um aluno via cache hit.
+
+### Pontos de invalidação
+
+| Evento | Chave invalidada |
+|--------|-----------------|
+| `PATCH /notas/:id` | Todo o cache do tenant |
+| `POST /ocorrencias` | Todo o cache do tenant |
+| Qualquer operação de escrita com `invalidate_tenant_cache()` | Todo o cache do tenant |
+
+---
+
+## Health Checks
+
+| Endpoint | Auth | Retorna |
+|----------|------|---------|
+| `GET /health` | Não | `{ status, checks: { database, redis } }` |
+| `GET /health/detailed` | JWT (super_admin para dados extras) | `{ status, checks: { database, migrations, redis, queue, [pool] } }` |
+
+O endpoint `/health/detailed` expõe a versão aplicada de migrations (`alembic_version`), profundidade da fila RQ e estado do pool de conexões. Ideal para monitoramento pós-deploy.
+
+---
+
+## Exportação de Dados
+
+Endpoints de exportação em `GET /api/v1/exports/`:
+
+| Endpoint | Formato | Filtros disponíveis |
+|----------|---------|---------------------|
+| `/exports/alunos` | CSV, XLSX | `turma`, `turno` |
+| `/exports/notas` | CSV, XLSX | `turma`, `turno`, `disciplina` |
+
+Geração síncrona (sem fila). Para datasets grandes (>5000 linhas) considere migrar para job assíncrono via RQ.
+
+---
+
 ## Performance
 
 ### Frontend
@@ -318,10 +376,10 @@ audit_logs
 - Sourcemaps desabilitados em produção
 
 ### Backend
-- Connection pooling (SQLAlchemy)
-- Paginação em todas as listagens
-- Cache Redis para queries pesadas de relatórios
-- Background jobs para operações longas (PDF, e-mails)
+- Connection pooling (SQLAlchemy) — configurável via env vars
+- Paginação em todas as listagens (`page` + `per_page`)
+- Cache Redis com invalidação O(1) por versão de tenant
+- Background jobs para operações longas (PDF, e-mails, treinamento ML)
 
 ---
 

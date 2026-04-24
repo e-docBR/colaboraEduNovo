@@ -186,9 +186,14 @@ Base URL: `https://{domain}/api/v1`
 | `GET` | `/comunicados` | Listar comunicados (paginado) |
 | `GET` | `/relatorios` | Gerar relatórios |
 | `GET` | `/graficos` | Dados para gráficos |
-| `POST` | `/uploads` | Upload de PDF de boletim |
+| `POST` | `/uploads/pdf` | Upload de PDF de boletim (queued) |
+| `GET` | `/uploads/jobs/<id>` | Status do job de ingestão |
+| `GET` | `/exports/alunos?format=csv\|xlsx` | Exportar lista de alunos com médias |
+| `GET` | `/exports/notas?format=csv\|xlsx` | Exportar notas completas |
 | `GET` | `/usuarios/me` | Perfil do usuário logado |
 | `GET` | `/audit-logs` | Logs de auditoria |
+| `GET` | `/health` | Health check (DB + Redis) |
+| `GET` | `/health/detailed` | Health detalhado (migrações, pool, fila) |
 
 ---
 

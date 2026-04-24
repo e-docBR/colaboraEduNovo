@@ -8,6 +8,7 @@ from werkzeug.utils import secure_filename
 
 from ...core.config import settings
 from ...core.decorators import require_roles
+from ...core.extensions import limiter
 from ...services import enqueue_pdf
 
 _PDF_MAGIC = b"%PDF-"
@@ -28,7 +29,8 @@ def register(parent: Blueprint) -> None:
 
     @bp.post("/uploads/pdf")
     @jwt_required()
-    @require_roles("admin", "super_admin", "coordenador", "diretor", "orientador", "professor")
+    @limiter.limit("20 per hour")
+    @require_roles("admin", "super_admin")
     def upload_boletim():
         if "file" not in request.files:
             return jsonify({"error": "arquivo não enviado"}), 400
@@ -98,22 +100,23 @@ def register(parent: Blueprint) -> None:
     @bp.get("/uploads/jobs/<job_id>")
     @jwt_required()
     def get_job_status(job_id):
+        from rq.job import Job, NoSuchJobError
+        from ...core.queue import redis_conn
+
         try:
-            from rq.job import Job
-            from ...core.queue import redis_conn
-            
             job = Job.fetch(job_id, connection=redis_conn)
-            return jsonify({
-                "job_id": job.id,
-                "status": job.get_status(),
-                "result": job.result if job.is_finished else None,
-                "enqueued_at": job.enqueued_at.isoformat() if job.enqueued_at else None,
-                "started_at": job.started_at.isoformat() if job.started_at else None,
-                "ended_at": job.ended_at.isoformat() if job.ended_at else None,
-                "meta": job.meta
-            })
-        except Exception:
-            return jsonify({"error": "Job not found"}), 404
+        except NoSuchJobError:
+            return jsonify({"error": "Job não encontrado"}), 404
+
+        return jsonify({
+            "job_id": job.id,
+            "status": job.get_status(),
+            "result": job.result if job.is_finished else None,
+            "enqueued_at": job.enqueued_at.isoformat() if job.enqueued_at else None,
+            "started_at": job.started_at.isoformat() if job.started_at else None,
+            "ended_at": job.ended_at.isoformat() if job.ended_at else None,
+            "meta": job.meta,
+        })
 
     parent.register_blueprint(bp)
 

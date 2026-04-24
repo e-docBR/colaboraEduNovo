@@ -13,7 +13,7 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..core.database import SessionLocal, session_scope
+from ..core.database import session_scope
 from ..models import Aluno, Nota, AcademicYear, Tenant
 from .accounts import ensure_aluno_user
 
@@ -105,7 +105,7 @@ def process_pdf(filepath: Path, *, turno: str | None = None, turma: str | None =
             if not year_obj:
                 year_obj = AcademicYear(tenant_id=tenant_id, label=str(extracted_year), is_current=False)
                 session.add(year_obj)
-                session.commit()
+                session.flush()  # get ID without premature commit; session_scope commits on exit
                 logger.info("Created new AcademicYear {} for tenant {}", extracted_year, tenant_id)
             academic_year_id = year_obj.id
             final_year_label = year_obj.label
@@ -124,18 +124,12 @@ def process_pdf(filepath: Path, *, turno: str | None = None, turma: str | None =
 def apply_records(records: Sequence[ParsedAlunoRecord], tenant_id: int | None = None, academic_year_id: int | None = None) -> int:
     if not records:
         return 0
-    session = SessionLocal()
-    try:
+    from ..core.database import session_scope as _scope
+    with _scope() as session:
         for record in records:
             aluno = _upsert_aluno(session, record, tenant_id=tenant_id, academic_year_id=academic_year_id)
             _upsert_notas(session, aluno, record.notas, tenant_id=tenant_id, academic_year_id=academic_year_id)
-        session.commit()
-        return len(records)
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
+    return len(records)
 
 
 def parse_pdf(filepath: Path, errors: list[str], *, turno: str | None = None, turma: str | None = None) -> tuple[list[ParsedAlunoRecord], int | None]:
@@ -147,13 +141,13 @@ def parse_pdf(filepath: Path, errors: list[str], *, turno: str | None = None, tu
         # Basic normalization: remove accents for matching
         norm_text = u_normalize("NFKD", first_page_text).encode("ascii", "ignore").decode("ascii")
         
-        logger.info(f"DEBUG: Processing {filepath.name}")
-        logger.info(f"DEBUG: First page text len: {len(first_page_text)}")
-        logger.info(f"DEBUG: Norm text snippet: {norm_text[:200]}")
-        
+        logger.debug("Processing {}", filepath.name)
+        logger.debug("First page text len: {}", len(first_page_text))
+        logger.debug("Norm text snippet: {}", norm_text[:200])
+
         # Check if it is a Matrícula Inicial/Final file
         is_mi = "MATRICULA INICIAL" in norm_text or "MATRICULA FINAL" in norm_text
-        logger.info(f"DEBUG: is_mi detected: {is_mi}")
+        logger.debug("is_mi detected: {}", is_mi)
         
         if is_mi:
             logger.info("Detected Matrícula Inicial/Final format for {}", filepath.name)

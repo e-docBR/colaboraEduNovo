@@ -30,7 +30,7 @@ def register(parent: Blueprint) -> None:
         try:
             payload = LoginRequest(**(request.get_json() or {}))
         except ValidationError as e:
-            raise e
+            return jsonify({"error": "Dados inválidos", "details": e.errors()}), 422
 
         ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
         with session_scope() as session:
@@ -88,7 +88,7 @@ def register(parent: Blueprint) -> None:
         try:
             payload = ChangePasswordRequest(**(request.get_json() or {}))
         except ValidationError as e:
-             raise e
+            return jsonify({"error": "Dados inválidos", "details": e.errors()}), 422
 
         user_id = int(get_jwt_identity())
         

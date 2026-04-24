@@ -51,6 +51,7 @@ class Ocorrencia(Base, TenantYearMixin):
             "observacao_pais": self.observacao_pais,
             "gravidade": self.gravidade,
             "acao_tomada": self.acao_tomada,
+            "resolvida": self.resolvida,
             "data_registro": self.data_registro.isoformat(),
-            "notificacao_status": self.notificacao_status
+            "notificacao_status": self.notificacao_status,
         }

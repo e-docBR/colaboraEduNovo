@@ -4,7 +4,7 @@ from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from pydantic import ValidationError
 
 from ...core.database import session_scope
-from ...core.decorators import require_roles, admin_required
+from ...core.decorators import require_roles
 from ...services.aluno_service import AlunoService
 from ...schemas.aluno import AlunoCreate, AlunoUpdate
 
@@ -62,7 +62,7 @@ def register(parent: Blueprint) -> None:
 
     @bp.post("/alunos")
     @jwt_required()
-    @require_roles("admin", "super_admin", "coordenador", "diretor", "orientador")
+    @require_roles("admin", "super_admin")
     def create_aluno():
         data = request.get_json() or {}
         try:
@@ -81,7 +81,7 @@ def register(parent: Blueprint) -> None:
 
     @bp.patch("/alunos/<int:aluno_id>")
     @jwt_required()
-    @require_roles("admin", "super_admin", "coordenador", "diretor", "orientador")
+    @require_roles("admin", "super_admin")
     def update_aluno(aluno_id: int):
         data = request.get_json() or {}
         try:
@@ -101,7 +101,7 @@ def register(parent: Blueprint) -> None:
 
     @bp.delete("/alunos/<int:aluno_id>")
     @jwt_required()
-    @require_roles("admin", "super_admin", "coordenador", "diretor")
+    @require_roles("admin", "super_admin")
     def delete_aluno(aluno_id: int):
             
         user_id = int(get_jwt_identity())

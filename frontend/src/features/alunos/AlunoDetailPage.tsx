@@ -101,7 +101,7 @@ export const AlunoDetailPage = () => {
   });
 
   const user = useAppSelector((state) => state.auth.user);
-  const isAdmin = user?.role && ["admin", "super_admin", "coordenacao", "coordenador", "direcao", "diretor", "orientacao", "orientador"].includes(user.role);
+  const isAdmin = user?.role && ["admin", "super_admin"].includes(user.role);
 
   const [editingNota, setEditingNota] = useState<AlunoNota | null>(null);
   const [editingAluno, setEditingAluno] = useState(false);

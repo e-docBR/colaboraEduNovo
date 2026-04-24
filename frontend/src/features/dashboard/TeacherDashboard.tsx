@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
     Alert,
     Box,
@@ -30,27 +30,31 @@ import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import PersonIcon from "@mui/icons-material/Person";
 import { Link } from "react-router-dom";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts";
 import { useGetTeacherDashboardQuery, useListTurmasQuery } from "../../lib/api";
 import { AIInterventionBoard } from "./AIInterventionBoard";
 
+const BAR_RANGE_COLORS = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#16a34a"];
+
 export const TeacherDashboard = () => {
     const theme = useTheme();
+    const [searchInput, setSearchInput] = useState("");
     const [filters, setFilters] = useState({ q: "", turno: "Todos", turma: "Todas" });
 
-    // Convert "Todos"/"Todas" to empty string for API
+    // Debounce search input
+    useEffect(() => {
+        const timer = setTimeout(() => setFilters(prev => ({ ...prev, q: searchInput })), 400);
+        return () => clearTimeout(timer);
+    }, [searchInput]);
+
     const apiFilters = {
-        q: filters.q,
+        q: filters.q || undefined,
         turno: filters.turno === "Todos" ? undefined : filters.turno,
-        turma: filters.turma === "Todas" ? undefined : filters.turma
+        turma: filters.turma === "Todas" ? undefined : filters.turma,
     };
 
     const { data, isLoading, error } = useGetTeacherDashboardQuery(apiFilters);
     const { data: turmasData } = useListTurmasQuery();
-
-    const handleFilterChange = (field: string, value: string) => {
-        setFilters(prev => ({ ...prev, [field]: value }));
-    };
 
     if (isLoading) {
         return (
@@ -68,16 +72,20 @@ export const TeacherDashboard = () => {
 
     const chartData = Object.entries(data.distribution || {}).map(([key, value]) => ({
         range: key,
-        count: value
+        count: value as number,
     }));
 
-    const uniqueTurmas = turmasData?.items.map(t => t.turma) || [];
+    const uniqueTurmas = turmasData?.items.map((t: any) => t.turma) || [];
+    const alertCount = data.alerts?.length ?? 0;
 
     const stats = [
         { label: "Turmas Ativas", value: data.classes_count, icon: <SchoolIcon />, color: theme.palette.primary.main },
         { label: "Total de Alunos", value: data.total_students, icon: <GroupsIcon />, color: theme.palette.success.main },
         { label: "Média Global", value: data.global_average, icon: <TrendingUpIcon />, color: theme.palette.info.main },
+        { label: "Alunos em Risco", value: alertCount, icon: <WarningAmberIcon />, color: theme.palette.error.main },
     ];
+
+    const hasNoStudents = data.total_students === 0;
 
     return (
         <Box>
@@ -98,8 +106,8 @@ export const TeacherDashboard = () => {
                         variant="outlined"
                         size="small"
                         fullWidth
-                        value={filters.q}
-                        onChange={(e) => handleFilterChange("q", e.target.value)}
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
                         InputProps={{
                             startAdornment: (
                                 <InputAdornment position="start">
@@ -117,7 +125,7 @@ export const TeacherDashboard = () => {
                                 labelId="turno-label"
                                 value={filters.turno}
                                 label="Turno"
-                                onChange={(e) => handleFilterChange("turno", e.target.value)}
+                                onChange={(e) => setFilters(prev => ({ ...prev, turno: e.target.value }))}
                                 sx={{ borderRadius: 2 }}
                             >
                                 <MenuItem value="Todos">Todos</MenuItem>
@@ -133,11 +141,11 @@ export const TeacherDashboard = () => {
                                 labelId="turma-label"
                                 value={filters.turma}
                                 label="Turma"
-                                onChange={(e) => handleFilterChange("turma", e.target.value)}
+                                onChange={(e) => setFilters(prev => ({ ...prev, turma: e.target.value }))}
                                 sx={{ borderRadius: 2 }}
                             >
                                 <MenuItem value="Todas">Todas</MenuItem>
-                                {uniqueTurmas.map((turma) => (
+                                {uniqueTurmas.map((turma: string) => (
                                     <MenuItem key={turma} value={turma}>
                                         {turma}
                                     </MenuItem>
@@ -148,9 +156,17 @@ export const TeacherDashboard = () => {
                 </Stack>
             </Card>
 
+            {/* Empty state */}
+            {hasNoStudents && (
+                <Alert severity="info" sx={{ mb: 4, borderRadius: 2 }}>
+                    Nenhum aluno encontrado com os filtros selecionados.
+                </Alert>
+            )}
+
+            {/* Stat Cards */}
             <Grid container spacing={3} mb={4}>
                 {stats.map((stat, index) => (
-                    <Grid key={index} size={{ xs: 12, md: 4 }}>
+                    <Grid key={index} size={{ xs: 12, sm: 6, lg: 3 }}>
                         <Card elevation={0} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
                             <CardContent sx={{ p: 3 }}>
                                 <Stack direction="row" spacing={2} alignItems="center">
@@ -161,7 +177,7 @@ export const TeacherDashboard = () => {
                                         <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ textTransform: "uppercase", letterSpacing: "0.05em" }}>
                                             {stat.label}
                                         </Typography>
-                                        <Typography variant="h4" fontWeight={700}>
+                                        <Typography variant="h4" fontWeight={700} color={index === 3 && alertCount > 0 ? "error.main" : "text.primary"}>
                                             {stat.value}
                                         </Typography>
                                     </Box>
@@ -208,7 +224,11 @@ export const TeacherDashboard = () => {
                                             return qualLabels[label] || label;
                                         }}
                                     />
-                                    <Bar dataKey="count" fill={theme.palette.primary.main} radius={[4, 4, 0, 0]} barSize={40} />
+                                    <Bar dataKey="count" radius={[4, 4, 0, 0]} barSize={40}>
+                                        {chartData.map((_, index) => (
+                                            <Cell key={`cell-${index}`} fill={BAR_RANGE_COLORS[index % BAR_RANGE_COLORS.length]} />
+                                        ))}
+                                    </Bar>
                                 </BarChart>
                             </ResponsiveContainer>
                         </CardContent>
@@ -242,16 +262,16 @@ export const TeacherDashboard = () => {
                                             <Avatar sx={{ bgcolor: theme.palette.error.main + "15", color: theme.palette.error.main }}>
                                                 <PersonIcon fontSize="small" />
                                             </Avatar>
-                                            <Box sx={{ flex: 1 }}>
+                                            <Box sx={{ flex: 1, minWidth: 0 }}>
                                                 <Link
                                                     to={`/app/alunos/${aluno.id}`}
                                                     style={{ textDecoration: 'none', color: 'inherit' }}
                                                 >
-                                                    <Typography fontWeight={600} sx={{ cursor: "pointer", "&:hover": { color: "primary.main" } }}>
+                                                    <Typography fontWeight={600} noWrap sx={{ cursor: "pointer", "&:hover": { color: "primary.main" } }}>
                                                         {aluno.nome}
                                                     </Typography>
                                                 </Link>
-                                                <Stack direction="row" spacing={1} alignItems="center">
+                                                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
                                                     <Typography variant="caption" color="text.secondary">
                                                         Média: <strong>{aluno.media}</strong>
                                                     </Typography>
@@ -259,13 +279,21 @@ export const TeacherDashboard = () => {
                                                     <Typography variant="caption" color="text.secondary">
                                                         {aluno.turma}
                                                     </Typography>
+                                                    {aluno.faltas != null && aluno.faltas > 0 && (
+                                                        <>
+                                                            <Box sx={{ width: 3, height: 3, borderRadius: "50%", bgcolor: "text.disabled" }} />
+                                                            <Typography variant="caption" color={aluno.faltas > 20 ? "error.main" : "text.secondary"} fontWeight={aluno.faltas > 20 ? 700 : 400}>
+                                                                {aluno.faltas} faltas
+                                                            </Typography>
+                                                        </>
+                                                    )}
                                                 </Stack>
                                             </Box>
                                             <Chip
                                                 label={`${(aluno.risk_score * 100).toFixed(0)}% Risco`}
                                                 color="error"
                                                 size="small"
-                                                sx={{ fontWeight: 700, borderRadius: 1 }}
+                                                sx={{ fontWeight: 700, borderRadius: 1, flexShrink: 0 }}
                                             />
                                         </Stack>
                                     </ListItem>
@@ -282,7 +310,7 @@ export const TeacherDashboard = () => {
             </Grid>
 
             {/* AI Pedagogical Interventions */}
-            {data.alerts?.length > 0 && (
+            {alertCount > 0 && (
                 <AIInterventionBoard studentIds={data.alerts.map((a: any) => a.id)} />
             )}
         </Box>

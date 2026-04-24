@@ -64,7 +64,7 @@ export const TurmasPage = () => {
   const navigate = useNavigate();
 
   const user = useAppSelector((state) => state.auth.user);
-  const isAdmin = user?.role && ["admin", "super_admin", "coordenador", "diretor"].includes(user.role);
+  const isAdmin = user?.role && ["admin", "super_admin"].includes(user.role);
 
   const setSearch = (value: string) => {
     if (value) {

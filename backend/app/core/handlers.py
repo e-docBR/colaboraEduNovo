@@ -22,11 +22,24 @@ def register_error_handlers(app):
         response.status_code = 422
         return response
 
+    @app.errorhandler(401)
+    def handle_401(_error):
+        return jsonify({"error": "Autenticação necessária"}), 401
+
+    @app.errorhandler(403)
+    def handle_403(_error):
+        return jsonify({"error": "Acesso negado"}), 403
+
     @app.errorhandler(404)
-    def handle_404(error):
+    def handle_404(_error):
         return jsonify({"error": "Recurso não encontrado"}), 404
+
+    @app.errorhandler(405)
+    def handle_405(_error):
+        return jsonify({"error": "Método não permitido"}), 405
 
     @app.errorhandler(500)
     def handle_500(error):
-        # In production, log this error propertly
+        from loguru import logger
+        logger.error("Internal server error: {}", error)
         return jsonify({"error": "Erro interno do servidor"}), 500

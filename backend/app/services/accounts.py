@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import re
-import secrets
-import string
 from unicodedata import normalize
 
 from loguru import logger
@@ -22,23 +20,6 @@ def _sanitize_first_name(full_name: str | None) -> str:
     safe = re.sub(r"[^a-zA-Z0-9]", "", normalized).lower()
     return safe or "aluno"
 
-
-def _generate_initial_password() -> str:
-    """Gera uma senha aleatória segura para uso inicial.
-    Formato: 3 letras maiúsculas + 3 dígitos + 2 caracteres especiais = 8 chars mínimos.
-    """
-    alphabet_upper = string.ascii_uppercase
-    digits = string.digits
-    special = "!@#$%"
-    password = (
-        "".join(secrets.choice(alphabet_upper) for _ in range(3))
-        + "".join(secrets.choice(digits) for _ in range(3))
-        + "".join(secrets.choice(special) for _ in range(2))
-    )
-    # Embaralha para não ter padrão previsível
-    chars = list(password)
-    secrets.SystemRandom().shuffle(chars)
-    return "".join(chars)
 
 
 def build_aluno_username(aluno: Aluno) -> str:
@@ -67,7 +48,7 @@ def ensure_aluno_user(session: Session, aluno: Aluno) -> Usuario:
         return usuario
 
     try:
-        initial_password = _generate_initial_password()
+        initial_password = aluno.matricula
         usuario = Usuario(
             username=username,
             password_hash=hash_password(initial_password),

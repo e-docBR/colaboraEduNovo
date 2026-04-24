@@ -62,11 +62,9 @@ export const ComunicadosPage = () => {
 
     const user = useAppSelector((state) => state.auth.user);
     const isAdmin = user?.role === "admin" ||
-        user?.role === "professor" ||
+        user?.role === "super_admin" ||
         user?.role === "coordenacao" ||
         user?.role === "coordenador" ||
-        user?.role === "direcao" ||
-        user?.role === "diretor" ||
         user?.role === "orientacao" ||
         user?.role === "orientador";
 

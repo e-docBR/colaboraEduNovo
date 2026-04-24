@@ -42,7 +42,7 @@ def register(bp: Blueprint):
 
     @bp.route("/ai/bulk-interventions", methods=["POST"])
     @jwt_required()
-    @require_roles("admin", "coordenador")
+    @require_roles("admin", "coordenador", "professor", "diretor", "orientador")
     def get_bulk_interventions():
         """Returns interventions for a list of student IDs (dashboard 'High Risk')."""
         data = request.get_json() or {}

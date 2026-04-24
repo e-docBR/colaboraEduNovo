@@ -3,14 +3,17 @@ from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from pydantic import ValidationError
 
 from ...core.database import session_scope
+from ...core.roles import STAFF_ROLES, OCORRENCIA_WRITE_ROLES
 from ...services.ocorrencia_service import OcorrenciaService
 from ...schemas.ocorrencia import OcorrenciaCreate, OcorrenciaUpdate
 
-_STAFF_ROLES = frozenset(["admin", "professor", "coordenador", "diretor", "orientador"])
-
 
 def _is_staff(roles: list) -> bool:
-    return bool(_STAFF_ROLES.intersection(roles))
+    return bool(STAFF_ROLES.intersection(roles))
+
+
+def _can_write_ocorrencia(roles: list) -> bool:
+    return bool(OCORRENCIA_WRITE_ROLES.intersection(roles))
 
 
 def register(parent: Blueprint) -> None:
@@ -25,27 +28,42 @@ def register(parent: Blueprint) -> None:
         user_aluno_id = claims.get("aluno_id")
         user_id = int(get_jwt_identity())
 
+        try:
+            page = max(1, int(request.args.get("page", 1)))
+            per_page = min(100, int(request.args.get("per_page", 50)))
+        except (ValueError, TypeError):
+            page, per_page = 1, 50
+
         with session_scope() as session:
             service = OcorrenciaService(session, user_id)
 
             target_aluno_id = None
             if not _is_staff(roles):
                 if not user_aluno_id:
-                    return jsonify([]), 200
-                target_aluno_id = int(user_aluno_id)
+                    return jsonify({"items": [], "meta": {"page": 1, "per_page": per_page, "total": 0}}), 200
+                try:
+                    target_aluno_id = int(user_aluno_id)
+                except (ValueError, TypeError):
+                    return jsonify({"error": "aluno_id inválido no token"}), 400
             else:
                 if req_aluno_id:
-                    target_aluno_id = int(req_aluno_id)
+                    try:
+                        target_aluno_id = int(req_aluno_id)
+                    except (ValueError, TypeError):
+                        return jsonify({"error": "aluno_id inválido"}), 400
 
-            results = service.list_ocorrencias(aluno_id=target_aluno_id)
-            return jsonify([r.model_dump() for r in results])
+            result = service.list_ocorrencias(aluno_id=target_aluno_id, page=page, per_page=per_page)
+            return jsonify({
+                "items": [r.model_dump() for r in result["items"]],
+                "meta": result["meta"],
+            })
 
     @bp.post("/ocorrencias")
     @jwt_required()
     def create_ocorrencia():
         claims = get_jwt()
         roles = claims.get("roles", [])
-        if not _is_staff(roles):
+        if not _can_write_ocorrencia(roles):
             return jsonify({"error": "Acesso negado"}), 403
 
         data = request.json or {}
@@ -71,7 +89,7 @@ def register(parent: Blueprint) -> None:
     def update_ocorrencia(ocorrencia_id: int):
         claims = get_jwt()
         roles = claims.get("roles", [])
-        if not _is_staff(roles):
+        if not _can_write_ocorrencia(roles):
             return jsonify({"error": "Acesso negado"}), 403
 
         data = request.json or {}
@@ -96,7 +114,7 @@ def register(parent: Blueprint) -> None:
     def delete_ocorrencia(ocorrencia_id: int):
         claims = get_jwt()
         roles = claims.get("roles", [])
-        if not _is_staff(roles):
+        if not _can_write_ocorrencia(roles):
             return jsonify({"error": "Acesso negado"}), 403
 
         user_id = int(get_jwt_identity())
@@ -110,14 +128,13 @@ def register(parent: Blueprint) -> None:
 
         return jsonify({"message": "Removido com sucesso"}), 200
 
-    _NOTIFY_ROLES = frozenset(["admin", "super_admin", "coordenador", "diretor", "orientador"])
-
     @bp.post("/ocorrencias/<int:ocorrencia_id>/notificar")
     @jwt_required()
     def renotificar_ocorrencia(ocorrencia_id: int):
+        from ...core.roles import MANAGER_ROLES
         claims = get_jwt()
         roles = claims.get("roles", [])
-        if not _NOTIFY_ROLES.intersection(roles):
+        if not MANAGER_ROLES.intersection(roles):
             return jsonify({"error": "Acesso negado"}), 403
 
         user_id = int(get_jwt_identity())

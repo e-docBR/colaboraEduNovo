@@ -158,7 +158,7 @@ export const AlunosPage = () => {
         </Typography>
       </Box>
 
-      {user?.role && ["admin", "super_admin", "coordenacao", "coordenador", "direcao", "diretor", "orientacao", "orientador"].includes(user.role) && (
+      {user?.role && ["admin", "super_admin"].includes(user.role) && (
         <Box mb={3} display="flex" justifyContent="flex-end">
           <Button
             variant="contained"
