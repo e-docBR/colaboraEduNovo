@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional
 from pydantic import BaseModel, ConfigDict
 
 class OcorrenciaBase(BaseModel):
@@ -26,7 +26,7 @@ class OcorrenciaUpdate(BaseModel):
 class OcorrenciaSchema(OcorrenciaBase):
     id: int
     aluno_id: int
-    autor_id: int
+    autor_id: Optional[int] = None
     resolvida: bool = False
 
     # Extra fields for display

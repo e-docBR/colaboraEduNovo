@@ -97,5 +97,4 @@ def notify_occurrence_task(ocorrencia_id: int):
             occurrence.notificacao_status = "Parcial (" + ", ".join(parts) + ")"
 
         session.add(occurrence)
-        session.commit()
         logger.info(f"Notification task for occurrence {ocorrencia_id} finished. Status: {occurrence.notificacao_status}")

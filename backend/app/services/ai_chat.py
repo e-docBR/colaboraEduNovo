@@ -1,12 +1,11 @@
 import re
-from sqlalchemy import select, func, desc, case
+from sqlalchemy import select, func, desc
 from sqlalchemy.orm import Session
 from ..models import Aluno, Nota, Comunicado, Ocorrencia
-from ..core.database import SessionLocal
+from ..core.database import session_scope
 from .intervention_service import intervention_service
 
-from loguru import logger
-from typing import TypedDict, List, Any, Optional
+from typing import TypedDict, Any, Optional
 
 class AIResponse(TypedDict):
     text: str
@@ -84,11 +83,10 @@ class AIAnalystEngine:
 
 
     def process_query(self, message: str) -> AIResponse:
-        session = SessionLocal()
         message_lower = message.lower()
-        try:
-            filters = self._extract_filters(message)
-            
+        filters = self._extract_filters(message)
+
+        with session_scope() as session:
             # 1. CHART INTENT: Grade Comparison
             if any(re.search(p, message_lower) for p in self.intent_patterns['chart_grades']):
                 return self._generate_grade_chart(session, filters)
@@ -110,19 +108,18 @@ class AIAnalystEngine:
                 return self._analyze_best_students(session, filters)
 
             # 6. LIST INTENT: Above/Below Average (generic fallback for 'media')
-            if 'acima' in message_lower and 'm[ée]dia' in message_lower:
-                 return self._analyze_performance(session, filters, above_avg=True)
-            if 'abaixo' in message_lower and 'm[ée]dia' in message_lower:
-                 return self._analyze_performance(session, filters, above_avg=False)
+            if 'acima' in message_lower and 'média' in message_lower:
+                return self._analyze_performance(session, filters, above_avg=True)
+            if 'abaixo' in message_lower and 'média' in message_lower:
+                return self._analyze_performance(session, filters, above_avg=False)
 
             # 7. CHART INTENT: Hardest Subjects
             if any(re.search(p, message_lower) for p in [r'dif[íi]cil', r'complexa', r'pior.*not[as]', r'disciplina.*baix[as]']):
-                 return self._analyze_hardest_subjects(session, filters)
+                return self._analyze_hardest_subjects(session, filters)
 
             # 8. CHART INTENT: Status Distribution
             if any(re.search(p, message_lower) for p in [r'status', r'situa[çc][ãa]o', r'aprovad', r'recupera[çc][ãa]o']):
-                 return self._analyze_status_stats(session, filters)
-
+                return self._analyze_status_stats(session, filters)
 
             # 9. INFO INTENT: Notices
             if any(re.search(p, message_lower) for p in self.intent_patterns['notices']):
@@ -148,10 +145,8 @@ class AIAnalystEngine:
             if any(re.search(p, message_lower) for p in self.intent_patterns['pedagogical_interventions']):
                 return self._analyze_interventions(session, filters)
 
-            # Default conversational fallback
             return {
                 "text": "Sou o AI FreiRonaldo. Posso ajudar com:\n"
-
                         "• Alunos em risco ou com mais faltas\n"
                         "• Comparativo de médias por turma ou disciplina\n"
                         "• Lista de melhores alunos ou destaques\n"
@@ -162,9 +157,6 @@ class AIAnalystEngine:
                 "data": None,
                 "chart_config": None
             }
-
-        finally:
-            session.close()
 
     def _generate_grade_chart(self, session: Session, filters: dict) -> AIResponse:
         """Generates a dataset for a chart comparing grades."""

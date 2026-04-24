@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from typing import Optional
-from sqlalchemy import Index, String, Text, DateTime, ForeignKey
+from sqlalchemy import Boolean, Index, String, Text, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..core.database import Base
@@ -26,6 +26,8 @@ class Ocorrencia(Base, TenantYearMixin):
     aluno_id: Mapped[int] = mapped_column(ForeignKey("alunos.id", ondelete="CASCADE"), nullable=False)
     autor_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True)
     
+    resolvida: Mapped[bool] = mapped_column(Boolean, default=False)
+
     # Status de envio de notificação (Pendente, Enviado, Erro)
     notificacao_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
 

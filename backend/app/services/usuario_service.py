@@ -1,11 +1,11 @@
-from typing import Optional, List
-from sqlalchemy import select, func
+from typing import Optional
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.repositories.usuario_repository import UsuarioRepository
 from app.core.security import hash_password, verify_password, generate_tokens
 from app.core.exceptions import AppError, UnauthorizedError, NotFoundError, ValidationError
-from app.models import Usuario, Aluno
+from app.models import Aluno
 from app.schemas.usuario import UsuarioCreate, UsuarioUpdate, UsuarioSchema, LoginResponse
 
 class UsuarioService:
@@ -13,19 +13,26 @@ class UsuarioService:
         self.repository = UsuarioRepository(session)
 
     def authenticate(self, username: str, password: str, tenant_slug: Optional[str] = None) -> LoginResponse:
-        user = self.repository.get_by_username(username)
+        from app.models.tenant import Tenant
+
+        # Resolve tenant first so we scope the user lookup to the correct school.
+        # Without this, two schools with the same username would return the wrong user.
+        tenant_id: Optional[int] = None
+        if tenant_slug:
+            tenant = self.repository.session.execute(
+                select(Tenant).where(Tenant.slug == tenant_slug, Tenant.is_active == True)
+            ).scalar_one_or_none()
+            if not tenant:
+                raise UnauthorizedError("Escola não encontrada")
+            tenant_id = tenant.id
+
+        user = self.repository.get_by_username(username, tenant_id=tenant_id)
         if not user or not verify_password(password, user.password_hash):
             raise UnauthorizedError("Usuário ou senha inválidos")
 
-        # If tenant_slug is provided, verify user belongs to it (unless super_admin)
-        if tenant_slug and user.role != "super_admin":
-            from app.models.tenant import Tenant
-            tenant = self.repository.session.execute(
-                select(Tenant).where(Tenant.slug == tenant_slug)
-            ).scalar_one_or_none()
-            
-            if not tenant or user.tenant_id != tenant.id:
-                raise UnauthorizedError("Usuário não pertence a esta escola")
+        # super_admin can log in from any tenant scope without restriction
+        if tenant_id and user.role != "super_admin" and user.tenant_id != tenant_id:
+            raise UnauthorizedError("Usuário não pertence a esta escola")
 
         roles = [user.role] if user.role else []
 

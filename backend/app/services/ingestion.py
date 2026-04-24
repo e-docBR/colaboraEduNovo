@@ -444,19 +444,21 @@ def _extract_rows(tables: Sequence[Sequence[Sequence[str | None]]]) -> Iterable[
 
 
 def _upsert_aluno(session: Session, record: ParsedAlunoRecord, tenant_id: int | None = None, academic_year_id: int | None = None) -> Aluno:
-    # 1. Try by matricula first (Standard)
+    # 1. Try by matricula first (Standard) — include academic_year_id to avoid merging cross-year records
     stmt = select(Aluno).where(
         Aluno.matricula == record.matricula,
-        Aluno.tenant_id == tenant_id
+        Aluno.tenant_id == tenant_id,
+        Aluno.academic_year_id == academic_year_id,
     )
     aluno = session.execute(stmt).scalar_one_or_none()
-    
+
     # 2. Try by Name as fallback (Prevents duplicates between MI and Bulletin if IDs differ)
     if aluno is None and record.nome:
         try:
             stmt = select(Aluno).where(
                 Aluno.nome == record.nome,
-                Aluno.tenant_id == tenant_id
+                Aluno.tenant_id == tenant_id,
+                Aluno.academic_year_id == academic_year_id,
             )
             aluno = session.execute(stmt).scalar_one_or_none()
         except Exception:

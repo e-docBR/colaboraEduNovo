@@ -9,13 +9,14 @@ class UsuarioRepository(BaseRepository[Usuario]):
     def __init__(self, session: Session):
         super().__init__(session, Usuario)
 
-    def get_by_username(self, username: str) -> Optional[Usuario]:
-        """Busca por username exato ou, se o valor contiver '@', também por e-mail."""
-        return self.session.execute(
-            select(Usuario).where(
-                or_(Usuario.username == username, Usuario.email == username)
-            )
-        ).scalar_one_or_none()
+    def get_by_username(self, username: str, tenant_id: Optional[int] = None) -> Optional[Usuario]:
+        """Busca por username/email dentro do tenant especificado (ou globalmente para super_admin)."""
+        stmt = select(Usuario).where(
+            or_(Usuario.username == username, Usuario.email == username)
+        )
+        if tenant_id is not None:
+            stmt = stmt.where(Usuario.tenant_id == tenant_id)
+        return self.session.execute(stmt).scalar_one_or_none()
 
     def exists_username(self, username: str, exclude_id: Optional[int] = None) -> bool:
         stmt = select(Usuario).where(Usuario.username == username)

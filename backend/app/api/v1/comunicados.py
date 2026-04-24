@@ -108,8 +108,11 @@ def register(parent: Blueprint) -> None:
             # TODOS: target_value não faz sentido
             target_value = None
 
+        if not getattr(g, "academic_year_id", None):
+            return jsonify({"error": "Nenhum ano letivo ativo configurado para esta escola"}), 400
+
         user_id = int(get_jwt_identity())
-        
+
         with session_scope() as session:
             novo = Comunicado(
                 titulo=data["titulo"],

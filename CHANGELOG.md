@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.1] - 2026-04-23
+
+### Segurança e Performance
+- **Isolamento de Tenants no Login**: Autenticação agora exige e verifica o `tenant_id` correto no lookup do usuário, evitando colisão de usernames entre escolas.
+- **Proteção de Scripts**: Adicionada variável de ambiente obrigatória (`ALLOW_BARE_MIGRATE=1`) para execução do script de migração `bare_usuarios.py`, prevenindo execuções acidentais em produção.
+- **Backend Gunicorn**: O container `backend` no `docker-compose.yml` agora utiliza o servidor de produção `gunicorn` com 4 workers em vez do servidor de desenvolvimento embutido do Flask.
+- **Segurança do Redis**: Adicionado suporte à variável `REDIS_PASSWORD` para proteção por senha no container do Redis.
+
+### Novas Funcionalidades
+- **Ocorrências Resolvidas**: Adicionado campo booleano `resolvida` ao modelo de Ocorrências (com respectiva migration `e2f3a4b5c6d7`) para permitir fechar/resolver ocorrências.
+
+### Bugs Corrigidos
+- **Ingestão de Boletins**: A função de upsert de Aluno agora usa também o `academic_year_id`, impedindo a mescla acidental de registros do mesmo aluno em anos letivos diferentes.
+- **AI Predictor**: Corrigidos bugs no parse de `faltas` e falhas de logging na predição de risco (`ai_predictor.py`).
+
 ## [1.6.0] - 2026-04-23
 
 ### Novas Funcionalidades

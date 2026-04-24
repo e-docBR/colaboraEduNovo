@@ -7,6 +7,7 @@ from flask_jwt_extended import jwt_required
 from werkzeug.utils import secure_filename
 
 from ...core.config import settings
+from ...core.decorators import require_roles
 from ...services import enqueue_pdf
 
 _PDF_MAGIC = b"%PDF-"
@@ -27,6 +28,7 @@ def register(parent: Blueprint) -> None:
 
     @bp.post("/uploads/pdf")
     @jwt_required()
+    @require_roles("admin", "super_admin", "coordenador", "diretor", "orientador", "professor")
     def upload_boletim():
         if "file" not in request.files:
             return jsonify({"error": "arquivo não enviado"}), 400

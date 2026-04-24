@@ -118,7 +118,16 @@ def register(parent: Blueprint) -> None:
     def download_bulletin_pdf(aluno_id: int):
         from flask import send_file, g
         from ...services.document_service import DocumentService
-        
+
+        claims = get_jwt()
+        roles = claims.get("roles", [])
+        _staff = frozenset(["admin", "super_admin", "coordenador", "diretor", "orientador", "professor"])
+        if not _staff.intersection(roles):
+            # Non-staff may only download their own bulletin
+            own_aluno_id = claims.get("aluno_id")
+            if not own_aluno_id or int(own_aluno_id) != aluno_id:
+                return jsonify({"error": "Acesso negado"}), 403
+
         with session_scope() as session:
             service = AlunoService(session)
             aluno_data = service.get_bulletin_data(aluno_id)

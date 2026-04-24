@@ -1,4 +1,11 @@
-import os, sqlite3, psycopg2
+"""One-time SQLite→Postgres migration script — DO NOT RUN IN PRODUCTION.
+Requires ALLOW_BARE_MIGRATE=1 to execute."""
+import os, sys, sqlite3, psycopg2
+
+if os.environ.get("ALLOW_BARE_MIGRATE") != "1":
+    print("ERROR: Set ALLOW_BARE_MIGRATE=1 to run this destructive script.")
+    sys.exit(1)
+
 lite = sqlite3.connect("/data/boletins.db")
 cur_l = lite.cursor()
 cur_l.execute("SELECT id, username, email, password_hash, role, is_admin, aluno_id, photo_url, must_change_password, is_active, tenant_id FROM usuarios")

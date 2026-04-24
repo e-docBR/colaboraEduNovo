@@ -1,120 +1,137 @@
+import hashlib
 import pandas as pd
+import joblib
 from sklearn.linear_model import LogisticRegression
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 from loguru import logger
-import pickle
 from pathlib import Path
 from ..models import Aluno, Nota
-from ..core.database import SessionLocal
 
-MODEL_PATH = Path(__file__).resolve().parents[3] / "data" / "risk_model.pkl"
+_DATA_DIR = Path(__file__).resolve().parents[3] / "data"
 
-def train_risk_model(session: Session):
-    """
-    Trains a simple logistic regression model to predict failure risk.
-    """
+
+def _model_path(tenant_id: int) -> Path:
+    return _DATA_DIR / f"risk_model_{tenant_id}.joblib"
+
+
+def _hash_path(tenant_id: int) -> Path:
+    return _model_path(tenant_id).with_suffix(".sha256")
+
+
+def train_risk_model(tenant_id: int) -> None:
+    """Background-safe: fetches its own DB session to train per-tenant model."""
+    from ..core.database import session_scope
+
     try:
-        # 1. Fetch Data
-        stm = select(Aluno)
-        alunos = session.execute(stm).scalars().all()
-        
-        data = []
-        for aluno in alunos:
-            # Aggregate grades
-            total_score = 0
-            low_grades_count = 0
-            faltas = 0
-            
-            for nota in aluno.notas:
-                # Use total or estimate based on trimesters
-                score = float(nota.total or 0)
-                if score < 60:
-                    low_grades_count += 1
-                total_score += score
-                faltas += (nota.faltas or 0)
-            
-            # Heuristic Target: If > 2 low grades OR > 15 faltas -> Risk
-            is_risk = 1 if (low_grades_count >= 2 or faltas > 15) else 0
-            
-            data.append({
-                "mean_score": total_score / len(aluno.notas) if aluno.notas else 0,
-                "low_grades": low_grades_count,
-                "faltas": faltas,
-                "target": is_risk
-            })
-            
-        if not data:
-            logger.warning("No data to train model.")
+        with session_scope() as session:
+            # Fetch all alunos for this tenant with their notas in one query (A-08 fix)
+            rows = session.execute(
+                select(
+                    Aluno.id,
+                    func.avg(Nota.total).label("mean_score"),
+                    func.count(Nota.id).filter(Nota.total < 60).label("low_grades"),
+                    func.sum(Nota.faltas).label("faltas"),
+                )
+                .join(Nota, Nota.aluno_id == Aluno.id)
+                .where(Aluno.tenant_id == tenant_id)
+                .group_by(Aluno.id)
+                .execution_options(include_all_tenants=True)
+            ).all()
+
+        if not rows:
+            logger.warning("No data to train model for tenant {}.", tenant_id)
             return
-            
+
+        data = [
+            {
+                "mean_score": float(r.mean_score or 0),
+                "low_grades": int(r.low_grades or 0),
+                "faltas": int(r.faltas or 0),
+                "target": 1 if (int(r.low_grades or 0) >= 2 or int(r.faltas or 0) > 15) else 0,
+            }
+            for r in rows
+        ]
+
         df = pd.DataFrame(data)
-        
-        # 2. Train Model
         X = df[["mean_score", "low_grades", "faltas"]]
         y = df["target"]
-        
+
         model = LogisticRegression()
         model.fit(X, y)
-        
-        # 3. Save
-        with open(MODEL_PATH, "wb") as f:
-            pickle.dump(model, f)
-            
+
+        path = _model_path(tenant_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(model, path)
+        _hash_path(tenant_id).write_text(hashlib.sha256(path.read_bytes()).hexdigest())
+        logger.info("Risk model trained for tenant {}.", tenant_id)
+
     except Exception as e:
-        logger.error(f"Training failed: {e}")
-        
-from sqlalchemy.orm import Session
+        logger.error("Training failed for tenant {}: {}", tenant_id, e)
+
+
+def enqueue_training(tenant_id: int) -> None:
+    """Enqueues model training as a background RQ task (A-05)."""
+    from ..core.queue import queue
+    queue.enqueue(train_risk_model, tenant_id)
+
 
 def predict_risk(aluno_id: int, session: Session) -> dict:
-    """
-    Returns probability and insights about failure risk for a student.
-    """
-    if not MODEL_PATH.exists():
-        logger.info("Model not found, training new one...")
-        train_risk_model(session)
-        
+    """Returns probability and insights about failure risk for a student."""
+    from flask import g
+    tenant_id = getattr(g, "tenant_id", None)
+    if not tenant_id:
+        return {"score": 0.0, "status": "ERRO", "error": "tenant indisponível"}
+
+    model_path = _model_path(tenant_id)
+    hash_path = _hash_path(tenant_id)
+
+    if not model_path.exists():
+        logger.info("Model not found for tenant {}, scheduling training.", tenant_id)
+        enqueue_training(tenant_id)
+        return {"score": 0.0, "status": "TREINANDO"}
+
+    if hash_path.exists():
+        stored = hash_path.read_text().strip()
+        actual = hashlib.sha256(model_path.read_bytes()).hexdigest()
+        if stored != actual:
+            logger.error("Model integrity check failed for tenant {} — retraining.", tenant_id)
+            enqueue_training(tenant_id)
+            return {"score": 0.0, "status": "TREINANDO"}
+
     try:
-        with open(MODEL_PATH, "rb") as f:
-            model = pickle.load(f)
-            
+        model = joblib.load(model_path)
+
         aluno = session.get(Aluno, aluno_id)
         if not aluno:
             return {"score": 0.0, "status": "INEXISTENTE"}
-            
-        # Extract features
-        total_score = 0
-        low_grades_count = 0
-        faltas = 0
-        for nota in aluno.notas:
-            score = float(nota.total or 0)
-            if score < 60:
-                low_grades_count += 1
-            total_score += score
-            faltas += (nota.faltas or 0)
-            
-        num_notas = len(aluno.notas)
-        mean_score = total_score / num_notas if num_notas else 0
-        
-        features = pd.DataFrame([{
-            "mean_score": mean_score,
-            "low_grades": low_grades_count,
-            "faltas": faltas
-        }])
-        
-        # Predict probability
+
+        # Single aggregation query instead of N+1 loop (A-08 fix)
+        row = session.execute(
+            select(
+                func.avg(Nota.total).label("mean_score"),
+                func.count(Nota.id).filter(Nota.total < 60).label("low_grades"),
+                func.sum(Nota.faltas).label("faltas"),
+            ).where(Nota.aluno_id == aluno_id)
+        ).one()
+
+        mean_score = float(row.mean_score or 0)
+        low_grades = int(row.low_grades or 0)
+        faltas = int(row.faltas or 0)
+
+        features = pd.DataFrame([{"mean_score": mean_score, "low_grades": low_grades, "faltas": faltas}])
         risk_prob = float(model.predict_proba(features)[0][1])
-        
+
         return {
             "score": round(risk_prob, 2),
             "status": "ALTO" if risk_prob > 0.7 else "MEDIO" if risk_prob > 0.4 else "BAIXO",
             "factors": {
                 "media_geral": round(mean_score, 1),
-                "disciplinas_abaixo_60": low_grades_count,
-                "total_faltas": faltas
-            }
+                "disciplinas_abaixo_60": low_grades,
+                "total_faltas": faltas,
+            },
         }
-        
+
     except Exception as e:
-        logger.error(f"Prediction failed: {e}")
+        logger.error("Prediction failed: {}", e)
         return {"score": 0.0, "status": "ERRO", "error": str(e)}
