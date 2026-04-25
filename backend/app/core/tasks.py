@@ -56,9 +56,9 @@ def notify_occurrence_task(ocorrencia_id: int):
             message_body += f"\n💡 Ação necessária: {occurrence.observacao_pais}\n"
 
         message_body += (
-            f"\nCaso julguem necessário, favor comparecer à escola para maiores esclarecimentos.\n\n"
+            f"\nValorizamos a parceria entre família e escola. Por isso, estamos à inteira disposição para recebê-los e esclarecer quaisquer pontos, visando sempre o sucesso escolar do aluno.\n\n"
             f"Atenciosamente,\n"
-            f"Coordenação Pedagógica — {school_name}"
+            f"Orientação Educacional — {school_name}"
         )
 
         status_email = False

@@ -9,6 +9,9 @@ All notable changes to this project will be documented in this file.
 - **Validação de Senha Robusta**: O frontend (`ChangePasswordPage.tsx`) agora conta com validação estrita de segurança e feedback visual contínuo informando o usuário sobre os requisitos (Mínimo 8 caracteres, 1 maiúscula, 1 número).
 - **Estabilidade do Banco de Dados**: Aumentado o limite de caracteres de `notificacao_status` (de 20 para 100) na tabela `ocorrencias` via nova migration (`f09657161e43`), evitando o erro de violação de tamanho ao sincronizar status longos vindo da Evolution API.
 
+### Melhorias de Comunicação e UI/UX
+- **Refinamento de Notificações**: Atualização do tom da mensagem de ocorrências enviada aos responsáveis, adotando uma abordagem mais parceira e acolhedora (assinada pela Orientação Educacional em vez da Coordenação).
+
 ### Melhorias de UI/UX
 - **Acesso do Responsável**: O perfil `responsavel` agora é adequadamente redirecionado para a visualização simplificada "Meu Boletim" junto com o perfil `aluno`, impedindo acesso indevido às opções completas do dashboard de gestão e garantindo consistência na interface.
 
