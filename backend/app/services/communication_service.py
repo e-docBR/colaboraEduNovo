@@ -1,38 +1,27 @@
 import re
+import smtplib
+import ssl
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
 import requests
-from flask_mail import Mail, Message
 from loguru import logger
 from ..core.config import settings
-
-mail = Mail()
 
 
 class CommunicationService:
 
     @staticmethod
     def _extract_first_phone(telefones: str) -> str:
-        """Extrai o primeiro número com pelo menos 10 dígitos do campo telefones.
-
-        O campo pode conter múltiplos números separados por ' / ', vírgula ou espaço,
-        ex: '(73) 3531-4000 / (73) 99858-8993'.
-        Retorna apenas dígitos do primeiro número válido encontrado.
-        """
         candidates = re.findall(r'[\d\s\(\)\-]+', telefones)
         for candidate in candidates:
             digits = re.sub(r'\D', '', candidate)
             if len(digits) >= 10:
                 return digits
-        # fallback: todos os dígitos do campo inteiro
         return re.sub(r'\D', '', telefones)
 
     @staticmethod
     def _normalize_br_phone(digits: str) -> str:
-        """Normaliza número brasileiro para o formato E.164 sem '+' (ex: 5573999999999).
-
-        A Evolution API espera o número no formato: 55 + DDD (2 dígitos) + número (8 ou 9 dígitos).
-        Se o número já começa com '55' e tem 12 ou 13 dígitos, retorna como está.
-        Se tem 10 ou 11 dígitos (sem DDI), adiciona '55'.
-        """
         if digits.startswith('55') and len(digits) in (12, 13):
             return digits
         if len(digits) in (10, 11):
@@ -41,23 +30,36 @@ class CommunicationService:
 
     @staticmethod
     def send_email(to_email: str, subject: str, body: str) -> bool:
-        """Envia e-mail via Flask-Mail (SMTP configurado em settings)."""
-        if not to_email:
-            logger.warning("No recipient email provided.")
+        """Envia e-mail via smtplib — funciona sem Flask app context."""
+        if not to_email or not settings.smtp_server:
+            logger.warning("Destinatário ou servidor SMTP não configurado.")
             return False
 
         try:
-            msg = Message(
-                subject=subject,
-                recipients=[to_email],
-                body=body,
-                sender=settings.smtp_from
-            )
-            mail.send(msg)
-            logger.info(f"Email sent to {to_email}")
+            msg = MIMEMultipart()
+            msg["From"] = settings.smtp_from
+            msg["To"] = to_email
+            msg["Subject"] = subject
+            msg.attach(MIMEText(body, "plain", "utf-8"))
+
+            if settings.smtp_use_ssl:
+                context = ssl.create_default_context()
+                with smtplib.SMTP_SSL(settings.smtp_server, settings.smtp_port, context=context) as server:
+                    if settings.smtp_user:
+                        server.login(settings.smtp_user, settings.smtp_password)
+                    server.sendmail(settings.smtp_from, to_email, msg.as_string())
+            else:
+                with smtplib.SMTP(settings.smtp_server, settings.smtp_port) as server:
+                    if settings.smtp_use_tls:
+                        server.starttls()
+                    if settings.smtp_user:
+                        server.login(settings.smtp_user, settings.smtp_password)
+                    server.sendmail(settings.smtp_from, to_email, msg.as_string())
+
+            logger.info(f"Email enviado para {to_email}")
             return True
         except Exception as e:
-            logger.error(f"Failed to send email to {to_email}: {e}")
+            logger.error(f"Falha ao enviar email para {to_email}: {e}")
             return False
 
     @staticmethod

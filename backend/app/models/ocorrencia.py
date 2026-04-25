@@ -29,7 +29,7 @@ class Ocorrencia(Base, TenantYearMixin):
     resolvida: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Status de envio de notificação (Pendente, Enviado, Erro)
-    notificacao_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    notificacao_status: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
     aluno = relationship("Aluno")
     autor = relationship("Usuario")

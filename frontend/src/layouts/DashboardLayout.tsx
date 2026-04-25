@@ -39,7 +39,7 @@ export const DashboardLayout = () => {
   if (user?.must_change_password) {
     return <Navigate to="/alterar-senha" state={{ from: location }} replace />;
   }
-  if (user?.role === "aluno" && location.pathname !== "/app/meu-boletim") {
+  if ((user?.role === "aluno" || user?.role === "responsavel") && location.pathname !== "/app/meu-boletim") {
     return <Navigate to="/app/meu-boletim" replace />;
   }
   return (
@@ -65,7 +65,7 @@ export const DashboardLayout = () => {
         <TopBar onMenuClick={handleDrawerToggle} />
         <Outlet />
       </Box>
-      {user?.role !== "aluno" && <ChatWidget />}
+      {user?.role !== "aluno" && user?.role !== "responsavel" && <ChatWidget />}
     </Box>
   );
 };

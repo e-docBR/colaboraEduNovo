@@ -98,6 +98,9 @@ class AlunoService:
     def create_aluno(self, data: dict) -> AlunoListSchema:
         aluno = self.repository.create(data)
         log_action(self.repository.session, self.user_id, "CREATE", "Aluno", aluno.id, data)
+        from app.services.accounts import ensure_aluno_user, ensure_responsavel_user
+        ensure_aluno_user(self.repository.session, aluno)
+        ensure_responsavel_user(self.repository.session, aluno)
         return AlunoListSchema(
             id=aluno.id,
             matricula=aluno.matricula,

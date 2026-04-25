@@ -38,7 +38,7 @@ const alunoNavItems = [{ label: "Meu Boletim", icon: <PeopleIcon />, path: `${ap
 
 export const Sidebar = ({ mobile }: { mobile?: boolean }) => {
   const user = useAppSelector((state) => state.auth.user);
-  const isAluno = user?.role === "aluno";
+  const isAluno = user?.role === "aluno" || user?.role === "responsavel";
   const isAdmin = Boolean(user?.is_admin || user?.role === "admin");
 
   const items = useMemo(() => {

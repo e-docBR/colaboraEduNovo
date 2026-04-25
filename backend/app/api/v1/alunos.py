@@ -45,8 +45,9 @@ def register(parent: Blueprint) -> None:
     def retrieve_aluno(aluno_id: int):
         claims = get_jwt()
         aluno_claim_id = claims.get("aluno_id")
-        
-        if "aluno" in (claims.get("roles") or []):
+        roles = set(claims.get("roles") or [])
+
+        if roles & {"aluno", "responsavel"}:
             if not aluno_claim_id or int(aluno_claim_id) != int(aluno_id):
                 return jsonify({"error": "Acesso restrito"}), 403
                 

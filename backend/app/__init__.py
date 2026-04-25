@@ -24,15 +24,6 @@ def create_app() -> Flask:
         SQLALCHEMY_DATABASE_URI=settings.database_url,
         UPLOAD_FOLDER=settings.upload_folder,
         LOG_LEVEL=settings.log_level,
-        # SMTP Settings
-        MAIL_SERVER=settings.smtp_server,
-        MAIL_PORT=settings.smtp_port,
-        MAIL_USE_TLS=settings.smtp_use_tls,
-        MAIL_USE_SSL=settings.smtp_use_ssl,
-        MAIL_USERNAME=settings.smtp_user,
-        MAIL_PASSWORD=settings.smtp_password,
-        MAIL_DEFAULT_SENDER=settings.smtp_from,
-        MAIL_SUPPRESS_SEND=(not settings.smtp_user),  # silencia quando SMTP não configurado
     )
 
     CORS(app, resources={r"/api/*": {"origins": settings.allowed_origins}})
@@ -41,9 +32,6 @@ def create_app() -> Flask:
     register_blueprints(app)
     register_cli(app)
 
-    from .services.communication_service import mail
-    mail.init_app(app)
-    
     from .core.extensions import limiter
     # Initialize Rate Limiter — storage URI must be set BEFORE init_app
     try:

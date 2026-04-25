@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.3] - 2026-04-24
+
+### Segurança e Estabilidade
+- **Melhoria no Envio de Emails**: Refatoração do `CommunicationService` para usar `smtplib` diretamente em vez do contexto do Flask-Mail. Isso evita falhas de contexto da aplicação ao rodar requisições em background (workers).
+- **Validação de Senha Robusta**: O frontend (`ChangePasswordPage.tsx`) agora conta com validação estrita de segurança e feedback visual contínuo informando o usuário sobre os requisitos (Mínimo 8 caracteres, 1 maiúscula, 1 número).
+- **Estabilidade do Banco de Dados**: Aumentado o limite de caracteres de `notificacao_status` (de 20 para 100) na tabela `ocorrencias` via nova migration (`f09657161e43`), evitando o erro de violação de tamanho ao sincronizar status longos vindo da Evolution API.
+
+### Melhorias de UI/UX
+- **Acesso do Responsável**: O perfil `responsavel` agora é adequadamente redirecionado para a visualização simplificada "Meu Boletim" junto com o perfil `aluno`, impedindo acesso indevido às opções completas do dashboard de gestão e garantindo consistência na interface.
+
 ## [1.6.2] - 2026-04-24
 
 ### Segurança e Governança

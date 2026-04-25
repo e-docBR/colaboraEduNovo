@@ -32,59 +32,81 @@ def ensure_aluno_user(session: Session, aluno: Aluno) -> Usuario:
     from sqlalchemy.exc import IntegrityError
 
     username = build_aluno_username(aluno)
-    # 1. First try to find by username (matricula-based) to avoid duplicates across years
     usuario = session.query(Usuario).filter(Usuario.username == username).first()
     if usuario:
-        # If user exists but is not linked to this tenant, maybe it's a conflict or shared?
-        # For now, if it exists, use it. We might update the hardcoded aluno_id to the most recent.
         if usuario.aluno_id != aluno.id and getattr(aluno, "academic_year", None) and aluno.academic_year.is_current:
              usuario.aluno_id = aluno.id
         return usuario
 
-    # 2. Fallback to searching by aluno_id if username didn't match (unlikely but safe)
-    stmt = select(Usuario).where(Usuario.aluno_id == aluno.id)
+    stmt = select(Usuario).where(Usuario.aluno_id == aluno.id, Usuario.role == "aluno")
     usuario = session.execute(stmt).scalar_one_or_none()
     if usuario:
         return usuario
 
     try:
-        initial_password = aluno.matricula
         usuario = Usuario(
             username=username,
-            password_hash=hash_password(initial_password),
+            password_hash=hash_password(aluno.matricula),
             role="aluno",
             aluno_id=aluno.id,
             tenant_id=aluno.tenant_id,
             must_change_password=True,
         )
         session.add(usuario)
-        session.flush()  # Ensure it's visible to subsequent queries in the same transaction
-        logger.info("Usuário aluno {} criado automaticamente para o tenant {}", username, aluno.tenant_id)
+        session.flush()
+        logger.info("Usuário aluno {} criado para o tenant {}", username, aluno.tenant_id)
     except IntegrityError:
-        # Concurrent request already created the user — rollback the savepoint and re-fetch
         session.rollback()
         usuario = session.query(Usuario).filter(Usuario.username == username).first()
         if not usuario:
-            usuario = session.execute(select(Usuario).where(Usuario.aluno_id == aluno.id)).scalar_one_or_none()
+            usuario = session.execute(select(Usuario).where(Usuario.aluno_id == aluno.id, Usuario.role == "aluno")).scalar_one_or_none()
+
+    return usuario
+
+
+def ensure_responsavel_user(session: Session, aluno: Aluno) -> Usuario:
+    """Garante que exista um usuário responsável vinculado ao aluno informado."""
+    from sqlalchemy.exc import IntegrityError
+
+    username = f"resp_{aluno.matricula}"
+
+    usuario = session.query(Usuario).filter(Usuario.username == username, Usuario.tenant_id == aluno.tenant_id).first()
+    if usuario:
+        return usuario
+
+    try:
+        usuario = Usuario(
+            username=username,
+            password_hash=hash_password(aluno.matricula),
+            role="responsavel",
+            aluno_id=aluno.id,
+            tenant_id=aluno.tenant_id,
+            must_change_password=True,
+        )
+        session.add(usuario)
+        session.flush()
+        logger.info("Usuário responsável {} criado para o tenant {}", username, aluno.tenant_id)
+    except IntegrityError:
+        session.rollback()
+        usuario = session.query(Usuario).filter(Usuario.username == username, Usuario.tenant_id == aluno.tenant_id).first()
 
     return usuario
 
 
 def ensure_all_aluno_users(session: Session) -> int:
-    """Provisiona contas para todos os alunos que ainda não possuem usuário."""
-    missing_stmt = (
-        select(Aluno)
-        .outerjoin(Usuario, Usuario.aluno_id == Aluno.id)
-        .where(Usuario.id.is_(None))
-    )
-    alunos_sem_usuario = session.execute(missing_stmt).scalars().all()
-    if not alunos_sem_usuario:
-        return 0
-
+    """Provisiona contas de aluno e responsável para todos os alunos sem usuário."""
+    alunos = session.execute(select(Aluno)).scalars().all()
     created = 0
-    for aluno in alunos_sem_usuario:
-        ensure_aluno_user(session, aluno)
-        created += 1
+    for aluno in alunos:
+        aluno_stmt = select(Usuario).where(Usuario.aluno_id == aluno.id, Usuario.role == "aluno")
+        if not session.execute(aluno_stmt).scalar_one_or_none():
+            ensure_aluno_user(session, aluno)
+            created += 1
+        resp_stmt = select(Usuario).where(Usuario.username == f"resp_{aluno.matricula}", Usuario.tenant_id == aluno.tenant_id)
+        if not session.execute(resp_stmt).scalar_one_or_none():
+            ensure_responsavel_user(session, aluno)
+            created += 1
 
-    logger.info("Provisionadas %s contas pendentes de alunos", created)
+    if created:
+        logger.info("Provisionadas {} contas pendentes de alunos/responsáveis", created)
     return created
