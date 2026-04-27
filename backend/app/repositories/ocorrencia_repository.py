@@ -14,6 +14,8 @@ class OcorrenciaRepository(BaseRepository[Ocorrencia]):
         aluno_id: Optional[int] = None,
         page: int = 1,
         per_page: int = 50,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
     ) -> Tuple[List[Ocorrencia], int]:
         """Return (items, total) for the given page."""
         from flask import g
@@ -37,6 +39,12 @@ class OcorrenciaRepository(BaseRepository[Ocorrencia]):
             conditions.append(self.model.academic_year_id == academic_year_id)
         if aluno_id:
             conditions.append(self.model.aluno_id == aluno_id)
+        if date_from:
+            from datetime import datetime
+            conditions.append(self.model.data_registro >= datetime.fromisoformat(date_from))
+        if date_to:
+            from datetime import datetime
+            conditions.append(self.model.data_registro <= datetime.fromisoformat(date_to))
 
         if conditions:
             base_query = base_query.where(*conditions)

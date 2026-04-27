@@ -13,6 +13,8 @@ class DashboardAnalytics:
     total_turmas: int
     media_geral: float
     alunos_em_risco: int
+    ocorrencias_abertas: int = 0
+    comunicados_recentes: int = 0
     # Teacher specific
     distribution: dict[str, int] | None = None
 
@@ -26,6 +28,8 @@ class DashboardAnalytics:
             "total_turmas": self.total_turmas,
             "media_geral": self.media_geral,
             "alunos_em_risco": self.alunos_em_risco,
+            "ocorrencias_abertas": self.ocorrencias_abertas,
+            "comunicados_recentes": self.comunicados_recentes,
         }
         if self.distribution:
             data["distribution"] = self.distribution
@@ -76,11 +80,37 @@ def build_dashboard_metrics(session: Session) -> DashboardAnalytics:
         *nota_filter
     ).scalar() or 0
 
+    # Ocorrências abertas (não resolvidas)
+    from ..models import Ocorrencia
+    oc_filter = []
+    if tenant_id:
+        oc_filter.append(Ocorrencia.tenant_id == tenant_id)
+    if year_id:
+        oc_filter.append(Ocorrencia.academic_year_id == year_id)
+    ocorrencias_abertas = session.query(func.count(Ocorrencia.id)).filter(
+        Ocorrencia.resolvida == False, *oc_filter  # noqa: E712
+    ).scalar() or 0
+
+    # Comunicados dos últimos 7 dias
+    from ..models import Comunicado
+    from datetime import datetime, timedelta, timezone
+    sete_dias_atras = datetime.now(timezone.utc) - timedelta(days=7)
+    com_filter = []
+    if tenant_id:
+        com_filter.append(Comunicado.tenant_id == tenant_id)
+    if year_id:
+        com_filter.append(Comunicado.academic_year_id == year_id)
+    comunicados_recentes = session.query(func.count(Comunicado.id)).filter(
+        Comunicado.data_envio >= sete_dias_atras, *com_filter
+    ).scalar() or 0
+
     return DashboardAnalytics(
         total_alunos=total_alunos,
         total_turmas=total_turmas,
         media_geral=round(media_geral_value, 2),
         alunos_em_risco=alunos_em_risco,
+        ocorrencias_abertas=ocorrencias_abertas,
+        comunicados_recentes=comunicados_recentes,
     )
 
 def build_teacher_dashboard(session: Session, query: str | None = None, turno: str | None = None, turma: str | None = None) -> dict[str, any]:

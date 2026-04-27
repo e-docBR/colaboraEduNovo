@@ -7,7 +7,10 @@ import {
   CardActionArea,
   CardContent,
   Chip,
+  DialogActions,
+  Divider,
   Grid2 as Grid,
+  IconButton,
   Skeleton,
   Snackbar,
   Stack,
@@ -18,6 +21,8 @@ import {
   DialogContent,
   DialogTitle
 } from "@mui/material";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import AddIcon from "@mui/icons-material/Add";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import { useMemo, useState } from "react";
@@ -77,14 +82,28 @@ export const AlunosPage = () => {
   const [turma, setTurma] = useState("");
   const [open, setOpen] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [credentialsDialog, setCredentialsDialog] = useState<{ nome: string; username: string; senha: string } | null>(null);
 
   const user = useAppSelector((state) => state.auth.user);
   const [createAluno, { isLoading: isCreating }] = useCreateAlunoMutation();
 
+  const buildUsername = (nome: string, matricula: string) => {
+    const firstName = nome.split(" ")[0].toLowerCase()
+      .normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9]/g, "");
+    return `${firstName}${matricula}`;
+  };
+
   const handleCreate = async (data: any) => {
     try {
-      await createAluno(data).unwrap();
+      const aluno = await createAluno(data).unwrap();
       setOpen(false);
+      setCreateError(null);
+      setCredentialsDialog({
+        nome: aluno.nome,
+        username: buildUsername(aluno.nome, aluno.matricula),
+        senha: aluno.matricula,
+      });
     } catch (error: any) {
       const msg = error?.data?.error ?? error?.data?.message ?? "Erro ao cadastrar aluno. Tente novamente.";
       setCreateError(msg);
@@ -399,6 +418,47 @@ export const AlunosPage = () => {
           {createError}
         </Alert>
       </Snackbar>
+
+      {/* Dialog de credenciais após cadastro */}
+      <Dialog open={!!credentialsDialog} onClose={() => setCredentialsDialog(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <CheckCircleOutlineIcon color="success" />
+          Aluno cadastrado com sucesso!
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            O aluno deverá trocar a senha no primeiro acesso.
+          </Alert>
+          <Stack spacing={1.5}>
+            <Box>
+              <Typography variant="caption" color="text.secondary">Nome</Typography>
+              <Typography fontWeight={600}>{credentialsDialog?.nome}</Typography>
+            </Box>
+            <Divider />
+            <Box display="flex" justifyContent="space-between" alignItems="center">
+              <Box>
+                <Typography variant="caption" color="text.secondary">Usuário</Typography>
+                <Typography fontFamily="monospace" fontWeight={600}>{credentialsDialog?.username}</Typography>
+              </Box>
+              <IconButton size="small" onClick={() => navigator.clipboard.writeText(credentialsDialog?.username ?? "")}>
+                <ContentCopyIcon fontSize="small" />
+              </IconButton>
+            </Box>
+            <Box display="flex" justifyContent="space-between" alignItems="center">
+              <Box>
+                <Typography variant="caption" color="text.secondary">Senha inicial (matrícula)</Typography>
+                <Typography fontFamily="monospace" fontWeight={600}>{credentialsDialog?.senha}</Typography>
+              </Box>
+              <IconButton size="small" onClick={() => navigator.clipboard.writeText(credentialsDialog?.senha ?? "")}>
+                <ContentCopyIcon fontSize="small" />
+              </IconButton>
+            </Box>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="contained" onClick={() => setCredentialsDialog(null)}>Fechar</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

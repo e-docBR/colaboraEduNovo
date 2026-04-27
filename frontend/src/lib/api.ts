@@ -19,6 +19,8 @@ type DashboardKpis = {
   total_turmas: number;
   media_geral: number;
   alunos_em_risco: number;
+  ocorrencias_abertas: number;
+  comunicados_recentes: number;
 };
 
 export type PublicTenant = {
@@ -677,10 +679,13 @@ export const api = createApi({
       }),
       invalidatesTags: ["Comunicados"]
     }),
-    listOcorrencias: builder.query<{ id: number; aluno_id: number; tipo: string; descricao: string; resolvida: boolean; data_registro: string; aluno_nome: string; autor_nome: string; notificacao_status?: string; observacao_pais?: string; gravidade?: string; acao_tomada?: string }[], string | void>({
-      query: (aluno_id) => ({
+    getComunicadoLeituras: builder.query<{ comunicado_id: number; titulo: string; total_leituras: number; leituras: { usuario_id: number; username: string; data_leitura: string }[] }, number>({
+      query: (id) => `/comunicados/${id}/leituras`,
+    }),
+    listOcorrencias: builder.query<{ id: number; aluno_id: number; tipo: string; descricao: string; resolvida: boolean; data_registro: string; aluno_nome: string; autor_nome: string; notificacao_status?: string; observacao_pais?: string; gravidade?: string; acao_tomada?: string }[], { aluno_id?: string; date_from?: string; date_to?: string } | string | void>({
+      query: (args) => ({
         url: "/ocorrencias",
-        params: aluno_id ? { aluno_id } : undefined
+        params: typeof args === "string" ? { aluno_id: args } : (args ?? undefined)
       }),
       transformResponse: (raw: any) => Array.isArray(raw) ? raw : (raw?.items ?? []),
       providesTags: ["Ocorrencias"]
@@ -848,6 +853,7 @@ export const {
   useCreateComunicadoMutation,
   useUpdateComunicadoMutation,
   useDeleteComunicadoMutation,
+  useGetComunicadoLeiturasQuery,
   useListOcorrenciasQuery,
   useCreateOcorrenciaMutation,
   useUpdateOcorrenciaMutation,

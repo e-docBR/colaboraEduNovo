@@ -46,6 +46,7 @@ def notify_occurrence_task(ocorrencia_id: int):
         message_body = (
             f"Prezados Pais/Responsáveis,\n\n"
             f"Informamos o registro de uma ocorrência para o(a) aluno(a) {aluno.nome}.\n\n"
+            f"🏫 Turma: {aluno.turma or '—'}\n"
             f"📅 Data: {data_str}\n"
             f"📝 Tipo: {tipo_label}\n"
             f"⚠️ Gravidade: {gravidade_label}\n"
@@ -64,7 +65,7 @@ def notify_occurrence_task(ocorrencia_id: int):
         status_email = False
         status_whatsapp = False
 
-        # Determinar destinatários (responsável tem prioridade sobre o aluno)
+        # Responsável tem prioridade sobre o próprio aluno
         email_destino = getattr(aluno, "email_responsavel", None) or aluno.email
         telefone_destino = getattr(aluno, "telefone_responsavel", None) or aluno.telefones
 
@@ -75,6 +76,8 @@ def notify_occurrence_task(ocorrencia_id: int):
                 subject=subject,
                 body=message_body
             )
+        else:
+            logger.warning(f"Aluno {aluno.id} ({aluno.nome}) sem email cadastrado — email não enviado")
 
         # Send WhatsApp
         if telefone_destino:
@@ -82,18 +85,23 @@ def notify_occurrence_task(ocorrencia_id: int):
                 phone=telefone_destino,
                 message=message_body
             )
+        else:
+            logger.warning(f"Aluno {aluno.id} ({aluno.nome}) sem telefone cadastrado — WhatsApp não enviado")
 
-        # Update Ocorrencia status
-        if not status_email and not status_whatsapp:
-            occurrence.notificacao_status = "Falha"
-        elif status_email and status_whatsapp:
+        # Update status distinguindo "não tentado" de "falha"
+        email_attempted = bool(email_destino)
+        whatsapp_attempted = bool(telefone_destino)
+        parts = []
+        if email_attempted:
+            parts.append("Email: OK" if status_email else "Email: Falha")
+        if whatsapp_attempted:
+            parts.append("WhatsApp: OK" if status_whatsapp else "WhatsApp: Falha")
+
+        if not parts:
+            occurrence.notificacao_status = "Sem contato cadastrado"
+        elif all("OK" in p for p in parts):
             occurrence.notificacao_status = "Enviado"
         else:
-            parts = []
-            if email_destino:
-                parts.append("Email: OK" if status_email else "Email: Falha")
-            if telefone_destino:
-                parts.append("WhatsApp: OK" if status_whatsapp else "WhatsApp: Falha")
             occurrence.notificacao_status = "Parcial (" + ", ".join(parts) + ")"
 
         session.add(occurrence)

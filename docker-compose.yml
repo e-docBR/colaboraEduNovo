@@ -57,7 +57,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    command: [ "sh", "-c", "rq worker default --url ${REDIS_URL:-redis://redis:6379/0}" ]
+    command: [ "sh", "-c", "python worker.py" ]
     volumes:
       - ./backend:/app
       - ./data:/data

@@ -13,6 +13,7 @@ import {
     TextField,
     Typography,
     Divider,
+    Snackbar,
     Stack,
     Switch,
     FormControlLabel,
@@ -68,6 +69,9 @@ export const TenantsPage = () => {
     });
     const [editData, setEditData] = useState({ name: "", domain: "" });
     const [newYearLabel, setNewYearLabel] = useState("");
+    const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: "success" | "error" }>({
+        open: false, message: "", severity: "success"
+    });
 
     const handleCreateTenant = async () => {
         setCreateError(null);
@@ -89,8 +93,10 @@ export const TenantsPage = () => {
             try {
                 await updateTenant({ id: selectedTenant.id, ...editData }).unwrap();
                 setOpenEditDialog(false);
-            } catch (e) {
-                console.error(e);
+                setSnackbar({ open: true, message: "Escola atualizada com sucesso!", severity: "success" });
+            } catch (e: any) {
+                const msg = e?.data?.error ?? "Erro ao atualizar escola. Tente novamente.";
+                setSnackbar({ open: true, message: msg, severity: "error" });
             }
         }
     };
@@ -98,8 +104,10 @@ export const TenantsPage = () => {
     const handleToggleActive = async (id: number, currentStatus: boolean) => {
         try {
             await updateTenant({ id, is_active: !currentStatus }).unwrap();
-        } catch (e) {
-            console.error(e);
+            setSnackbar({ open: true, message: currentStatus ? "Escola desativada." : "Escola ativada.", severity: "success" });
+        } catch (e: any) {
+            const msg = e?.data?.error ?? "Erro ao alterar status da escola.";
+            setSnackbar({ open: true, message: msg, severity: "error" });
         }
     };
 
@@ -107,8 +115,10 @@ export const TenantsPage = () => {
         if (window.confirm(`Tem certeza que deseja excluir a escola "${name}"? Esta ação é irreversível.`)) {
             try {
                 await deleteTenant(id).unwrap();
-            } catch (e) {
-                console.error(e);
+                setSnackbar({ open: true, message: `Escola "${name}" excluída.`, severity: "success" });
+            } catch (e: any) {
+                const msg = e?.data?.error ?? "Erro ao excluir escola. Verifique se há dados vinculados.";
+                setSnackbar({ open: true, message: msg, severity: "error" });
             }
         }
     };
@@ -119,8 +129,10 @@ export const TenantsPage = () => {
                 await addYear({ tenantId: selectedTenant.id, label: newYearLabel, set_current: true }).unwrap();
                 setOpenYearDialog(false);
                 setNewYearLabel("");
-            } catch (e) {
-                console.error(e);
+                setSnackbar({ open: true, message: `Ano letivo ${newYearLabel} adicionado!`, severity: "success" });
+            } catch (e: any) {
+                const msg = e?.data?.error ?? "Erro ao adicionar ano letivo.";
+                setSnackbar({ open: true, message: msg, severity: "error" });
             }
         }
     };
@@ -258,7 +270,7 @@ export const TenantsPage = () => {
                                             <HistoryIcon fontSize="inherit" /> CICLOS ATIVOS
                                         </Typography>
                                         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                                            {tenant.years.map((year: any) => (
+                                            {(tenant.academic_years ?? []).map((year: any) => (
                                                 <Chip
                                                     key={year.id}
                                                     label={year.label}
@@ -487,6 +499,17 @@ export const TenantsPage = () => {
                     <Button variant="contained" onClick={handleAddYear} sx={{ fontWeight: 800, bgcolor: TEAL_COLOR }}>Definir como Atual</Button>
                 </DialogActions>
             </Dialog>
+
+            <Snackbar
+                open={snackbar.open}
+                autoHideDuration={4000}
+                onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+                anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+            >
+                <Alert severity={snackbar.severity} onClose={() => setSnackbar((s) => ({ ...s, open: false }))}>
+                    {snackbar.message}
+                </Alert>
+            </Snackbar>
         </Box>
     );
 };

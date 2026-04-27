@@ -32,7 +32,7 @@ import {
     Checkbox,
     FormControlLabel
 } from "@mui/material";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -74,7 +74,6 @@ const GRAVIDADE_CONFIG: Record<string, { color: string, label: string, bgcolor: 
 
 export const OcorrenciasPage = () => {
     const theme = useTheme();
-    const { data: ocorrencias, isLoading } = useListOcorrenciasQuery();
     const { data: alunosData } = useListAlunosQuery({ per_page: 1000 });
     const [createOcorrencia, { isLoading: isCreating }] = useCreateOcorrenciaMutation();
     const [updateOcorrencia] = useUpdateOcorrenciaMutation();
@@ -103,6 +102,20 @@ export const OcorrenciasPage = () => {
     const [menuOcorrencia, setMenuOcorrencia] = useState<any | null>(null);
 
     const [searchTerm, setSearchTerm] = useState("");
+    const [dateFrom, setDateFrom] = useState("");
+    const [dateTo, setDateTo] = useState("");
+
+    const queryArgs = useMemo(
+        () => (dateFrom || dateTo ? { date_from: dateFrom || undefined, date_to: dateTo || undefined } : undefined),
+        [dateFrom, dateTo]
+    );
+    const [pollingInterval, setPollingInterval] = useState(0);
+    const { data: ocorrencias, isLoading } = useListOcorrenciasQuery(queryArgs, { pollingInterval });
+
+    useEffect(() => {
+        const hasPending = (ocorrencias ?? []).some((o) => o.notificacao_status === "Pendente");
+        setPollingInterval(hasPending ? 4000 : 0);
+    }, [ocorrencias]);
 
     const [dataRegistro, setDataRegistro] = useState(new Date().toISOString().split("T")[0]);
     const [filterTurma, setFilterTurma] = useState<string>("");
@@ -181,8 +194,10 @@ export const OcorrenciasPage = () => {
             }
             setOpen(false);
             resetForm();
-        } catch {
-            alert("Erro ao salvar ocorrência");
+            setSnackbar({ open: true, message: editingId ? "Ocorrência atualizada!" : "Ocorrência registrada!", severity: "success" });
+        } catch (error: any) {
+            const msg = error?.data?.error ?? error?.data?.message ?? "Erro ao salvar ocorrência. Tente novamente.";
+            setSnackbar({ open: true, message: msg, severity: "error" });
         }
     };
 
@@ -291,7 +306,7 @@ export const OcorrenciasPage = () => {
                 )}
             </Box>
 
-            <Box mb={3}>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2} mb={3} alignItems="center">
                 <TextField
                     placeholder="Buscar por aluno, tipo ou descrição..."
                     fullWidth
@@ -307,7 +322,49 @@ export const OcorrenciasPage = () => {
                         ),
                     }}
                 />
-            </Box>
+                <TextField
+                    label="De"
+                    type="date"
+                    size="small"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    InputProps={{
+                        startAdornment: (
+                            <InputAdornment position="start">
+                                <CalendarTodayIcon fontSize="small" color="action" />
+                            </InputAdornment>
+                        )
+                    }}
+                    sx={{ minWidth: 170 }}
+                />
+                <TextField
+                    label="Até"
+                    type="date"
+                    size="small"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    InputProps={{
+                        startAdornment: (
+                            <InputAdornment position="start">
+                                <CalendarTodayIcon fontSize="small" color="action" />
+                            </InputAdornment>
+                        )
+                    }}
+                    sx={{ minWidth: 170 }}
+                />
+                {(dateFrom || dateTo) && (
+                    <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => { setDateFrom(""); setDateTo(""); }}
+                        sx={{ whiteSpace: "nowrap" }}
+                    >
+                        Limpar datas
+                    </Button>
+                )}
+            </Stack>
 
             {isLoading ? (
                 <Grid container spacing={3}>
@@ -444,17 +501,22 @@ export const OcorrenciasPage = () => {
                                                 </Typography>
                                             </Stack>
 
-                                            {oc.notificacao_status && (
-                                                <Tooltip title={`Status da Notificação: ${oc.notificacao_status}`}>
-                                                    <Chip
-                                                        label={oc.notificacao_status}
-                                                        size="small"
-                                                        variant="outlined"
-                                                        color={oc.notificacao_status === "Enviado" ? "success" : "warning"}
-                                                        sx={{ height: 20, fontSize: "0.6rem" }}
-                                                    />
-                                                </Tooltip>
-                                            )}
+                                            {oc.notificacao_status && (() => {
+                                                const s = oc.notificacao_status;
+                                                const isParcial = s.startsWith("Parcial");
+                                                const color = s === "Enviado" ? "success" : s === "Falha" ? "error" : s === "Pendente" ? "warning" : "warning";
+                                                const label = isParcial ? "Parcial" : s;
+                                                return (
+                                                    <Tooltip title={`Notificação: ${s}`}>
+                                                        <Chip
+                                                            label={label}
+                                                            size="small"
+                                                            color={color}
+                                                            sx={{ height: 20, fontSize: "0.6rem" }}
+                                                        />
+                                                    </Tooltip>
+                                                );
+                                            })()}
 
                                             {oc.resolvida ? (
                                                 <Chip

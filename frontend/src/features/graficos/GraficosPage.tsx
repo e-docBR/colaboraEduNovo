@@ -12,6 +12,7 @@ import {
   InputLabel,
   MenuItem,
   Select,
+  Snackbar,
   Stack,
   Typography,
   Table,
@@ -113,6 +114,9 @@ export const GraficosPage = () => {
   const academicYearId = useSelector((state: RootState) => state.app.academicYearId);
   
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [exportSnackbar, setExportSnackbar] = useState<{ open: boolean; message: string; severity: "success" | "error" }>({
+    open: false, message: "", severity: "error"
+  });
 
   const handleExportClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget);
@@ -152,8 +156,8 @@ export const GraficosPage = () => {
       a.click();
       a.remove();
       window.URL.revokeObjectURL(downloadUrl);
-    } catch (e) {
-      console.error("Falha ao exportar:", e);
+    } catch {
+      setExportSnackbar({ open: true, message: "Erro ao exportar relatório. Tente novamente.", severity: "error" });
     }
   };
 
@@ -689,6 +693,17 @@ export const GraficosPage = () => {
           </Stack>
         </Grid>
       </Grid>
+
+      <Snackbar
+        open={exportSnackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setExportSnackbar((s) => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity={exportSnackbar.severity} onClose={() => setExportSnackbar((s) => ({ ...s, open: false }))}>
+          {exportSnackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

@@ -16,7 +16,7 @@ class Comunicado(Base, TenantYearMixin):
         DateTime(timezone=True), server_default=func.now(), default=func.now()
     )
     
-    autor_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False)
+    autor_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True)
     autor = relationship("Usuario")
 
     # Target: "TODOS", "TURMA", "ALUNO"
@@ -31,7 +31,7 @@ class Comunicado(Base, TenantYearMixin):
             "titulo": self.titulo,
             "conteudo": self.conteudo,
             "data_envio": self.data_envio.isoformat(),
-            "autor": self.autor.username if self.autor else "Sistema",
+            "autor": self.autor.username if self.autor_id and self.autor else "Sistema",
             "target_type": self.target_type,
             "target_value": self.target_value,
             "target": f"{self.target_type} {self.target_value or ''}".strip(),

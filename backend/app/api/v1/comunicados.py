@@ -107,10 +107,11 @@ def register(parent: Blueprint) -> None:
         if target_type in {"TURMA", "ALUNO"}:
             if not target_value or not str(target_value).strip():
                 return jsonify({"error": f"target_value é obrigatório quando target_type é '{target_type}'"}), 400
-            # Para ALUNO, target_value deve ser inteiro (ID do aluno)
+            # Para ALUNO, target_value deve ser inteiro (ID do aluno) e o aluno deve existir
             if target_type == "ALUNO":
                 try:
-                    target_value = str(int(target_value))
+                    aluno_id_val = int(target_value)
+                    target_value = str(aluno_id_val)
                 except (ValueError, TypeError):
                     return jsonify({"error": "target_value deve ser um ID numérico de aluno quando target_type é 'ALUNO'"}), 400
             elif target_type == "TURMA":
@@ -127,6 +128,15 @@ def register(parent: Blueprint) -> None:
         user_id = int(get_jwt_identity())
 
         with session_scope() as session:
+            # Validar existência do aluno para comunicados direcionados
+            if target_type == "ALUNO":
+                from ...models import Aluno
+                aluno_obj = session.query(Aluno).filter(
+                    Aluno.id == int(target_value), Aluno.tenant_id == g.tenant_id
+                ).first()
+                if not aluno_obj:
+                    return jsonify({"error": f"Aluno com ID {target_value} não encontrado nesta escola"}), 400
+
             novo = Comunicado(
                 titulo=data["titulo"],
                 conteudo=data["conteudo"],
@@ -137,7 +147,7 @@ def register(parent: Blueprint) -> None:
                 academic_year_id=g.academic_year_id
             )
             session.add(novo)
-        
+
         return jsonify({"message": "Comunicado enviado!"}), 201
 
     @bp.patch("/comunicados/<int:comunicado_id>")
@@ -226,5 +236,47 @@ def register(parent: Blueprint) -> None:
             leitura = ComunicadoLeitura(comunicado_id=comunicado_id, usuario_id=user_id)
             session.merge(leitura)
         return jsonify({"message": "Lido"}), 200
+
+    @bp.get("/comunicados/<int:comunicado_id>/leituras")
+    @jwt_required()
+    def list_leituras(comunicado_id: int):
+        """Retorna quem leu o comunicado e quando — apenas para admins e autores."""
+        from ...models import Usuario
+        claims = get_jwt()
+        roles = claims.get("roles", [])
+
+        if not COMUNICADO_WRITE_ROLES.intersection(roles):
+            return jsonify({"error": "Acesso negado"}), 403
+
+        with session_scope() as session:
+            comunicado = (
+                session.query(Comunicado)
+                .filter(Comunicado.id == comunicado_id, Comunicado.tenant_id == g.tenant_id)
+                .first()
+            )
+            if not comunicado:
+                return jsonify({"error": "Comunicado não encontrado"}), 404
+
+            leituras = (
+                session.query(ComunicadoLeitura, Usuario.username)
+                .join(Usuario, ComunicadoLeitura.usuario_id == Usuario.id)
+                .filter(ComunicadoLeitura.comunicado_id == comunicado_id)
+                .order_by(ComunicadoLeitura.data_leitura.desc())
+                .all()
+            )
+            result = [
+                {
+                    "usuario_id": l.ComunicadoLeitura.usuario_id,
+                    "username": l.username,
+                    "data_leitura": l.ComunicadoLeitura.data_leitura.isoformat(),
+                }
+                for l in leituras
+            ]
+            return jsonify({
+                "comunicado_id": comunicado_id,
+                "titulo": comunicado.titulo,
+                "total_leituras": len(result),
+                "leituras": result
+            }), 200
 
     parent.register_blueprint(bp)

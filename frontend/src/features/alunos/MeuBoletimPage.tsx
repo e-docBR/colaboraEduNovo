@@ -6,6 +6,7 @@ import {
   CardContent,
   CircularProgress,
   Divider,
+  Snackbar,
   Stack,
   Table,
   TableBody,
@@ -50,8 +51,12 @@ const formatSituacao = (value?: string | null) => {
 
 export const MeuBoletimPage = () => {
   const alunoId = useAppSelector((state) => state.auth.user?.aluno_id);
+  const userRole = useAppSelector((state) => state.auth.user?.role);
   const alunoKey = alunoId ? String(alunoId) : "";
   const [tab, setTab] = useState(0);
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: "success" | "error" }>({
+    open: false, message: "", severity: "error"
+  });
 
   const { data, isLoading, isError } = useGetAlunoQuery(alunoKey, {
     skip: !alunoId
@@ -99,8 +104,8 @@ export const MeuBoletimPage = () => {
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error("Erro no download", error);
+    } catch {
+      setSnackbar({ open: true, message: "Erro ao gerar o PDF. Tente novamente.", severity: "error" });
     }
   };
 
@@ -122,6 +127,11 @@ export const MeuBoletimPage = () => {
 
   return (
     <Stack spacing={3}>
+      {userRole === "responsavel" && (
+        <Alert severity="info" icon={false}>
+          Visualizando boletim de: <strong>{data.nome}</strong>
+        </Alert>
+      )}
       <Card>
         <CardContent>
           <Typography variant="h4" fontWeight={600} gutterBottom>
@@ -337,6 +347,17 @@ export const MeuBoletimPage = () => {
           )}
         </Stack>
       )}
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity={snackbar.severity} onClose={() => setSnackbar((s) => ({ ...s, open: false }))}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Stack>
   );
 };

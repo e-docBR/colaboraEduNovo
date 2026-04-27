@@ -42,18 +42,19 @@ class CommunicationService:
             msg["Subject"] = subject
             msg.attach(MIMEText(body, "plain", "utf-8"))
 
+            clean_password = settings.smtp_password.replace(" ", "")
             if settings.smtp_use_ssl:
                 context = ssl.create_default_context()
                 with smtplib.SMTP_SSL(settings.smtp_server, settings.smtp_port, context=context) as server:
                     if settings.smtp_user:
-                        server.login(settings.smtp_user, settings.smtp_password)
+                        server.login(settings.smtp_user, clean_password)
                     server.sendmail(settings.smtp_from, to_email, msg.as_string())
             else:
                 with smtplib.SMTP(settings.smtp_server, settings.smtp_port) as server:
                     if settings.smtp_use_tls:
                         server.starttls()
                     if settings.smtp_user:
-                        server.login(settings.smtp_user, settings.smtp_password)
+                        server.login(settings.smtp_user, clean_password)
                     server.sendmail(settings.smtp_from, to_email, msg.as_string())
 
             logger.info(f"Email enviado para {to_email}")

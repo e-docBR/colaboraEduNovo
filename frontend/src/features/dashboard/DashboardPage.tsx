@@ -108,12 +108,23 @@ export const DashboardPage = () => {
     {
       label: "Em Risco",
       value: data?.alunos_em_risco ?? 0,
-
       helper: "Média < 50",
-
-
       icon: WarningAmberIcon,
       color: theme.palette.warning.main
+    },
+    {
+      label: "Ocorrências Abertas",
+      value: data?.ocorrencias_abertas ?? 0,
+      helper: "Não resolvidas",
+      icon: WarningAmberIcon,
+      color: theme.palette.error.main
+    },
+    {
+      label: "Comunicados (7 dias)",
+      value: data?.comunicados_recentes ?? 0,
+      helper: "Últimos 7 dias",
+      icon: AssessmentIcon,
+      color: theme.palette.secondary.main
     }
   ];
 

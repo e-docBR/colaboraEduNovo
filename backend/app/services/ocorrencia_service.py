@@ -16,13 +16,15 @@ class OcorrenciaService:
         aluno_id: Optional[int] = None,
         page: int = 1,
         per_page: int = 50,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
     ) -> dict:
         """Return paginated occurrences.
 
         Access-control decisions (which aluno_id is visible) must be made by
         the caller before invoking this method.
         """
-        items, total = self.repository.list_filtered(aluno_id, page=page, per_page=per_page)
+        items, total = self.repository.list_filtered(aluno_id, page=page, per_page=per_page, date_from=date_from, date_to=date_to)
 
         schemas = [
             OcorrenciaSchema(

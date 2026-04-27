@@ -1,4 +1,5 @@
 import {
+    Alert,
     Box,
     Button,
     Card,
@@ -15,6 +16,7 @@ import {
     InputLabel,
     MenuItem,
     Select,
+    Snackbar,
     Stack,
     TextField,
     Typography,
@@ -40,6 +42,11 @@ import GroupsIcon from "@mui/icons-material/Groups";
 import PersonIcon from "@mui/icons-material/Person";
 import PushPinIcon from "@mui/icons-material/PushPin"; // Pinnned
 import HistoryIcon from "@mui/icons-material/History"; // Archived
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import List from "@mui/material/List";
+import ListItem from "@mui/material/ListItem";
+import ListItemText from "@mui/material/ListItemText";
 
 import {
     useCreateComunicadoMutation,
@@ -47,7 +54,8 @@ import {
     useUpdateComunicadoMutation,
     useDeleteComunicadoMutation,
     useMarkComunicadoReadMutation,
-    useListAlunosQuery
+    useListAlunosQuery,
+    useGetComunicadoLeiturasQuery
 } from "../../lib/api";
 import { useAppSelector } from "../../app/hooks";
 
@@ -84,6 +92,17 @@ export const ComunicadosPage = () => {
         return Array.from(t).sort();
     }, [alunosData]);
 
+    const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: "success" | "error" }>({
+        open: false, message: "", severity: "success"
+    });
+
+    // Leituras dialog state
+    const [leiturasDialogId, setLeiturasDialogId] = useState<number | null>(null);
+    const { data: leiturasData, isFetching: isFetchingLeituras } = useGetComunicadoLeiturasQuery(
+        leiturasDialogId as number,
+        { skip: leiturasDialogId === null }
+    );
+
     // Menu state
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [menuComunicado, setMenuComunicado] = useState<any | null>(null);
@@ -107,8 +126,10 @@ export const ComunicadosPage = () => {
             }
             setOpen(false);
             resetForm();
-        } catch {
-            alert("Erro ao salvar comunicado");
+            setSnackbar({ open: true, message: editingId ? "Comunicado atualizado!" : "Comunicado publicado!", severity: "success" });
+        } catch (error: any) {
+            const msg = error?.data?.error ?? error?.data?.message ?? "Erro ao salvar comunicado. Tente novamente.";
+            setSnackbar({ open: true, message: msg, severity: "error" });
         }
     };
 
@@ -151,8 +172,8 @@ export const ComunicadosPage = () => {
         if (!isAdmin && !isRead) {
             try {
                 await markRead(id).unwrap();
-            } catch (e) {
-                console.error(e);
+            } catch {
+                // Falha silenciosa — marcar como lido é operação não-crítica
             }
         }
     };
@@ -361,6 +382,10 @@ export const ComunicadosPage = () => {
                     <ListItemIcon><ArchiveIcon fontSize="small" color="action" /></ListItemIcon>
                     {menuComunicado?.arquivado ? "Desarquivar" : "Arquivar"}
                 </MuiMenuItem>
+                <MuiMenuItem onClick={() => { setLeiturasDialogId(menuComunicado?.id ?? null); handleCloseMenu(); }}>
+                    <ListItemIcon><VisibilityIcon fontSize="small" color="info" /></ListItemIcon>
+                    Ver leituras
+                </MuiMenuItem>
                 <Divider />
                 <MuiMenuItem onClick={handleDelete}>
                     <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon>
@@ -477,6 +502,72 @@ export const ComunicadosPage = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            {/* Leituras Dialog */}
+            <Dialog
+                open={leiturasDialogId !== null}
+                onClose={() => setLeiturasDialogId(null)}
+                fullWidth
+                maxWidth="sm"
+                PaperProps={{ sx: { borderRadius: 4 } }}
+            >
+                <DialogTitle sx={{ fontWeight: 700 }}>
+                    Quem leu este comunicado
+                    {leiturasData && (
+                        <Chip
+                            label={`${leiturasData.total_leituras} leitura${leiturasData.total_leituras !== 1 ? "s" : ""}`}
+                            size="small"
+                            color="primary"
+                            sx={{ ml: 1.5, fontWeight: 700 }}
+                        />
+                    )}
+                </DialogTitle>
+                <DialogContent dividers>
+                    {isFetchingLeituras ? (
+                        <Box display="flex" justifyContent="center" py={4}>
+                            <CircularProgress />
+                        </Box>
+                    ) : leiturasData?.leituras.length === 0 ? (
+                        <Box textAlign="center" py={4}>
+                            <VisibilityIcon sx={{ fontSize: 40, color: "text.secondary", mb: 1, opacity: 0.4 }} />
+                            <Typography color="text.secondary">Nenhum usuário leu ainda.</Typography>
+                        </Box>
+                    ) : (
+                        <List disablePadding>
+                            {leiturasData?.leituras.map((l, idx) => (
+                                <Box key={l.usuario_id}>
+                                    <ListItem sx={{ px: 0 }}>
+                                        <ListItemIcon sx={{ minWidth: 36 }}>
+                                            <CheckCircleIcon color="success" fontSize="small" />
+                                        </ListItemIcon>
+                                        <ListItemText
+                                            primary={<Typography fontWeight={600}>{l.username}</Typography>}
+                                            secondary={new Date(l.data_leitura).toLocaleString("pt-BR")}
+                                        />
+                                    </ListItem>
+                                    {idx < (leiturasData?.leituras.length ?? 0) - 1 && <Divider component="li" />}
+                                </Box>
+                            ))}
+                        </List>
+                    )}
+                </DialogContent>
+                <DialogActions sx={{ p: 2 }}>
+                    <Button onClick={() => setLeiturasDialogId(null)} sx={{ borderRadius: 2, fontWeight: 600 }}>
+                        Fechar
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Snackbar
+                open={snackbar.open}
+                autoHideDuration={4000}
+                onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+                anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+            >
+                <Alert severity={snackbar.severity} onClose={() => setSnackbar((s) => ({ ...s, open: false }))}>
+                    {snackbar.message}
+                </Alert>
+            </Snackbar>
         </Box>
     );
 };

@@ -19,9 +19,10 @@ interface EditNotaDialogProps {
     open: boolean;
     onClose: () => void;
     nota: AlunoNota | null;
+    onError?: (msg: string) => void;
 }
 
-export const EditNotaDialog = ({ open, onClose, nota }: EditNotaDialogProps) => {
+export const EditNotaDialog = ({ open, onClose, nota, onError }: EditNotaDialogProps) => {
     const [updateNota, { isLoading }] = useUpdateNotaMutation();
     const [formData, setFormData] = useState<{
         trimestre1: string;
@@ -86,9 +87,9 @@ export const EditNotaDialog = ({ open, onClose, nota }: EditNotaDialogProps) => 
 
             await updateNota(payload).unwrap();
             onClose();
-        } catch (error) {
-            console.error("Failed to update nota", error);
-            alert("Erro ao salvar nota");
+        } catch (error: any) {
+            const msg = error?.data?.error ?? "Erro ao salvar nota. Tente novamente.";
+            if (onError) onError(msg);
         }
     };
 

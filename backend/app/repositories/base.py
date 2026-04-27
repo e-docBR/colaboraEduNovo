@@ -31,23 +31,19 @@ class BaseRepository(Generic[T]):
     def create(self, obj_in: dict) -> T:
         db_obj = self.model(**obj_in)
         self.session.add(db_obj)
-        self.session.commit()
-        self.session.refresh(db_obj)
+        self.session.flush()
         return db_obj
 
     def update(self, db_obj: T, obj_in: dict) -> T:
         for field, value in obj_in.items():
             setattr(db_obj, field, value)
         self.session.add(db_obj)
-        self.session.commit()
-        self.session.refresh(db_obj)
         return db_obj
 
     def delete(self, id: int) -> bool:
         obj = self.get(id)
         if obj:
             self.session.delete(obj)
-            self.session.commit()
             return True
         return False
 
@@ -56,6 +52,5 @@ class BaseRepository(Generic[T]):
         obj = self.get_scoped(id)
         if obj:
             self.session.delete(obj)
-            self.session.commit()
             return True
         return False

@@ -23,6 +23,8 @@ def register(parent: Blueprint) -> None:
     @jwt_required()
     def list_ocorrencias():
         req_aluno_id = request.args.get("aluno_id")
+        date_from = request.args.get("date_from")
+        date_to = request.args.get("date_to")
         claims = get_jwt()
         roles = claims.get("roles", [])
         user_aluno_id = claims.get("aluno_id")
@@ -52,7 +54,7 @@ def register(parent: Blueprint) -> None:
                     except (ValueError, TypeError):
                         return jsonify({"error": "aluno_id inválido"}), 400
 
-            result = service.list_ocorrencias(aluno_id=target_aluno_id, page=page, per_page=per_page)
+            result = service.list_ocorrencias(aluno_id=target_aluno_id, page=page, per_page=per_page, date_from=date_from, date_to=date_to)
             return jsonify({
                 "items": [r.model_dump() for r in result["items"]],
                 "meta": result["meta"],

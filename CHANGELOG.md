@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.4] - 2026-04-27
+
+### Segurança e Estabilidade
+- **Transações do Banco de Dados**: Refatoração do `BaseRepository` para usar `session.flush()` em vez de `session.commit()` nas operações de `create` e `update`, permitindo que o escopo da transação controle os commits e evitando inconsistências no banco.
+- **Worker Customizado**: Adição de `worker.py` e atualização do `docker-compose.yml` para rodar o worker através do script Python em vez do comando CLI do RQ diretamente.
+
+### Novas Funcionalidades e UI/UX
+- **Leituras de Comunicados**: Novo endpoint no backend e interface no frontend (`ComunicadosPage.tsx`) que permite visualizar quem leu um comunicado e quando.
+- **Credenciais de Acesso (Alunos)**: Adicionado um dialog de confirmação na tela de criação de alunos (`AlunosPage.tsx`) que exibe de forma clara o usuário e a senha (matrícula) gerados para o primeiro acesso.
+- **Visualização para Responsáveis**: Adicionado um banner informativo no `MeuBoletimPage.tsx` destacando qual aluno está sendo visualizado quando o usuário logado é um "responsável".
+- **Novas Métricas no Dashboard**: O Dashboard agora exibe métricas de `ocorrencias_abertas` (não resolvidas) e `comunicados_recentes` (últimos 7 dias).
+- **Filtro de Ocorrências por Data**: Ocorrências agora suportam filtragem por período de data (`date_from` e `date_to`) na listagem da API.
+
+### Bugs Corrigidos
+- **Notificações de Ocorrências**: Tratamento mais claro de status de notificação (`Sem contato cadastrado`, `OK`, `Falha`). Adicionada também a turma do aluno no corpo do e-mail.
+- **Validação de Comunicados Específicos**: Correção na criação de comunicados para alvo "ALUNO", que agora verifica no banco de dados se o aluno especificado realmente existe naquele tenant.
+- **Tratamento de Erros no Frontend**: Melhorado o tratamento de erros em operações de CRUD no painel de alunos, exibindo snackbars descritivos em vez de falhas silenciosas ou console logs genéricos.
+
 ## [1.6.3] - 2026-04-24
 
 ### Segurança e Estabilidade

@@ -116,9 +116,9 @@ export const AlunoDetailPage = () => {
       await updateAluno({ id: Number(alunoId), ...formData }).unwrap();
       setEditingAluno(false);
       setSnackbar({ open: true, message: "Aluno atualizado com sucesso!", severity: "success" });
-    } catch (error) {
-      console.error("Failed to update aluno", error);
-      setSnackbar({ open: true, message: "Erro ao salvar. Tente novamente.", severity: "error" });
+    } catch (error: any) {
+      const msg = error?.data?.error ?? "Erro ao salvar. Tente novamente.";
+      setSnackbar({ open: true, message: msg, severity: "error" });
     }
   };
 
@@ -126,8 +126,9 @@ export const AlunoDetailPage = () => {
     try {
       await deleteAluno(Number(alunoId)).unwrap();
       navigate("/app/alunos");
-    } catch (error) {
-      console.error("Failed to delete aluno", error);
+    } catch (error: any) {
+      const msg = error?.data?.error ?? "Erro ao excluir aluno. Tente novamente.";
+      setSnackbar({ open: true, message: msg, severity: "error" });
     }
   };
 
@@ -152,8 +153,8 @@ export const AlunoDetailPage = () => {
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error("Erro no download", error);
+    } catch {
+      setSnackbar({ open: true, message: "Erro ao gerar o PDF. Tente novamente.", severity: "error" });
     }
   };
 
@@ -474,6 +475,7 @@ export const AlunoDetailPage = () => {
           open={Boolean(editingNota)}
           nota={editingNota}
           onClose={() => setEditingNota(null)}
+          onError={(msg) => setSnackbar({ open: true, message: msg, severity: "error" })}
         />
       )}
 
