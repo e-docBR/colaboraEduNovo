@@ -99,7 +99,7 @@ def register(parent: Blueprint) -> None:
         target_type = data.get("target_type", "TODOS")
         target_value = data.get("target_value")
 
-        _VALID_TYPES = {"TODOS", "TURMA", "ALUNO"}
+        _VALID_TYPES = {"TODOS", "TURMA", "ALUNO", "PROFESSOR"}
         if target_type not in _VALID_TYPES:
             return jsonify({"error": f"target_type inválido. Valores aceitos: {sorted(_VALID_TYPES)}"}), 400
 

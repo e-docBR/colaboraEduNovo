@@ -46,6 +46,7 @@ class AlunoListSchema(AlunoBase):
     id: int
     media: Optional[float] = None
     faltas: Optional[int] = None
+    media_faltas: Optional[float] = None
     status: Optional[str] = None
 
 

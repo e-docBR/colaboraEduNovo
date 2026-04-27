@@ -32,10 +32,10 @@ def ensure_aluno_user(session: Session, aluno: Aluno) -> Usuario:
     from sqlalchemy.exc import IntegrityError
 
     username = build_aluno_username(aluno)
-    usuario = session.query(Usuario).filter(Usuario.username == username).first()
+    usuario = session.query(Usuario).filter(Usuario.username == username, Usuario.tenant_id == aluno.tenant_id).first()
     if usuario:
-        if usuario.aluno_id != aluno.id and getattr(aluno, "academic_year", None) and aluno.academic_year.is_current:
-             usuario.aluno_id = aluno.id
+        if usuario.aluno_id != aluno.id:
+            usuario.aluno_id = aluno.id
         return usuario
 
     stmt = select(Usuario).where(Usuario.aluno_id == aluno.id, Usuario.role == "aluno")

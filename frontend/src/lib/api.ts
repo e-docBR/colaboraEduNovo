@@ -144,6 +144,7 @@ export type AlunoSummary = {
   turno: string;
   media?: number | null;
   faltas?: number | null;
+  media_faltas?: number | null;
   status?: string | null;
   sexo?: string | null;
   data_nascimento?: string | null;

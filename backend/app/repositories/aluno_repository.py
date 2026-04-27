@@ -26,7 +26,12 @@ class AlunoRepository(BaseRepository[Aluno]):
         
         # Base query for data
         data_query = (
-            select(Aluno, func.avg(Nota.total).label("media"), func.sum(Nota.faltas).label("faltas"))
+            select(
+                Aluno,
+                func.avg(Nota.total).label("media"),
+                func.sum(Nota.faltas).label("faltas"),
+                func.avg(Nota.faltas).label("media_faltas"),
+            )
             .outerjoin(Nota)
             .group_by(Aluno.id)
         )

@@ -35,7 +35,7 @@ class AlunoService:
         )
 
         items = []
-        for aluno, media, faltas in results:
+        for aluno, media, faltas, media_faltas in results:
             items.append(
                 AlunoListSchema(
                     id=aluno.id,
@@ -45,7 +45,8 @@ class AlunoService:
                     turno=aluno.turno,
                     status=aluno.status,
                     media=float(media) if media is not None else None,
-                    faltas=int(faltas) if faltas is not None else 0
+                    faltas=int(faltas) if faltas is not None else 0,
+                    media_faltas=round(float(media_faltas), 1) if media_faltas is not None else None,
                 )
             )
 

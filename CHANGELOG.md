@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.5] - 2026-04-27
+
+### Novas Funcionalidades e UI/UX
+- **Comunicados para Professores**: Adicionado suporte para enviar comunicados direcionados a "Professor(es)" tanto no frontend (`ComunicadosPage.tsx`) quanto na validação da API (`comunicados.py`).
+- **Cálculo de Risco de Alunos**: A lógica visual de Risco (Alto/Atenção) no `AlunosPage.tsx` agora usa a média de faltas (`media_faltas`) em vez das faltas totais, fornecendo um indicador mais justo em relação ao desempenho acadêmico geral da turma.
+
+### Bugs Corrigidos
+- **Vínculo de Contas de Aluno**: O serviço de contas (`accounts.py`) foi ajustado para sempre atualizar ou forçar o vínculo do `aluno_id` do usuário com sua matrícula independentemente de validações estritas de ano letivo, o que resolve problemas de login de alunos cujos anos letivos poderiam ser avaliados como não correntes no momento da sincronização.
+
 ## [1.6.4] - 2026-04-27
 
 ### Segurança e Estabilidade

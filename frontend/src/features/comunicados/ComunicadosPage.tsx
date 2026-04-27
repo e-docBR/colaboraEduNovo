@@ -198,6 +198,7 @@ export const ComunicadosPage = () => {
         switch (type) {
             case "TURMA": return <GroupsIcon fontSize="small" />;
             case "ALUNO": return <PersonIcon fontSize="small" />;
+            case "PROFESSOR": return <GroupsIcon fontSize="small" />;
             default: return <SchoolIcon fontSize="small" />;
         }
     };
@@ -206,6 +207,7 @@ export const ComunicadosPage = () => {
         switch (type) {
             case "TURMA": return `Turma: ${value}`;
             case "ALUNO": return `Aluno: ${value}`;
+            case "PROFESSOR": return "Professores";
             default: return "Todos";
         }
     };
@@ -427,7 +429,10 @@ export const ComunicadosPage = () => {
                                     <Box display="flex" alignItems="center" gap={1.5}>
                                         {getTargetIcon(selected)}
                                         <Typography fontWeight={500}>
-                                            {selected === "TODOS" ? "Todos (Escola Inteira)" : selected === "TURMA" ? "Turma Específica" : "Aluno Específico"}
+                                            {selected === "TODOS" ? "Todos (Escola Inteira)" :
+                                             selected === "TURMA" ? "Turma Específica" :
+                                             selected === "PROFESSOR" ? "Professor(es)" :
+                                             "Aluno Específico"}
                                         </Typography>
                                     </Box>
                                 )}
@@ -439,6 +444,10 @@ export const ComunicadosPage = () => {
                                 <MenuItem value="TURMA">
                                     <ListItemIcon><GroupsIcon fontSize="small" sx={{ color: "secondary.main" }} /></ListItemIcon>
                                     <Typography variant="body2">Turma Específica</Typography>
+                                </MenuItem>
+                                <MenuItem value="PROFESSOR">
+                                    <ListItemIcon><GroupsIcon fontSize="small" sx={{ color: "warning.main" }} /></ListItemIcon>
+                                    <Typography variant="body2">Professor(es)</Typography>
                                 </MenuItem>
                             </Select>
                         </FormControl>

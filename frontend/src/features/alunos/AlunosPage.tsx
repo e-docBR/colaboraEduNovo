@@ -57,10 +57,10 @@ const getMediaColor = (media?: number | null): "default" | "success" | "warning"
 
 type RiskLevel = "ALTO" | "MEDIO" | null;
 
-const getRiskLevel = (media?: number | null, faltas?: number | null): RiskLevel => {
+const getRiskLevel = (media?: number | null, media_faltas?: number | null): RiskLevel => {
   if (media === undefined || media === null) return null;
-  if (media < 50 || (faltas !== null && faltas !== undefined && faltas > 15)) return "ALTO";
-  if (media < 60 || (faltas !== null && faltas !== undefined && faltas > 10)) return "MEDIO";
+  if (media < 50 || (media_faltas != null && media_faltas > 20)) return "ALTO";
+  if (media < 60 || (media_faltas != null && media_faltas > 12)) return "MEDIO";
   return null;
 };
 
@@ -276,9 +276,9 @@ export const AlunosPage = () => {
                 elevation={0}
                 sx={{
                   border: "1px solid",
-                  borderColor: getRiskLevel(aluno.media, aluno.faltas) === "ALTO"
+                  borderColor: getRiskLevel(aluno.media, aluno.media_faltas) === "ALTO"
                     ? "error.light"
-                    : getRiskLevel(aluno.media, aluno.faltas) === "MEDIO"
+                    : getRiskLevel(aluno.media, aluno.media_faltas) === "MEDIO"
                     ? "warning.light"
                     : "divider",
                   height: "100%",
@@ -298,7 +298,7 @@ export const AlunosPage = () => {
                     <Stack direction="row" spacing={1.5} alignItems="flex-start" mb={1.5}>
                       <Avatar
                         sx={{
-                          bgcolor: getRiskLevel(aluno.media, aluno.faltas) === "ALTO"
+                          bgcolor: getRiskLevel(aluno.media, aluno.media_faltas) === "ALTO"
                             ? "error.main"
                             : "primary.main",
                           width: 40,
@@ -328,17 +328,17 @@ export const AlunosPage = () => {
                           {aluno.turma}
                         </Typography>
                       </Box>
-                      {getRiskLevel(aluno.media, aluno.faltas) && (
+                      {getRiskLevel(aluno.media, aluno.media_faltas) && (
                         <Tooltip
                           title={
-                            getRiskLevel(aluno.media, aluno.faltas) === "ALTO"
+                            getRiskLevel(aluno.media, aluno.media_faltas) === "ALTO"
                               ? "Alto risco de reprovação"
                               : "Atenção: desempenho abaixo da média"
                           }
                         >
                           <WarningAmberIcon
                             fontSize="small"
-                            color={getRiskLevel(aluno.media, aluno.faltas) === "ALTO" ? "error" : "warning"}
+                            color={getRiskLevel(aluno.media, aluno.media_faltas) === "ALTO" ? "error" : "warning"}
                             sx={{ flexShrink: 0, mt: 0.25 }}
                           />
                         </Tooltip>
@@ -381,7 +381,7 @@ export const AlunosPage = () => {
                           }}
                         />
                       )}
-                      {getRiskLevel(aluno.media, aluno.faltas) === "ALTO" && (
+                      {getRiskLevel(aluno.media, aluno.media_faltas) === "ALTO" && (
                         <Chip
                           label="Alto Risco"
                           size="small"
@@ -390,7 +390,7 @@ export const AlunosPage = () => {
                           sx={{ height: 20, fontSize: "0.625rem", fontWeight: 700 }}
                         />
                       )}
-                      {getRiskLevel(aluno.media, aluno.faltas) === "MEDIO" && (
+                      {getRiskLevel(aluno.media, aluno.media_faltas) === "MEDIO" && (
                         <Chip
                           label="Em Atenção"
                           size="small"
