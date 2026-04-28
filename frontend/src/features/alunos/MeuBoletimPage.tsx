@@ -34,7 +34,7 @@ import CircleIcon from "@mui/icons-material/Circle";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 
 import { useAppSelector } from "../../app/hooks";
-import { useGetAlunoQuery, useListComunicadosQuery, useListOcorrenciasQuery, useMarkComunicadoReadMutation } from "../../lib/api";
+import { useGetMyAlunoQuery, useListComunicadosQuery, useListOcorrenciasQuery, useMarkComunicadoReadMutation } from "../../lib/api";
 
 const formatNota = (value?: number | null) => (typeof value === "number" ? value.toFixed(1) : "-");
 
@@ -58,9 +58,9 @@ export const MeuBoletimPage = () => {
     open: false, message: "", severity: "error"
   });
 
-  const { data, isLoading, isError } = useGetAlunoQuery(alunoKey, {
-    skip: !alunoId
-  });
+  // useGetMyAlunoQuery uses /alunos/me which finds the aluno for the currently selected
+  // academic year via the matricula in the JWT — enabling cross-year access with one user account.
+  const { data, isLoading, isError } = useGetMyAlunoQuery();
 
   const { data: ocorrencias } = useListOcorrenciasQuery(alunoKey, {
     skip: !alunoId
@@ -108,10 +108,6 @@ export const MeuBoletimPage = () => {
       setSnackbar({ open: true, message: "Erro ao gerar o PDF. Tente novamente.", severity: "error" });
     }
   };
-
-  if (!alunoId) {
-    return <Alert severity="warning">Seu perfil não está associado a um aluno.</Alert>;
-  }
 
   if (isLoading) {
     return (

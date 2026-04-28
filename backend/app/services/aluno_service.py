@@ -96,6 +96,19 @@ class AlunoService:
             telefone_responsavel=aluno.telefone_responsavel,
         )
 
+    def get_aluno_by_matricula(self, matricula: str) -> tuple:
+        """Find the aluno for the current academic year by matricula.
+
+        The ORM event listener automatically applies tenant_id and academic_year_id filters.
+        """
+        from app.models import Aluno
+        aluno = self.repository.session.query(Aluno).filter(
+            Aluno.matricula == matricula
+        ).first()
+        if not aluno:
+            return None, None, []
+        return self.repository.get_with_notes(aluno.id)
+
     def create_aluno(self, data: dict) -> AlunoListSchema:
         aluno = self.repository.create(data)
         log_action(self.repository.session, self.user_id, "CREATE", "Aluno", aluno.id, data)

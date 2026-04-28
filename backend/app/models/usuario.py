@@ -18,6 +18,7 @@ class Usuario(Base):
     aluno_id: Mapped[int | None] = mapped_column(
         ForeignKey("alunos.id", ondelete="SET NULL"), nullable=True  # A5
     )
+    matricula: Mapped[str | None] = mapped_column(String(32), nullable=True)
     photo_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

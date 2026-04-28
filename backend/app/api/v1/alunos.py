@@ -40,24 +40,44 @@ def register(parent: Blueprint) -> None:
             # Pydantic v2 use model_dump
             return jsonify(result.model_dump())
 
+    @bp.get("/alunos/me")
+    @jwt_required()
+    def get_my_aluno():
+        claims = get_jwt()
+        matricula = claims.get("matricula")
+        roles = set(claims.get("roles") or [])
+
+        if not (roles & {"aluno", "responsavel"}) or not matricula:
+            return jsonify({"error": "Acesso restrito"}), 403
+
+        user_id = int(get_jwt_identity())
+        with session_scope() as session:
+            service = AlunoService(session, user_id=user_id)
+            aluno, _media, _notas = service.get_aluno_by_matricula(matricula)
+            if not aluno:
+                return jsonify({"error": "Aluno não encontrado para este ano letivo"}), 404
+            aluno_detail = service.get_aluno_details(aluno.id)
+            return jsonify(aluno_detail.model_dump())
+
     @bp.get("/alunos/<int:aluno_id>")
     @jwt_required()
     def retrieve_aluno(aluno_id: int):
         claims = get_jwt()
-        aluno_claim_id = claims.get("aluno_id")
+        matricula_claim = claims.get("matricula")
         roles = set(claims.get("roles") or [])
 
-        if roles & {"aluno", "responsavel"}:
-            if not aluno_claim_id or int(aluno_claim_id) != int(aluno_id):
-                return jsonify({"error": "Acesso restrito"}), 403
-                
         user_id = int(get_jwt_identity())
         with session_scope() as session:
             service = AlunoService(session, user_id=user_id)
             aluno_detail = service.get_aluno_details(aluno_id)
-            
+
             if not aluno_detail:
                 return jsonify({"error": "Aluno não encontrado"}), 404
+
+            # Alunos and responsaveis may only access their own record, matched by matricula
+            if roles & {"aluno", "responsavel"}:
+                if not matricula_claim or aluno_detail.matricula != matricula_claim:
+                    return jsonify({"error": "Acesso restrito"}), 403
 
             return jsonify(aluno_detail.model_dump())
 

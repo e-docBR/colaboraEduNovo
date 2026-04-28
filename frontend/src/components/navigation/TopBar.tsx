@@ -16,7 +16,7 @@ import {
   TextField,
   Typography
 } from "@mui/material";
-import { MouseEvent, useState } from "react";
+import { MouseEvent, useState, useEffect } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
@@ -48,9 +48,21 @@ const AcademicYearSelector = () => {
   const currentYearId = useAppSelector((state) => state.app.academicYearId);
   const dispatch = useAppDispatch();
 
+  const defaultId = years
+    ? (years.find((y: { is_current: boolean; id: number }) => y.is_current)?.id || years[0]?.id)
+    : null;
+
+  // Inicializa o Redux com o ano padrão na primeira carga para garantir
+  // que o header X-Academic-Year-ID seja enviado desde a primeira requisição.
+  useEffect(() => {
+    if (!currentYearId && defaultId) {
+      dispatch(setAcademicYearId(defaultId));
+    }
+  }, [currentYearId, defaultId, dispatch]);
+
   if (isLoading || !years || years.length === 0) return null;
 
-  const selectedId = currentYearId || years.find((y: { is_current: boolean; id: number }) => y.is_current)?.id || years[0].id;
+  const selectedId = currentYearId || defaultId;
 
   return (
     <TextField

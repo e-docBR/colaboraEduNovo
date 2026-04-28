@@ -19,8 +19,8 @@ class Aluno(Base, TenantYearMixin):
     # A2: unique per tenant+year, not globally — schools reuse matricula sequences
     matricula: Mapped[str] = mapped_column(String(32), nullable=False)
     nome: Mapped[str] = mapped_column(String(255), nullable=False)
-    turma: Mapped[str] = mapped_column(String(32), nullable=False)
-    turno: Mapped[str] = mapped_column(String(32), nullable=False)
+    turma: Mapped[str] = mapped_column(String(100), nullable=False)
+    turno: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
 
     # Personal Data from Matrícula Inicial

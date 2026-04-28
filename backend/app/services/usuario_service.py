@@ -51,6 +51,7 @@ class UsuarioService:
 
         extra_claims = {
             "aluno_id": user.aluno_id,
+            "matricula": user.matricula,
             "tenant_id": user.tenant_id,
             "academic_year_id": academic_year_id,
         }

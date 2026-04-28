@@ -28,27 +28,45 @@ def build_aluno_username(aluno: Aluno) -> str:
 
 
 def ensure_aluno_user(session: Session, aluno: Aluno) -> Usuario:
-    """Garante que exista um usuário vinculado ao aluno informado."""
+    """Garante que exista um usuário vinculado ao aluno informado.
+
+    Lookup order:
+    1. by (tenant_id, role=aluno, matricula) — cross-year stable identifier
+    2. by (tenant_id, username) — fallback for legacy accounts without matricula
+    3. create new account
+    """
     from sqlalchemy.exc import IntegrityError
 
     username = build_aluno_username(aluno)
-    usuario = session.query(Usuario).filter(Usuario.username == username, Usuario.tenant_id == aluno.tenant_id).first()
+
+    # 1. Primary lookup by matricula — works across academic years
+    usuario = session.query(Usuario).filter(
+        Usuario.matricula == aluno.matricula,
+        Usuario.tenant_id == aluno.tenant_id,
+        Usuario.role == "aluno"
+    ).first()
     if usuario:
-        if usuario.aluno_id != aluno.id:
-            usuario.aluno_id = aluno.id
+        usuario.aluno_id = aluno.id  # point to current year's aluno row
         return usuario
 
-    stmt = select(Usuario).where(Usuario.aluno_id == aluno.id, Usuario.role == "aluno")
-    usuario = session.execute(stmt).scalar_one_or_none()
+    # 2. Fallback for legacy accounts created before the matricula field existed
+    usuario = session.query(Usuario).filter(
+        Usuario.username == username,
+        Usuario.tenant_id == aluno.tenant_id
+    ).first()
     if usuario:
+        usuario.aluno_id = aluno.id
+        usuario.matricula = aluno.matricula  # backfill
         return usuario
 
+    # 3. Create new account
     try:
         usuario = Usuario(
             username=username,
             password_hash=hash_password(aluno.matricula),
             role="aluno",
             aluno_id=aluno.id,
+            matricula=aluno.matricula,
             tenant_id=aluno.tenant_id,
             must_change_password=True,
         )
@@ -57,9 +75,12 @@ def ensure_aluno_user(session: Session, aluno: Aluno) -> Usuario:
         logger.info("Usuário aluno {} criado para o tenant {}", username, aluno.tenant_id)
     except IntegrityError:
         session.rollback()
-        usuario = session.query(Usuario).filter(Usuario.username == username).first()
-        if not usuario:
-            usuario = session.execute(select(Usuario).where(Usuario.aluno_id == aluno.id, Usuario.role == "aluno")).scalar_one_or_none()
+        usuario = session.query(Usuario).filter(
+            Usuario.username == username, Usuario.tenant_id == aluno.tenant_id
+        ).first()
+        if usuario and not usuario.matricula:
+            usuario.matricula = aluno.matricula
+            usuario.aluno_id = aluno.id
 
     return usuario
 
@@ -70,8 +91,23 @@ def ensure_responsavel_user(session: Session, aluno: Aluno) -> Usuario:
 
     username = f"resp_{aluno.matricula}"
 
-    usuario = session.query(Usuario).filter(Usuario.username == username, Usuario.tenant_id == aluno.tenant_id).first()
+    # Lookup by (tenant_id, role=responsavel, matricula) for cross-year stability
+    usuario = session.query(Usuario).filter(
+        Usuario.matricula == aluno.matricula,
+        Usuario.tenant_id == aluno.tenant_id,
+        Usuario.role == "responsavel"
+    ).first()
     if usuario:
+        usuario.aluno_id = aluno.id
+        return usuario
+
+    # Fallback by username for legacy accounts
+    usuario = session.query(Usuario).filter(
+        Usuario.username == username, Usuario.tenant_id == aluno.tenant_id
+    ).first()
+    if usuario:
+        usuario.aluno_id = aluno.id
+        usuario.matricula = aluno.matricula
         return usuario
 
     try:
@@ -80,6 +116,7 @@ def ensure_responsavel_user(session: Session, aluno: Aluno) -> Usuario:
             password_hash=hash_password(aluno.matricula),
             role="responsavel",
             aluno_id=aluno.id,
+            matricula=aluno.matricula,
             tenant_id=aluno.tenant_id,
             must_change_password=True,
         )
@@ -88,7 +125,12 @@ def ensure_responsavel_user(session: Session, aluno: Aluno) -> Usuario:
         logger.info("Usuário responsável {} criado para o tenant {}", username, aluno.tenant_id)
     except IntegrityError:
         session.rollback()
-        usuario = session.query(Usuario).filter(Usuario.username == username, Usuario.tenant_id == aluno.tenant_id).first()
+        usuario = session.query(Usuario).filter(
+            Usuario.username == username, Usuario.tenant_id == aluno.tenant_id
+        ).first()
+        if usuario and not usuario.matricula:
+            usuario.matricula = aluno.matricula
+            usuario.aluno_id = aluno.id
 
     return usuario
 

@@ -9,8 +9,8 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 export interface ChatResponse {
   text: string;
   type: "text" | "table" | "chart";
-  data?: Record<string, unknown> | Array<Record<string, unknown>>;
-  chart_config?: Record<string, unknown>;
+  data?: any;
+  chart_config?: any;
 }
 
 
@@ -495,6 +495,10 @@ export const api = createApi({
         { type: "Alunos", id: String(alunoId) }
       ]
     }),
+    getMyAluno: builder.query<AlunoDetail, void>({
+      query: () => "/alunos/me",
+      providesTags: ["Alunos"]
+    }),
     listAlunos: builder.query<ListAlunosResponse, ListAlunosParams | void>({
       query: (params) => ({
         url: "/alunos",
@@ -828,6 +832,7 @@ export const {
   useGetDashboardKpisQuery,
   useGetTeacherDashboardQuery,
   useGetAlunoQuery,
+  useGetMyAlunoQuery,
   useListAlunosQuery,
   useListTurmasQuery,
   useGetTurmaAlunosQuery,
