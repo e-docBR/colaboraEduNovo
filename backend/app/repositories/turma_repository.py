@@ -115,7 +115,7 @@ class TurmaRepository(BaseRepository[Aluno]):
             aluno.turma = new_name
             if new_turno:
                 aluno.turno = new_turno
-        self.session.commit()
+        self.session.flush()
         return len(alunos)
 
     def delete_turma(self, turma_nome: str) -> int:
@@ -134,6 +134,6 @@ class TurmaRepository(BaseRepository[Aluno]):
             if academic_year_id:
                 query = query.filter(Aluno.academic_year_id == academic_year_id)
             query.delete(synchronize_session=False)
-            self.session.commit()
+            self.session.flush()
 
         return len(aluno_ids)

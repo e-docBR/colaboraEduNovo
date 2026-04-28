@@ -57,6 +57,7 @@ def register(parent: Blueprint) -> None:
         roles = jwt_data.get("roles", [])
         extra_claims = {
             "aluno_id": jwt_data.get("aluno_id"),
+            "matricula": jwt_data.get("matricula"),
             "tenant_id": jwt_data.get("tenant_id"),
             "academic_year_id": jwt_data.get("academic_year_id"),
         }

@@ -134,7 +134,12 @@ def register(parent: Blueprint) -> None:
                 return jsonify({"error": "Usuário já existe"}), 409
 
             if aluno_id is not None:
-                aluno = session.get(Aluno, aluno_id)
+                # C1: scoped lookup prevents associating a user with an aluno from another tenant
+                aluno = (
+                    session.query(Aluno)
+                    .filter(Aluno.id == aluno_id, Aluno.tenant_id == g.tenant_id)
+                    .first()
+                )
                 if not aluno:
                     return jsonify({"error": "Aluno informado não existe"}), 400
 
@@ -223,7 +228,12 @@ def register(parent: Blueprint) -> None:
                 if aluno_id_value is None:
                     usuario.aluno_id = None
                 else:
-                    aluno = session.get(Aluno, aluno_id_value)
+                    # C1: scoped lookup prevents associating a user with an aluno from another tenant
+                    aluno = (
+                        session.query(Aluno)
+                        .filter(Aluno.id == aluno_id_value, Aluno.tenant_id == g.tenant_id)
+                        .first()
+                    )
                     if not aluno:
                         return jsonify({"error": "Aluno informado não existe"}), 400
                     usuario.aluno_id = aluno.id

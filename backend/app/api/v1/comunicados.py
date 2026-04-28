@@ -35,7 +35,12 @@ def register(parent: Blueprint) -> None:
                 aluno_id = claims.get("aluno_id")
                 turma_slug = None
                 if aluno_id:
-                    aluno = session.get(Aluno, aluno_id)
+                    # C1: scoped query prevents cross-tenant Aluno lookup
+                    aluno = (
+                        session.query(Aluno)
+                        .filter(Aluno.id == int(aluno_id), Aluno.tenant_id == g.tenant_id)
+                        .first()
+                    )
                     if aluno:
                         turma_slug = aluno.turma
 

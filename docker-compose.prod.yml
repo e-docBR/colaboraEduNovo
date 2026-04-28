@@ -214,9 +214,18 @@ services:
           NEXT=$(( $(date -d 'tomorrow 02:00' +%s) - $(date +%s) ));
           sleep $$NEXT;
           FILENAME=/backups/backup_$$(date +%Y%m%d_%H%M%S).sql.gz;
-          pg_dump -h postgres -U $$POSTGRES_USER $$POSTGRES_DB | gzip > $$FILENAME
-            && echo \"Backup OK: $$FILENAME\"
-            || echo \"Backup FAILED\";
+          if pg_dump -h postgres -U $$POSTGRES_USER $$POSTGRES_DB | gzip > $$FILENAME; then
+            SIZE=$$(stat -c%s $$FILENAME 2>/dev/null || echo 0);
+            if [ "$$SIZE" -lt 1024 ]; then
+              echo \"Backup FAILED: arquivo muito pequeno ($$SIZE bytes) — possível dump vazio\";
+              rm -f $$FILENAME;
+            else
+              echo \"Backup OK: $$FILENAME ($$SIZE bytes)\";
+            fi;
+          else
+            echo \"Backup FAILED: pg_dump retornou erro\";
+            rm -f $$FILENAME;
+          fi;
           find /backups -name 'backup_*.sql.gz' -mtime +7 -delete;
         done
       "

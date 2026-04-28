@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, Integer
+from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship, declared_attr
 
 class TenantYearMixin:
@@ -6,11 +6,11 @@ class TenantYearMixin:
     
     @declared_attr
     def tenant_id(cls) -> Mapped[int]:
-        return mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
+        return mapped_column(ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False, index=True)
 
     @declared_attr
     def academic_year_id(cls) -> Mapped[int]:
-        return mapped_column(ForeignKey("academic_years.id"), nullable=False, index=True)
+        return mapped_column(ForeignKey("academic_years.id", ondelete="RESTRICT"), nullable=False, index=True)
 
     @declared_attr
     def tenant(cls):
