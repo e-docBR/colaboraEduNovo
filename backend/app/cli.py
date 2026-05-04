@@ -260,6 +260,169 @@ def register_cli(app):
                 fg="green",
             )
 
+    @maintenance.command("anonymize-pii")
+    @click.option("--days", default=1825, show_default=True,
+                  help="Anonimizar alunos de anos letivos com mais de N dias de encerramento.")
+    @click.option("--dry-run", is_flag=True, default=False,
+                  help="Mostrar quantos alunos seriam anonimizados sem alterar nada.")
+    def anonymize_pii_command(days: int, dry_run: bool):
+        """Anonimiza PII de alunos de anos letivos encerrados há mais de N dias (LGPD art. 16).
+
+        Os campos apagados são: cpf, nis, inep, endereco, filiacao, telefones,
+        email, email_responsavel, telefone_responsavel, data_nascimento.
+        A identidade escolar (nome, matrícula, turma) é preservada para auditoria.
+
+        Exemplos:\n
+            flask maintenance anonymize-pii --days 1825\n
+            flask maintenance anonymize-pii --days 730 --dry-run
+        """
+        import datetime
+        from sqlalchemy import select, update
+
+        if days < 365:
+            click.secho("Mínimo de 365 dias para anonimização.", fg="red")
+            return
+
+        cutoff = datetime.date.today() - datetime.timedelta(days=days)
+
+        PII_FIELDS = [
+            "cpf", "nis", "inep", "endereco", "filiacao",
+            "telefones", "email", "email_responsavel",
+            "telefone_responsavel", "data_nascimento",
+        ]
+
+        with session_scope() as session:
+            old_years = (
+                session.query(AcademicYear)
+                .filter(AcademicYear.label <= str(cutoff.year))
+                .execution_options(include_all_tenants=True)
+                .all()
+            )
+            year_ids = [y.id for y in old_years]
+            if not year_ids:
+                click.secho("Nenhum ano letivo elegível encontrado.", fg="yellow")
+                return
+
+            # Count candidates — only those that still have PII
+            from sqlalchemy import or_
+            candidate_q = session.query(Aluno).filter(
+                Aluno.academic_year_id.in_(year_ids),
+                or_(*[getattr(Aluno, f).isnot(None) for f in PII_FIELDS]),
+            ).execution_options(include_all_tenants=True)
+
+            count = candidate_q.count()
+
+            if dry_run:
+                click.secho(
+                    f"[dry-run] {count} aluno(s) teriam PII anonimizada "
+                    f"(anos letivos ≤ {cutoff.year}).",
+                    fg="yellow",
+                )
+                return
+
+            if count == 0:
+                click.secho("Nenhum dado de PII a anonimizar.", fg="green")
+                return
+
+            if not click.confirm(
+                f"Anonimizar PII de {count} aluno(s) em anos letivos ≤ {cutoff.year}? "
+                "Esta operação é irreversível."
+            ):
+                click.secho("Operação cancelada.", fg="yellow")
+                return
+
+            redacted: dict = {f: "[REDACTED]" for f in PII_FIELDS}
+            from sqlalchemy import update as sa_update
+            session.execute(
+                sa_update(Aluno)
+                .where(Aluno.academic_year_id.in_(year_ids))
+                .values(**redacted)
+                .execution_options(synchronize_session="fetch"),
+            )
+            click.secho(f"PII de {count} aluno(s) anonimizada com sucesso.", fg="green")
+
+    @maintenance.command("advance-year")
+    @click.option("--tenant-slug", required=True, help="Slug do tenant (escola).")
+    @click.option("--year", required=True, type=int, help="Novo ano letivo (ex: 2027).")
+    @click.option("--dry-run", is_flag=True, default=False,
+                  help="Simular sem persistir.")
+    def advance_year_command(tenant_slug: str, year: int, dry_run: bool):
+        """Abre um novo ano letivo para um tenant e desativa o atual.
+
+        O ano anterior é marcado como is_current=False.
+        O novo ano é criado (ou reativado) como is_current=True.
+        Nenhum dado de aluno/nota é copiado — a migração de matrículas deve
+        ser feita via importação de PDF ou manualmente.
+
+        Exemplos:\n
+            flask maintenance advance-year --tenant-slug minha-escola --year 2027\n
+            flask maintenance advance-year --tenant-slug minha-escola --year 2027 --dry-run
+        """
+        current_year = __import__("datetime").date.today().year
+        if year < current_year or year > current_year + 2:
+            click.secho(
+                f"Ano {year} fora do intervalo permitido ({current_year}–{current_year + 2}).",
+                fg="red",
+            )
+            return
+
+        with session_scope() as session:
+            tenant = (
+                session.query(Tenant)
+                .filter(Tenant.slug == tenant_slug, Tenant.is_active.is_(True))
+                .execution_options(include_all_tenants=True)
+                .first()
+            )
+            if not tenant:
+                click.secho(f"Tenant '{tenant_slug}' não encontrado ou inativo.", fg="red")
+                return
+
+            current = (
+                session.query(AcademicYear)
+                .filter(AcademicYear.tenant_id == tenant.id, AcademicYear.is_current.is_(True))
+                .execution_options(include_all_tenants=True)
+                .first()
+            )
+
+            existing_new = (
+                session.query(AcademicYear)
+                .filter(AcademicYear.tenant_id == tenant.id, AcademicYear.label == str(year))
+                .execution_options(include_all_tenants=True)
+                .first()
+            )
+
+            if dry_run:
+                click.secho(
+                    f"[dry-run] Tenant: {tenant.name}\n"
+                    f"  Ano atual:  {current.label if current else '—'} → is_current=False\n"
+                    f"  Novo ano:   {year} → {'reativar' if existing_new else 'criar'} como is_current=True",
+                    fg="yellow",
+                )
+                return
+
+            if not click.confirm(
+                f"Avançar tenant '{tenant.name}' do ano "
+                f"{current.label if current else '—'} para {year}?"
+            ):
+                click.secho("Operação cancelada.", fg="yellow")
+                return
+
+            if current:
+                current.is_current = False
+                session.add(current)
+
+            if existing_new:
+                existing_new.is_current = True
+                session.add(existing_new)
+                click.secho(f"Ano letivo {year} reativado como corrente.", fg="green")
+            else:
+                new_year = AcademicYear(tenant_id=tenant.id, label=str(year), is_current=True)
+                session.add(new_year)
+                click.secho(f"Ano letivo {year} criado como corrente.", fg="green")
+
+            if current:
+                click.secho(f"Ano letivo {current.label} marcado como encerrado.", fg="cyan")
+
     @maintenance.command("schedule-clean-audit")
     @click.option("--days", default=365, show_default=True, help="Retenção em dias usada no job agendado.")
     def schedule_clean_audit_command(days: int):

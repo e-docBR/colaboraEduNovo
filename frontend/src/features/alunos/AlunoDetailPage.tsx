@@ -42,6 +42,7 @@ import DescriptionIcon from "@mui/icons-material/Description";
 import GroupIcon from "@mui/icons-material/Group";
 import SchoolIcon from "@mui/icons-material/School";
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
+import ReportIcon from "@mui/icons-material/Report";
 import { AIInterventionBoard } from "../dashboard/AIInterventionBoard";
 
 interface TabPanelProps {
@@ -68,7 +69,8 @@ function CustomTabPanel(props: TabPanelProps) {
   );
 }
 import { useState } from "react";
-import { useGetAlunoQuery, AlunoNota, useUpdateAlunoMutation, useDeleteAlunoMutation } from "../../lib/api";
+import { useGetAlunoQuery, useGetAlunoOcorrenciasSummaryQuery, AlunoNota, useUpdateAlunoMutation, useDeleteAlunoMutation } from "../../lib/api";
+import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from "recharts";
 import { useAppSelector } from "../../app/hooks";
 import { EditNotaDialog } from "../notas/EditNotaDialog";
 import { AlunoForm } from "./AlunoForm";
@@ -99,6 +101,8 @@ export const AlunoDetailPage = () => {
   const { data, isLoading, isError } = useGetAlunoQuery(alunoId ?? "", {
     skip: !alunoId
   });
+
+  const { data: ocorrenciasSummary } = useGetAlunoOcorrenciasSummaryQuery(Number(alunoId), { skip: !alunoId });
 
   const user = useAppSelector((state) => state.auth.user);
   const isAdmin = user?.role && ["admin", "super_admin"].includes(user.role);
@@ -266,6 +270,7 @@ export const AlunoDetailPage = () => {
         <Tabs value={tabValue} onChange={handleTabChange} color="secondary">
           <Tab icon={<SchoolIcon fontSize="small" />} iconPosition="start" label="Acadêmico" />
           <Tab icon={<PersonIcon fontSize="small" />} iconPosition="start" label="Dados Pessoais" />
+          <Tab icon={<ReportIcon fontSize="small" />} iconPosition="start" label="Ocorrências" />
           <Tab icon={<AutoFixHighIcon fontSize="small" />} iconPosition="start" label="IA Insights" />
         </Tabs>
       </Box>
@@ -467,6 +472,34 @@ export const AlunoDetailPage = () => {
       </CustomTabPanel>
 
       <CustomTabPanel value={tabValue} index={2}>
+        <Card>
+          <CardContent>
+            <Typography variant="h6" fontWeight={700} mb={2}>Ocorrências por Tipo</Typography>
+            {!ocorrenciasSummary || ocorrenciasSummary.length === 0 ? (
+              <Typography color="text.secondary">Nenhuma ocorrência registrada.</Typography>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={ocorrenciasSummary} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                  <XAxis dataKey="tipo" tick={{ fontSize: 12 }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                  <RechartsTooltip />
+                  <Bar dataKey="total" radius={[4, 4, 0, 0]}>
+                    {ocorrenciasSummary.map((entry) => {
+                      const colors: Record<string, string> = {
+                        ADVERTENCIA: "#f59e0b", ELOGIO: "#10b981",
+                        ATRASO: "#3b82f6", SUSPENSAO: "#ef4444", OUTRO: "#6b7280"
+                      };
+                      return <Cell key={entry.tipo} fill={colors[entry.tipo] ?? "#6b7280"} />;
+                    })}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </CustomTabPanel>
+
+      <CustomTabPanel value={tabValue} index={3}>
         <AIInterventionBoard studentIds={[Number(alunoId)]} />
       </CustomTabPanel>
 

@@ -15,6 +15,20 @@ from .cli import register_cli
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 def create_app() -> Flask:
+    if settings.sentry_dsn:
+        import sentry_sdk
+        from sentry_sdk.integrations.flask import FlaskIntegration
+        from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+        from sentry_sdk.integrations.rq import RqIntegration
+        sentry_sdk.init(
+            dsn=settings.sentry_dsn,
+            integrations=[FlaskIntegration(), SqlalchemyIntegration(), RqIntegration()],
+            environment=settings.environment,
+            traces_sample_rate=0.1,
+            send_default_pii=False,
+        )
+        logger.info("Sentry SDK initialized (env={})", settings.environment)
+
     app = Flask(__name__)
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
     app.config.update(
@@ -33,15 +47,24 @@ def create_app() -> Flask:
     register_cli(app)
 
     from .core.extensions import limiter
-    # Initialize Rate Limiter — storage URI must be set BEFORE init_app
+    # Initialize Rate Limiter — storage URI must be set BEFORE init_app.
+    # In production we require Redis-backed storage; per-process in-memory storage
+    # would allow up to (workers × limit) attempts per window, undermining brute-force
+    # protection.
     try:
         settings_redis = getattr(settings, 'redis_url', None)
         if settings_redis:
             app.config["RATELIMIT_STORAGE_URI"] = settings_redis
         limiter.init_app(app)
-        logger.info("Flask-Limiter configured")
+        logger.info("Flask-Limiter configured with Redis storage")
     except Exception as e:
-        logger.warning(f"Failed to configure Flask-Limiter: {e}")
+        logger.error(f"Flask-Limiter failed to configure Redis storage: {e}")
+        if settings.environment == "production":
+            raise RuntimeError(
+                "Rate limiter requires Redis in production. "
+                "Check REDIS_URL and Redis availability."
+            ) from e
+        logger.warning("Rate limiter falling back to in-memory storage (dev only)")
     
     from .core.handlers import register_error_handlers
     register_error_handlers(app)
@@ -55,6 +78,7 @@ def create_app() -> Flask:
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
         # CSP para respostas da API (sem HTML — bloqueia execução de scripts se renderizado)
         response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+        response.headers["Cache-Control"] = "no-store, no-cache, private"
         if settings.environment == "production":
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
         # Attach request-id to response for log correlation
@@ -109,14 +133,16 @@ def create_app() -> Flask:
                 s.execute(_text("SELECT 1"))
             checks["database"] = "ok"
         except Exception as exc:
-            checks["database"] = f"error: {exc}"
+            logger.error("Health check — database error: {}", exc)
+            checks["database"] = "error"
             overall = "degraded"
 
         try:
             redis_client.ping()
             checks["redis"] = "ok"
         except Exception as exc:
-            checks["redis"] = f"error: {exc}"
+            logger.error("Health check — redis error: {}", exc)
+            checks["redis"] = "error"
             overall = "degraded"
 
         status_code = 200 if overall == "ok" else 503

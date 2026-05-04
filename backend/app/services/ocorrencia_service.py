@@ -75,13 +75,18 @@ class OcorrenciaService:
 
         # Handle notification if requested
         if data.notificar_responsaveis:
+            from rq import Retry
             from ..core.queue import queue
             from ..core.tasks import notify_occurrence_task
             # Marca como pendente antes de enfileirar (sem commit — o session_scope faz isso)
             novo.notificacao_status = "Pendente"
             self.repository.session.add(novo)
             self.repository.session.flush()
-            queue.enqueue(notify_occurrence_task, novo.id)
+            queue.enqueue(
+                notify_occurrence_task,
+                novo.id,
+                retry=Retry(max=3, interval=[60, 300, 900]),  # 1 min, 5 min, 15 min
+            )
 
         # Audit
         log_action(
@@ -152,12 +157,17 @@ class OcorrenciaService:
         oc = self.repository.get_scoped(ocorrencia_id)
         if not oc:
             return False
+        from rq import Retry
         from ..core.queue import queue
         from ..core.tasks import notify_occurrence_task
         oc.notificacao_status = "Pendente"
         self.repository.session.add(oc)
         self.repository.session.flush()
-        queue.enqueue(notify_occurrence_task, oc.id)
+        queue.enqueue(
+            notify_occurrence_task,
+            oc.id,
+            retry=Retry(max=3, interval=[60, 300, 900]),
+        )
         log_action(
             self.repository.session,
             self.user_id,

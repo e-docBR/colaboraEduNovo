@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     whatsapp_api_url: str = Field(default="", alias="WHATSAPP_API_URL")
     whatsapp_api_token: str = Field(default="", alias="WHATSAPP_API_TOKEN")
     whatsapp_instance: str = Field(default="", alias="WHATSAPP_INSTANCE")
+    # Error monitoring
+    sentry_dsn: str = Field(default="", alias="SENTRY_DSN")
+
     # Commercial Settings
     commercial_mode: str = Field(default="saas", alias="COMMERCIAL_MODE") # saas or dedicated
     enable_registration: bool = Field(default=True, alias="ENABLE_REGISTRATION")

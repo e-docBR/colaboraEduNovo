@@ -72,6 +72,7 @@ export const TenantsPage = () => {
     const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: "success" | "error" }>({
         open: false, message: "", severity: "success"
     });
+    const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; name: string } | null>(null);
 
     const handleCreateTenant = async () => {
         setCreateError(null);
@@ -111,15 +112,20 @@ export const TenantsPage = () => {
         }
     };
 
-    const handleDeleteTenant = async (id: number, name: string) => {
-        if (window.confirm(`Tem certeza que deseja excluir a escola "${name}"? Esta ação é irreversível.`)) {
-            try {
-                await deleteTenant(id).unwrap();
-                setSnackbar({ open: true, message: `Escola "${name}" excluída.`, severity: "success" });
-            } catch (e: any) {
-                const msg = e?.data?.error ?? "Erro ao excluir escola. Verifique se há dados vinculados.";
-                setSnackbar({ open: true, message: msg, severity: "error" });
-            }
+    const handleDeleteTenant = (id: number, name: string) => {
+        setDeleteConfirm({ id, name });
+    };
+
+    const handleConfirmDeleteTenant = async () => {
+        if (!deleteConfirm) return;
+        const { id, name } = deleteConfirm;
+        setDeleteConfirm(null);
+        try {
+            await deleteTenant(id).unwrap();
+            setSnackbar({ open: true, message: `Escola "${name}" excluída.`, severity: "success" });
+        } catch (e: any) {
+            const msg = e?.data?.error ?? "Erro ao excluir escola. Verifique se há dados vinculados.";
+            setSnackbar({ open: true, message: msg, severity: "error" });
         }
     };
 
@@ -497,6 +503,17 @@ export const TenantsPage = () => {
                 <DialogActions sx={{ p: 3 }}>
                     <Button onClick={() => setOpenYearDialog(false)} color="inherit">Cancelar</Button>
                     <Button variant="contained" onClick={handleAddYear} sx={{ fontWeight: 800, bgcolor: TEAL_COLOR }}>Definir como Atual</Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog open={deleteConfirm != null} onClose={() => setDeleteConfirm(null)} maxWidth="xs" fullWidth>
+                <DialogTitle>Excluir escola</DialogTitle>
+                <DialogContent>
+                    <Typography>Tem certeza que deseja excluir a escola <strong>"{deleteConfirm?.name}"</strong>? Esta ação é irreversível.</Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setDeleteConfirm(null)}>Cancelar</Button>
+                    <Button onClick={handleConfirmDeleteTenant} color="error" variant="contained">Excluir</Button>
                 </DialogActions>
             </Dialog>
 

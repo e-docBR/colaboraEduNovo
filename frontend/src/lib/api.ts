@@ -396,10 +396,10 @@ const rawBaseQuery = fetchBaseQuery({
   }
 });
 
-/**
- * Wrapper that automatically retries requests with a refreshed access token
- * when the server returns 401. Falls back to logout if refresh fails.
- */
+// Serializes concurrent refresh calls so only one /auth/refresh request fires at a time.
+// Without this, 5 parallel 401s would each try to use the same single-use refresh token.
+let refreshPromise: Promise<boolean> | null = null;
+
 const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (
   args,
   api,
@@ -407,36 +407,57 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
 ) => {
   let result = await rawBaseQuery(args, api, extraOptions);
 
+  if (result.error?.status === 429) {
+    return {
+      error: {
+        status: 429,
+        data: { error: "Muitas tentativas. Aguarde alguns instantes e tente novamente." },
+      } as FetchBaseQueryError,
+    };
+  }
+
   if (result.error?.status === 401) {
     const state = api.getState() as RootState;
     const refreshToken = state.auth.refreshToken;
 
     if (refreshToken) {
-      // Attempt to get a new access token
-      const refreshResult = await rawBaseQuery(
-        {
-          url: "/auth/refresh",
-          method: "POST",
-          headers: { Authorization: `Bearer ${refreshToken}` }
-        },
-        api,
-        extraOptions
-      );
+      if (!refreshPromise) {
+        refreshPromise = (async () => {
+          try {
+            const refreshResult = await rawBaseQuery(
+              {
+                url: "/auth/refresh",
+                method: "POST",
+                headers: { Authorization: `Bearer ${refreshToken}` }
+              },
+              api,
+              extraOptions
+            );
 
-      if (refreshResult.data) {
-        const data = refreshResult.data as { access_token: string; refresh_token: string };
-        const currentState = api.getState() as RootState;
-        api.dispatch(
-          setCredentials({
-            access_token: data.access_token,
-            refresh_token: data.refresh_token,
-            user: currentState.auth.user
-          })
-        );
-        // Retry the original request with the new token
+            if (refreshResult.data) {
+              const data = refreshResult.data as { access_token: string; refresh_token: string };
+              const currentState = api.getState() as RootState;
+              api.dispatch(
+                setCredentials({
+                  access_token: data.access_token,
+                  refresh_token: data.refresh_token,
+                  user: currentState.auth.user
+                })
+              );
+              return true;
+            } else {
+              api.dispatch(logout());
+              return false;
+            }
+          } finally {
+            refreshPromise = null;
+          }
+        })();
+      }
+
+      const refreshed = await refreshPromise;
+      if (refreshed) {
         result = await rawBaseQuery(args, api, extraOptions);
-      } else {
-        api.dispatch(logout());
       }
     } else {
       api.dispatch(logout());
@@ -498,6 +519,10 @@ export const api = createApi({
     getMyAluno: builder.query<AlunoDetail, void>({
       query: () => "/alunos/me",
       providesTags: ["Alunos"]
+    }),
+    getAlunoOcorrenciasSummary: builder.query<{ tipo: string; total: number }[], number>({
+      query: (alunoId) => `/alunos/${alunoId}/ocorrencias/summary`,
+      providesTags: (_r, _e, alunoId) => [{ type: "Ocorrencias", id: alunoId }]
     }),
     listAlunos: builder.query<ListAlunosResponse, ListAlunosParams | void>({
       query: (params) => ({
@@ -591,7 +616,7 @@ export const api = createApi({
         body
       })
     }),
-    forgotPassword: builder.mutation<{ message: string }, { email: string }>({
+    forgotPassword: builder.mutation<{ message: string }, { email: string; tenant_slug: string }>({
       query: (body) => ({
         url: "/auth/forgot-password",
         method: "POST",
@@ -833,6 +858,7 @@ export const {
   useGetTeacherDashboardQuery,
   useGetAlunoQuery,
   useGetMyAlunoQuery,
+  useGetAlunoOcorrenciasSummaryQuery,
   useListAlunosQuery,
   useListTurmasQuery,
   useGetTurmaAlunosQuery,

@@ -1,13 +1,12 @@
 """Auth endpoints."""
 import secrets
-import time
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from pydantic import ValidationError
 from sqlalchemy import select
 
 from ...core.database import session_scope
-from ...core.security import generate_tokens, add_token_to_blocklist, hash_password, verify_password
+from ...core.security import generate_tokens, add_token_to_blocklist, hash_password
 from ...services.usuario_service import UsuarioService
 from ...schemas.usuario import LoginRequest, ChangePasswordRequest
 from ...core.extensions import limiter
@@ -92,11 +91,20 @@ def register(parent: Blueprint) -> None:
             return jsonify({"error": "Dados inválidos", "details": e.errors()}), 422
 
         user_id = int(get_jwt_identity())
-        
+
         with session_scope() as session:
             service = UsuarioService(session)
             service.change_password(user_id, payload.current_password, payload.new_password)
-            
+
+        # Revoke the current token so the user must re-authenticate with the new password.
+        # This invalidates any attacker who obtained the old token before the change.
+        import time as _time
+        jwt_data = get_jwt()
+        jti = jwt_data["jti"]
+        exp = jwt_data.get("exp", 0)
+        ttl = max(int(exp - _time.time()), 1)
+        add_token_to_blocklist(jti, ttl)
+
         return ("", 204)
 
     @bp.post("/auth/forgot-password")
@@ -104,22 +112,44 @@ def register(parent: Blueprint) -> None:
     def forgot_password():
         """Envia email com link de redefinição de senha.
         Sempre retorna 200 para não revelar se o email existe.
+        tenant_slug é obrigatório para garantir que o reset atinja o usuário
+        correto quando o mesmo e-mail existe em múltiplos tenants.
         """
         from ...core.cache import redis_client
         from ...services.communication_service import CommunicationService
         from ...core.config import settings
         from ...models import Usuario
+        from ...models.tenant import Tenant
 
         data = request.get_json() or {}
         email = (data.get("email") or "").strip().lower()
-        if not email:
-            return jsonify({"message": "Se o e-mail estiver cadastrado, você receberá um link em breve."}), 200
+        tenant_slug = (data.get("tenant_slug") or "").strip().lower()
+
+        _ok = jsonify({"message": "Se o e-mail estiver cadastrado, você receberá um link em breve."})
+
+        if not email or not tenant_slug:
+            return _ok, 200
 
         with session_scope() as session:
-            user = session.query(Usuario).filter(
-                Usuario.email == email,
-                Usuario.is_active == True
-            ).first()
+            # Scope the lookup to the specific tenant to avoid resetting the wrong
+            # account when the same e-mail exists in more than one school.
+            tenant = session.execute(
+                select(Tenant).where(Tenant.slug == tenant_slug, Tenant.is_active == True)
+            ).scalar_one_or_none()
+
+            if not tenant:
+                return _ok, 200
+
+            user = (
+                session.query(Usuario)
+                .filter(
+                    Usuario.email == email,
+                    Usuario.tenant_id == tenant.id,
+                    Usuario.is_active == True,
+                )
+                .execution_options(include_all_tenants=True)
+                .first()
+            )
 
             if user:
                 token = secrets.token_urlsafe(32)
@@ -140,7 +170,7 @@ def register(parent: Blueprint) -> None:
                     body=body
                 )
 
-        return jsonify({"message": "Se o e-mail estiver cadastrado, você receberá um link em breve."}), 200
+        return _ok, 200
 
     @bp.post("/auth/reset-password")
     @limiter.limit("10 per hour")
@@ -164,12 +194,11 @@ def register(parent: Blueprint) -> None:
             return jsonify({"error": str(exc)}), 400
 
         redis_key = f"pwd_reset:{token}"
-        user_id_bytes = redis_client.get(redis_key)
+        user_id_bytes = redis_client.getdel(redis_key)
         if not user_id_bytes:
             return jsonify({"error": "Token inválido ou expirado"}), 400
 
         user_id = int(user_id_bytes)
-        redis_client.delete(redis_key)
 
         with session_scope() as session:
             user = session.get(Usuario, user_id)

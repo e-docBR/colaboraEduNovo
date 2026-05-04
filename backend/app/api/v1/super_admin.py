@@ -1,11 +1,13 @@
-from flask import Blueprint, jsonify, request, g
-from flask_jwt_extended import jwt_required, get_jwt
-from sqlalchemy import select
+from flask import Blueprint, jsonify, request
+from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from app.core.database import session_scope
 from app.models.tenant import Tenant
 from app.models.academic_year import AcademicYear
 from app.models.usuario import Usuario
+from app.models.aluno import Aluno
+from app.services.audit import log_action
 
 def register(parent: Blueprint) -> None:
     bp = Blueprint("super_admin", __name__, url_prefix="/admin")
@@ -153,13 +155,37 @@ def register(parent: Blueprint) -> None:
     @jwt_required()
     @super_admin_required
     def delete_tenant(tenant_id):
+        data = request.get_json() or {}
+        if not data.get("confirm_delete"):
+            return jsonify({"error": "Confirme a exclusão enviando confirm_delete: true"}), 400
+
         with session_scope() as session:
             tenant = session.get(Tenant, tenant_id)
             if not tenant:
                 return jsonify({"error": "Escola não encontrada"}), 404
-            
-            # Note: This might fail if there are related records
+
+            # Check all dependent data before attempting delete to avoid FK violations
+            aluno_count = session.execute(
+                select(func.count(Aluno.id)).where(Aluno.tenant_id == tenant_id)
+            ).scalar() or 0
+
+            usuario_count = session.execute(
+                select(func.count(Usuario.id)).where(Usuario.tenant_id == tenant_id)
+            ).scalar() or 0
+
+            if aluno_count > 0 or usuario_count > 0:
+                parts = []
+                if aluno_count:
+                    parts.append(f"{aluno_count} aluno(s)")
+                if usuario_count:
+                    parts.append(f"{usuario_count} usuário(s)")
+                return jsonify({
+                    "error": f"Escola possui {', '.join(parts)} cadastrado(s). Remova todos os dados antes de excluir."
+                }), 409
+
+            actor_id = int(get_jwt_identity())
+            log_action(session, actor_id, "DELETE_TENANT", "Tenant", tenant_id, {"name": tenant.name})
             session.delete(tenant)
-            return "", 204
+            return jsonify({"message": f"Escola '{tenant.name}' excluída com sucesso"}), 200
 
     parent.register_blueprint(bp)

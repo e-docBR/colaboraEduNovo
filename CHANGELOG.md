@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.7] - 2026-05-04
+
+### Segurança e Governança
+- **Controle de Acesso e API**: Revisão e aprimoramento das validações de RBAC e segurança nos endpoints principais da API v1 e na camada de serviços.
+- **Tratamento de Autenticação**: Atualização nas rotinas de segurança e integração de usuários.
+
+### Melhorias de UI/UX
+- **Componentes do Frontend**: Atualizações no painel de navegação (`TopBar.tsx`) e nas telas de gestão de alunos, comunicados, ocorrências, tenants e usuários.
+- **Fluxo de Autenticação**: Melhorias na experiência das telas de login, recuperação e alteração de senhas.
+
+### Infraestrutura e Estabilidade
+- **Docker e Produção**: Ajustes e otimizações no arquivo `docker-compose.prod.yml` e no script `entrypoint.sh` para garantir inicialização confiável dos serviços.
+
 ## [1.6.5] - 2026-04-27
 
 ### Novas Funcionalidades e UI/UX

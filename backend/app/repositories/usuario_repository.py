@@ -18,8 +18,12 @@ class UsuarioRepository(BaseRepository[Usuario]):
             stmt = stmt.where(Usuario.tenant_id == tenant_id)
         return self.session.execute(stmt).scalar_one_or_none()
 
-    def exists_username(self, username: str, exclude_id: Optional[int] = None) -> bool:
+    def exists_username(self, username: str, exclude_id: Optional[int] = None, tenant_id: Optional[int] = None) -> bool:
+        from flask import g
+        effective_tenant = tenant_id if tenant_id is not None else getattr(g, "tenant_id", None)
         stmt = select(Usuario).where(Usuario.username == username)
+        if effective_tenant is not None:
+            stmt = stmt.where(Usuario.tenant_id == effective_tenant)
         if exclude_id:
             stmt = stmt.where(Usuario.id != exclude_id)
         return self.session.execute(stmt).first() is not None

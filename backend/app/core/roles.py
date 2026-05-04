@@ -37,6 +37,12 @@ REPORT_ROLES: frozenset[str] = STAFF_ROLES
 UPLOAD_ROLES: frozenset[str] = frozenset({"admin", "super_admin"})
 
 
+# All roles that may be assigned to a user
+VALID_ROLES: frozenset[str] = frozenset(
+    {"admin", "super_admin", "professor", "coordenador", "diretor", "orientador", "aluno", "responsavel"}
+)
+
+
 def has_any_role(roles: list[str], allowed: frozenset[str]) -> bool:
     """Return True if at least one of *roles* is in *allowed*."""
     return bool(set(roles) & allowed)

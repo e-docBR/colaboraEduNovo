@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ...core.config import settings
 from ...core.database import session_scope
+from ...core.roles import VALID_ROLES
 from ...core.security import hash_password
 from ...models import Aluno, Usuario
 
@@ -115,6 +116,8 @@ def register(parent: Blueprint) -> None:
             return jsonify({"error": "Usuário e senha são obrigatórios"}), 400
         if len(username) > 50:
             return jsonify({"error": "Usuário deve ter no máximo 50 caracteres"}), 400
+        if role not in VALID_ROLES:
+            return jsonify({"error": f"Role inválido. Valores aceitos: {sorted(VALID_ROLES)}"}), 400
 
         from app.core.validators import validate_password_strength
         try:
@@ -209,6 +212,8 @@ def register(parent: Blueprint) -> None:
 
             if "role" in payload:
                 new_role = payload.get("role") or usuario.role
+                if new_role not in VALID_ROLES:
+                    return jsonify({"error": f"Role inválido. Valores aceitos: {sorted(VALID_ROLES)}"}), 400
                 # C4: only super_admin can grant admin/super_admin roles
                 if new_role in ("super_admin", "admin") and not is_super_admin:
                     return jsonify({"error": "Permissão insuficiente para atribuir este papel"}), 403
@@ -318,17 +323,28 @@ def register(parent: Blueprint) -> None:
         # Ensure directory exists
         photos_dir = Path(settings.upload_folder) / "photos"
         photos_dir.mkdir(parents=True, exist_ok=True)
-        
+
         filepath = photos_dir / filename
         file.save(filepath)
-        
-        # Update user in DB
+
+        # Update user in DB and delete the previous photo file to avoid disk leaks
         photo_url = f"/api/v1/static/photos/{filename}"
         with session_scope() as session:
             user = session.get(Usuario, int(user_id))
             if user:
+                old_url = user.photo_url
                 user.photo_url = photo_url
                 session.add(user)
+
+                if old_url:
+                    old_filename = old_url.rsplit("/", 1)[-1]
+                    old_path = (photos_dir / old_filename).resolve()
+                    # Guard against path traversal before deleting
+                    if str(old_path).startswith(str(photos_dir.resolve()) + "/"):
+                        try:
+                            old_path.unlink(missing_ok=True)
+                        except OSError:
+                            pass
                 
         return jsonify({"photo_url": photo_url})
 

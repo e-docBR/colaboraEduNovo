@@ -83,8 +83,10 @@ def register(parent: Blueprint) -> None:
                 return jsonify({"message": "Ocorrência registrada!"}), 201
             except ValueError as e:
                 return jsonify({"error": str(e)}), 400
-            except Exception as e:
-                return jsonify({"error": str(e)}), 500
+            except Exception:
+                from loguru import logger as _log
+                _log.exception("Erro ao criar ocorrência")
+                return jsonify({"error": "Erro interno ao registrar ocorrência"}), 500
 
     @bp.patch("/ocorrencias/<int:ocorrencia_id>")
     @jwt_required()

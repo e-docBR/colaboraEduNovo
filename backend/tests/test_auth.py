@@ -18,23 +18,25 @@ def test_login_failure(client):
     assert response.status_code == 401
 
 def test_change_password(client, auth_headers):
-    # Change password
+    # New password must satisfy strength rules: 8+ chars, uppercase, digit
     response = client.post("/api/v1/auth/change-password", headers=auth_headers, json={
         "current_password": "admin123",
-        "new_password": "newpassword123"
+        "new_password": "NewPass456"
     })
     assert response.status_code == 204
 
-    # Login with new password
+    # After change, the old token is revoked — must log in again with the new password
     response = client.post("/api/v1/auth/login", json={
         "username": "admin_test",
-        "password": "newpassword123"
+        "password": "NewPass456"
     })
     assert response.status_code == 200
 
 def test_upload_photo(client, auth_headers):
+    # Build a minimal valid JPEG: starts with FF D8 magic bytes
+    jpeg_bytes = b"\xff\xd8\xff\xe0" + b"\x00" * 20
     data = {
-        "file": (io.BytesIO(b"fake image data"), "test_photo.jpg")
+        "file": (io.BytesIO(jpeg_bytes), "photo.jpg", "image/jpeg")
     }
     response = client.post(
         "/api/v1/usuarios/me/photo",
@@ -44,4 +46,5 @@ def test_upload_photo(client, auth_headers):
     )
     assert response.status_code == 200
     assert "photo_url" in response.json
-    assert "test_photo.jpg" in response.json["photo_url"]
+    # Filename is UUID-based, not the original name — just verify the URL path prefix
+    assert response.json["photo_url"].startswith("/api/v1/static/photos/")

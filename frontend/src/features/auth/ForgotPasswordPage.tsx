@@ -4,7 +4,11 @@ import {
   Button,
   Card,
   CardContent,
+  FormControl,
+  InputLabel,
   Link,
+  MenuItem,
+  Select,
   Stack,
   TextField,
   Typography,
@@ -12,20 +16,26 @@ import {
 import EmailIcon from "@mui/icons-material/Email";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useForgotPasswordMutation } from "../../lib/api";
+import { useForgotPasswordMutation, useListPublicTenantsQuery } from "../../lib/api";
 
 export const ForgotPasswordPage = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
+  const [tenantSlug, setTenantSlug] = useState("");
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [forgotPassword, { isLoading }] = useForgotPasswordMutation();
+  const { data: tenants = [] } = useListPublicTenantsQuery();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (!tenantSlug) {
+      setError("Selecione a escola antes de continuar.");
+      return;
+    }
     try {
-      await forgotPassword({ email }).unwrap();
+      await forgotPassword({ email, tenant_slug: tenantSlug }).unwrap();
       setSent(true);
     } catch {
       setError("Ocorreu um erro ao enviar o e-mail. Tente novamente.");
@@ -62,7 +72,7 @@ export const ForgotPasswordPage = () => {
               Recuperar senha
             </Typography>
             <Typography variant="body2" color="text.secondary" align="center" mt={1}>
-              Informe o e-mail cadastrado. Se ele existir, você receberá um link para criar uma nova senha.
+              Selecione sua escola e informe o e-mail cadastrado para receber o link de redefinição.
             </Typography>
           </Stack>
 
@@ -77,12 +87,28 @@ export const ForgotPasswordPage = () => {
             </Stack>
           ) : (
             <Stack component="form" spacing={2} onSubmit={handleSubmit}>
+              {tenants.length > 0 && (
+                <FormControl fullWidth required>
+                  <InputLabel>Escola</InputLabel>
+                  <Select
+                    value={tenantSlug}
+                    label="Escola"
+                    onChange={(e) => setTenantSlug(e.target.value)}
+                  >
+                    {tenants.map((t) => (
+                      <MenuItem key={t.id} value={t.slug}>
+                        {t.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
               <TextField
                 label="E-mail"
                 type="email"
                 fullWidth
                 required
-                autoFocus
+                autoFocus={tenants.length === 0}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -91,7 +117,7 @@ export const ForgotPasswordPage = () => {
                 type="submit"
                 variant="contained"
                 fullWidth
-                disabled={isLoading || !email}
+                disabled={isLoading || !email || !tenantSlug}
                 size="large"
               >
                 {isLoading ? "Enviando…" : "Enviar link de recuperação"}

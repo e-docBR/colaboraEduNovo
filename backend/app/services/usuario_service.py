@@ -77,8 +77,7 @@ class UsuarioService:
             
         user.password_hash = hash_password(new_pass)
         user.must_change_password = False
-        self.repository.session.add(user) # Should be in update method in repo but ok
-        self.repository.session.commit()
+        self.repository.session.add(user)
 
     def create_user(self, data: UsuarioCreate) -> UsuarioSchema:
         if self.repository.exists_username(data.username):

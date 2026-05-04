@@ -95,6 +95,7 @@ export const ComunicadosPage = () => {
     const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: "success" | "error" }>({
         open: false, message: "", severity: "success"
     });
+    const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
 
     // Leituras dialog state
     const [leiturasDialogId, setLeiturasDialogId] = useState<number | null>(null);
@@ -151,12 +152,16 @@ export const ComunicadosPage = () => {
         handleCloseMenu();
     };
 
-    const handleDelete = async () => {
+    const handleDelete = () => {
         if (!menuComunicado) return;
-        if (confirm("Tem certeza que deseja excluir este comunicado?")) {
-            await deleteComunicado(menuComunicado.id);
-        }
+        setDeleteConfirmId(menuComunicado.id);
         handleCloseMenu();
+    };
+
+    const handleConfirmDelete = async () => {
+        if (deleteConfirmId == null) return;
+        await deleteComunicado(deleteConfirmId);
+        setDeleteConfirmId(null);
     };
 
     const handleToggleArchive = async () => {
@@ -564,6 +569,17 @@ export const ComunicadosPage = () => {
                     <Button onClick={() => setLeiturasDialogId(null)} sx={{ borderRadius: 2, fontWeight: 600 }}>
                         Fechar
                     </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog open={deleteConfirmId != null} onClose={() => setDeleteConfirmId(null)} maxWidth="xs" fullWidth>
+                <DialogTitle>Excluir comunicado</DialogTitle>
+                <DialogContent>
+                    <Typography>Tem certeza que deseja excluir este comunicado? Esta ação não pode ser desfeita.</Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setDeleteConfirmId(null)}>Cancelar</Button>
+                    <Button onClick={handleConfirmDelete} color="error" variant="contained">Excluir</Button>
                 </DialogActions>
             </Dialog>
 

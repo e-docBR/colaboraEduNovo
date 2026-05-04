@@ -19,7 +19,7 @@ def register(parent: Blueprint) -> None:
             
         try:
             page = max(1, int(request.args.get("page", 1)))
-            per_page = min(200, int(request.args.get("per_page", 20)))
+            per_page = min(100, int(request.args.get("per_page", 20)))
         except (ValueError, TypeError):
             page, per_page = 1, 20
         turno = request.args.get("turno")
@@ -78,6 +78,10 @@ def register(parent: Blueprint) -> None:
             if roles & {"aluno", "responsavel"}:
                 if not matricula_claim or aluno_detail.matricula != matricula_claim:
                     return jsonify({"error": "Acesso restrito"}), 403
+            else:
+                # Staff reading another person's PII — log for LGPD audit trail
+                from ...services.audit import log_action
+                log_action(session, user_id, "READ_PII", "Aluno", aluno_id, {"roles": sorted(roles)})
 
             return jsonify(aluno_detail.model_dump())
 
@@ -134,6 +138,21 @@ def register(parent: Blueprint) -> None:
                 return "", 204
             return jsonify({"error": "Aluno não encontrado"}), 404
 
+    @bp.get("/alunos/<int:aluno_id>/ocorrencias/summary")
+    @jwt_required()
+    @require_roles("admin", "super_admin", "coordenador", "diretor", "orientador", "professor")
+    def get_aluno_ocorrencias_summary(aluno_id: int):
+        from ...models import Ocorrencia
+        from sqlalchemy import func
+        with session_scope() as session:
+            rows = (
+                session.query(Ocorrencia.tipo, func.count(Ocorrencia.id))
+                .filter(Ocorrencia.aluno_id == aluno_id)
+                .group_by(Ocorrencia.tipo)
+                .all()
+            )
+            return jsonify([{"tipo": tipo, "total": total} for tipo, total in rows])
+
     @bp.get("/alunos/<int:aluno_id>/boletim/pdf")
     @jwt_required()
     def download_bulletin_pdf(aluno_id: int):
@@ -142,8 +161,10 @@ def register(parent: Blueprint) -> None:
 
         claims = get_jwt()
         roles = claims.get("roles", [])
+        user_id = int(get_jwt_identity())
         _staff = frozenset(["admin", "super_admin", "coordenador", "diretor", "orientador", "professor"])
-        if not _staff.intersection(roles):
+        is_staff = bool(_staff.intersection(roles))
+        if not is_staff:
             # Non-staff may only download their own bulletin
             own_aluno_id = claims.get("aluno_id")
             if not own_aluno_id or int(own_aluno_id) != aluno_id:
@@ -152,15 +173,20 @@ def register(parent: Blueprint) -> None:
         with session_scope() as session:
             service = AlunoService(session)
             aluno_data = service.get_bulletin_data(aluno_id)
-            
+
             if not aluno_data:
                 return jsonify({"error": "Aluno não encontrado"}), 404
-            
+
+            # Log staff PDF downloads for LGPD audit trail
+            if is_staff:
+                from ...services.audit import log_action
+                log_action(session, user_id, "DOWNLOAD_PDF", "Aluno", aluno_id, {"roles": sorted(roles)})
+
             from ...models import Tenant, AcademicYear
-            
+
             tenant = session.get(Tenant, g.tenant_id)
             school_name = tenant.name if tenant else "ColaboraEDU"
-            
+
             import datetime
             year_label = str(datetime.date.today().year)
             if g.get("academic_year_id"):

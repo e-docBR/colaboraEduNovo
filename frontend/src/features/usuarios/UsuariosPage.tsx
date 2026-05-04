@@ -11,6 +11,7 @@ import {
   DialogContent,
   DialogTitle,
   FormControlLabel,
+  Snackbar,
   Stack,
   Switch,
   Table,
@@ -69,6 +70,7 @@ export const UsuariosPage = () => {
   const [editingUsuario, setEditingUsuario] = useState<UsuarioAccount | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UsuarioAccount | null>(null);
   const [formError, setFormError] = useState<string>("");
+  const [deleteError, setDeleteError] = useState<string>("");
 
   useEffect(() => {
     setPage(1);
@@ -148,8 +150,9 @@ export const UsuariosPage = () => {
     try {
       await deleteUsuario(deleteTarget.id).unwrap();
       setDeleteTarget(null);
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      const msg = error?.data?.error ?? error?.data?.message ?? "Erro ao excluir usuário. Tente novamente.";
+      setDeleteError(msg);
     }
   };
 
@@ -322,6 +325,15 @@ export const UsuariosPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar
+        open={!!deleteError}
+        autoHideDuration={5000}
+        onClose={() => setDeleteError("")}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity="error" onClose={() => setDeleteError("")}>{deleteError}</Alert>
+      </Snackbar>
     </Box>
   );
 };

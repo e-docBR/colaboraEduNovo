@@ -77,7 +77,8 @@ def register(parent: Blueprint) -> None:
     @bp.get("/notas")
     @jwt_required()
     def list_notas():
-        if "aluno" in (get_jwt().get("roles") or []):
+        restricted = {"aluno", "responsavel"}
+        if restricted.intersection(get_jwt().get("roles") or []):
             return jsonify({"error": "Acesso restrito"}), 403
         turma = request.args.get("turma")
         turno = request.args.get("turno")

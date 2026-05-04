@@ -19,13 +19,24 @@ GRAVIDADE_LABELS = {
 }
 
 def notify_occurrence_task(ocorrencia_id: int):
-    """Background task to send occurrence notifications via Email and WhatsApp."""
+    """Background task to send occurrence notifications via Email and WhatsApp.
+
+    Retry behaviour (configured at enqueue time):
+    - If ALL attempted channels fail, raises RuntimeError so RQ reschedules the job.
+    - The status is committed to the DB before raising so operators can see "Parcial"
+      in the UI and know a retry is pending.
+    - The idempotency guard (status == "Enviado") prevents redundant sends on retry.
+    """
     logger.info(f"Starting notification task for occurrence {ocorrencia_id}")
 
     with session_scope() as session:
         occurrence = session.get(Ocorrencia, ocorrencia_id)
         if not occurrence:
             logger.error(f"Occurrence {ocorrencia_id} not found.")
+            return
+
+        if occurrence.notificacao_status == "Enviado":
+            logger.info(f"Occurrence {ocorrencia_id} already notified — skipping duplicate task.")
             return
 
         aluno = occurrence.aluno
@@ -97,12 +108,24 @@ def notify_occurrence_task(ocorrencia_id: int):
         if whatsapp_attempted:
             parts.append("WhatsApp: OK" if status_whatsapp else "WhatsApp: Falha")
 
+        all_failed = False
         if not parts:
             occurrence.notificacao_status = "Sem contato cadastrado"
         elif all("OK" in p for p in parts):
             occurrence.notificacao_status = "Enviado"
         else:
             occurrence.notificacao_status = "Parcial (" + ", ".join(parts) + ")"
+            # All attempted channels failed → signal RQ to retry after backoff
+            if all("Falha" in p for p in parts):
+                all_failed = True
 
         session.add(occurrence)
         logger.info(f"Notification task for occurrence {ocorrencia_id} finished. Status: {occurrence.notificacao_status}")
+
+    # Raise AFTER the session_scope commits so the status is persisted before RQ
+    # reschedules. On retry the task re-reads the status and tries again (the
+    # idempotency guard only short-circuits when status == "Enviado").
+    if all_failed:
+        raise RuntimeError(
+            f"All notification channels failed for occurrence {ocorrencia_id} — will retry"
+        )

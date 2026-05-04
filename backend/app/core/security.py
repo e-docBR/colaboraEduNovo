@@ -1,25 +1,26 @@
 """Security helpers: password hashing, JWT setup, and token blocklist."""
 from datetime import timedelta
 
+import bcrypt as _bcrypt
 from flask_jwt_extended import JWTManager, create_access_token, create_refresh_token
-from passlib.context import CryptContext
 
 # Local in-process cache for revoked JTIs — bounded to 4096 entries to avoid unbounded growth.
 # Entries are never evicted within a process lifetime but JTIs are short-lived (30 min).
 _local_blocklist_cache: dict[str, bool] = {}
 _LOCAL_CACHE_MAX = 4096
 
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 jwt = JWTManager()
 
 
 def hash_password(raw_password: str) -> str:
-    return pwd_context.hash(raw_password)
+    return _bcrypt.hashpw(raw_password.encode(), _bcrypt.gensalt(rounds=12)).decode()
 
 
 def verify_password(raw_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(raw_password, hashed_password)
+    try:
+        return _bcrypt.checkpw(raw_password.encode(), hashed_password.encode())
+    except Exception:
+        return False
 
 
 def generate_tokens(identity: str, roles: list[str], extra_claims: dict[str, object] | None = None) -> dict[str, str]:

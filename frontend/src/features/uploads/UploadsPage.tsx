@@ -29,7 +29,7 @@ export const UploadsPage = () => {
 
   const [uploadBoletim, { isLoading: isUploading }] = useUploadBoletimMutation();
   const { data: jobStatus } = useGetJobStatusQuery(currentJobId || "", {
-    pollingInterval: 2000,
+    pollingInterval: 5000,
     skip: !currentJobId
   });
 

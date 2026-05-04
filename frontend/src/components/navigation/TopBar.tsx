@@ -5,6 +5,7 @@ import LockResetIcon from "@mui/icons-material/LockReset";
 import AddAPhotoIcon from "@mui/icons-material/AddAPhoto";
 import MenuIcon from "@mui/icons-material/Menu";
 import {
+  Alert,
   Avatar,
   Box,
   Divider,
@@ -13,6 +14,7 @@ import {
   ListItemIcon,
   Menu,
   MenuItem,
+  Snackbar,
   TextField,
   Typography
 } from "@mui/material";
@@ -162,6 +164,7 @@ export const TopBar = ({ onMenuClick }: { onMenuClick?: () => void }) => {
   const showSearch = ["/app", "/app/", "/app/alunos", "/app/turmas"].includes(location.pathname);
 
   const [uploadPhoto, { isLoading: isUploadingPhoto }] = useUploadPhotoMutation();
+  const [photoSnackbar, setPhotoSnackbar] = useState<{ open: boolean; message: string; severity: "success" | "error" }>({ open: false, message: "", severity: "success" });
 
   const handleMenuOpen = (event: MouseEvent<HTMLElement>) => setAnchorEl(event.currentTarget);
   const handleMenuClose = () => setAnchorEl(null);
@@ -188,11 +191,9 @@ export const TopBar = ({ onMenuClick }: { onMenuClick?: () => void }) => {
         formData.append("file", file);
         try {
           await uploadPhoto(formData).unwrap();
-          // updateUser is handled by DashboardLayout via getMe invalidation
-          alert("Foto enviada com sucesso! A imagem será atualizada em instantes.");
-        } catch (error) {
-          console.error("Failed to upload photo", error);
-          alert("Erro ao enviar foto. Tente novamente.");
+          setPhotoSnackbar({ open: true, message: "Foto enviada! A imagem será atualizada em instantes.", severity: "success" });
+        } catch {
+          setPhotoSnackbar({ open: true, message: "Erro ao enviar foto. Tente novamente.", severity: "error" });
         }
       }
     };
@@ -280,7 +281,7 @@ export const TopBar = ({ onMenuClick }: { onMenuClick?: () => void }) => {
           aria-expanded={menuOpen ? "true" : undefined}
         >
           <Avatar
-            src={user?.photo_url ? `${user.photo_url}${user.photo_url.includes('?') ? '&' : '?'}t=${Date.now()}` : undefined}
+            src={user?.photo_url || undefined}
             sx={{
               width: 32,
               height: 32,
@@ -347,6 +348,17 @@ export const TopBar = ({ onMenuClick }: { onMenuClick?: () => void }) => {
           </MenuItem>
         </Menu>
       </Box>
+
+      <Snackbar
+        open={photoSnackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setPhotoSnackbar((s) => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity={photoSnackbar.severity} onClose={() => setPhotoSnackbar((s) => ({ ...s, open: false }))}>
+          {photoSnackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

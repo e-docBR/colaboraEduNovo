@@ -70,6 +70,8 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      PGHOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       ALLOWED_ORIGINS: '["https://${DOMAIN}"]'
       UPLOAD_FOLDER: /data/uploads
@@ -137,7 +139,13 @@ services:
         max-file: "3"
     deploy:
       replicas: 3
-    command: ["rq", "worker", "default", "--url", "redis://:${REDIS_PASSWORD}@redis:6379/0"]
+    command: [
+      "rq", "worker", "default",
+      "--url", "redis://:${REDIS_PASSWORD}@redis:6379/0",
+      "--result-ttl", "86400",
+      "--failure-ttl", "604800",
+      "--max-jobs", "500"
+    ]
     environment:
       FLASK_APP: app
       FLASK_ENV: production
@@ -167,6 +175,17 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.prod
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     labels:
       - "traefik.enable=true"
       # HTTPS
@@ -184,6 +203,8 @@ services:
       - app_network
 
   # ─── Monitoramento ─────────────────────────────────────────────────────────
+  # MONITOR_BASICAUTH must be set in .env as a htpasswd string.
+  # Generate with: echo $(htpasswd -nb admin yourpassword) | sed -e 's/\$/\$\$/g'
   uptime-kuma:
     image: louislam/uptime-kuma:1
     restart: unless-stopped
@@ -196,38 +217,50 @@ services:
       - "traefik.http.routers.monitoring.rule=Host(`monitor.${DOMAIN}`)"
       - "traefik.http.routers.monitoring.entrypoints=websecure"
       - "traefik.http.routers.monitoring.tls.certresolver=myresolver"
+      - "traefik.http.routers.monitoring.middlewares=monitor-auth"
       - "traefik.http.services.monitoring.loadbalancer.server.port=3001"
       - "traefik.http.routers.monitoring-http.rule=Host(`monitor.${DOMAIN}`)"
       - "traefik.http.routers.monitoring-http.entrypoints=web"
       - "traefik.http.routers.monitoring-http.middlewares=redirect-to-https"
+      - "traefik.http.middlewares.monitor-auth.basicauth.users=${MONITOR_BASICAUTH}"
 
   # ─── Backup PostgreSQL ──────────────────────────────────────────────────────
-  # Faz pg_dump diário, guarda por 7 dias no volume pgbackups.
-  # Para backup em Object Storage, montar um bucket S3-compatible nesse volume.
+  # Usa crond do Alpine para garantir execução exata às 02:00 independente de
+  # quando o container iniciar.  Para backup em Object Storage, montar um
+  # bucket S3-compatible em /backups.
   pgbackup:
     image: postgres:15-alpine
     restart: unless-stopped
     entrypoint: >
       sh -c "
-        echo 'ColaboraEdu pgbackup started — daily backups at 02:00';
-        while true; do
-          NEXT=$(( $(date -d 'tomorrow 02:00' +%s) - $(date +%s) ));
-          sleep $$NEXT;
-          FILENAME=/backups/backup_$$(date +%Y%m%d_%H%M%S).sql.gz;
-          if pg_dump -h postgres -U $$POSTGRES_USER $$POSTGRES_DB | gzip > $$FILENAME; then
-            SIZE=$$(stat -c%s $$FILENAME 2>/dev/null || echo 0);
-            if [ "$$SIZE" -lt 1024 ]; then
-              echo \"Backup FAILED: arquivo muito pequeno ($$SIZE bytes) — possível dump vazio\";
-              rm -f $$FILENAME;
-            else
-              echo \"Backup OK: $$FILENAME ($$SIZE bytes)\";
-            fi;
-          else
-            echo \"Backup FAILED: pg_dump retornou erro\";
-            rm -f $$FILENAME;
-          fi;
-          find /backups -name 'backup_*.sql.gz' -mtime +7 -delete;
-        done
+        echo 'ColaboraEdu pgbackup started — scheduling daily cron at 02:00';
+
+        cat > /usr/local/bin/run_backup.sh << 'SCRIPT'
+        #!/bin/sh
+        set -e
+        FILENAME=/backups/backup_$$(date +%Y%m%d_%H%M%S).sql.gz
+        echo \"[pgbackup] Starting backup -> $$FILENAME\"
+        if pg_dump -h postgres -U $$POSTGRES_USER $$POSTGRES_DB | gzip > \"$$FILENAME\"; then
+          SIZE=$$(stat -c%s \"$$FILENAME\" 2>/dev/null || echo 0)
+          if [ \"$$SIZE\" -lt 1024 ]; then
+            echo \"[pgbackup] FAILED: dump too small ($${SIZE} bytes) — removing\"
+            rm -f \"$$FILENAME\"
+            exit 1
+          fi
+          echo \"[pgbackup] OK: $$FILENAME ($${SIZE} bytes)\"
+          find /backups -name 'backup_*.sql.gz' -mtime +7 -delete
+        else
+          echo \"[pgbackup] FAILED: pg_dump returned non-zero\"
+          rm -f \"$$FILENAME\"
+          exit 1
+        fi
+        SCRIPT
+
+        chmod +x /usr/local/bin/run_backup.sh;
+        echo '0 2 * * * /usr/local/bin/run_backup.sh >> /proc/1/fd/1 2>&1' | crontab -;
+        echo 'Cron scheduled. Running initial backup now to verify connectivity...';
+        /usr/local/bin/run_backup.sh || echo '[pgbackup] Initial backup failed — check PGPASSWORD/postgres connectivity';
+        crond -f -l 2
       "
     environment:
       PGPASSWORD: ${POSTGRES_PASSWORD}

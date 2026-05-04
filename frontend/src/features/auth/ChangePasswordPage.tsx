@@ -6,7 +6,7 @@ import { Navigate, useNavigate } from "react-router-dom";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
-import { logout, updateUser } from "./authSlice";
+import { logout } from "./authSlice";
 import { useChangePasswordMutation } from "../../lib/api";
 
 const PASSWORD_RULES = [
@@ -61,18 +61,9 @@ export const ChangePasswordPage = () => {
     }
     try {
       await changePassword({ current_password: currentPassword, new_password: newPassword }).unwrap();
-      setSuccess(true);
-      dispatch(
-        updateUser(
-          user
-            ? {
-              ...user,
-              must_change_password: false
-            }
-            : undefined
-        )
-      );
-      navigate("/app", { replace: true });
+      // Force re-login so the revoked token is never silently refreshed (B8).
+      dispatch(logout());
+      navigate("/login", { replace: true, state: { message: "Senha alterada com sucesso. Faça login novamente." } });
     } catch (err) {
       setError(resolveErrorMessage(err));
     }

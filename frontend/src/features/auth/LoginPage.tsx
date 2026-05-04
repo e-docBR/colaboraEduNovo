@@ -23,7 +23,7 @@ import {
 import { alpha } from "@mui/material/styles";
 import type { SelectChangeEvent } from "@mui/material/Select";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import PersonIcon from "@mui/icons-material/Person";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
@@ -52,7 +52,9 @@ const amber = "#f59e0b";
 export const LoginPage = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
+  const locationMessage = (location.state as { message?: string } | null)?.message ?? null;
 
   const isStudentFlow = useMemo(() => {
     const perfil = searchParams.get("perfil")?.toLowerCase();
@@ -459,6 +461,11 @@ export const LoginPage = () => {
                   </Link>
                 </Stack>
 
+                {locationMessage && (
+                  <Alert severity="success" sx={{ borderRadius: 2, fontSize: "0.875rem" }}>
+                    {locationMessage}
+                  </Alert>
+                )}
                 {error && (
                   <Alert
                     severity="error"
