@@ -1,3 +1,5 @@
+import re
+
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
 from sqlalchemy import select, func
@@ -8,6 +10,8 @@ from app.models.academic_year import AcademicYear
 from app.models.usuario import Usuario
 from app.models.aluno import Aluno
 from app.services.audit import log_action
+
+_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$")
 
 def register(parent: Blueprint) -> None:
     bp = Blueprint("super_admin", __name__, url_prefix="/admin")
@@ -53,21 +57,31 @@ def register(parent: Blueprint) -> None:
     def create_tenant():
         data = request.get_json() or {}
         name = (data.get("name") or "").strip()
-        slug = (data.get("slug") or "").strip()
+        slug = (data.get("slug") or "").strip().lower()
         if not name or not slug:
             return jsonify({"error": "Nome e slug são obrigatórios"}), 400
+        if not _SLUG_RE.fullmatch(slug):
+            return jsonify({"error": "Slug deve conter apenas letras minúsculas, números e hífen"}), 400
 
         # Normalize empty string domain to None to avoid unique constraint conflicts
-        domain = data.get("domain") or None
+        domain = (data.get("domain") or "").strip().lower() or None
+        admin_email = (data.get("admin_email") or "").strip().lower()
+        admin_password = data.get("admin_password") or ""
+        if admin_password:
+            from app.core.validators import validate_password_strength
+            try:
+                validate_password_strength(admin_password)
+            except ValueError as exc:
+                return jsonify({"error": str(exc)}), 400
 
         # 2. Check for duplicate admin email (cross-tenant, so bypass tenant filter)
-        if data.get("admin_email"):
+        if admin_email:
             with session_scope() as check_session:
                 existing_user = check_session.query(Usuario).filter(
-                    Usuario.email == data["admin_email"]
+                    Usuario.email == admin_email
                 ).execution_options(include_all_tenants=True).first()
             if existing_user:
-                return jsonify({"error": f"Já existe um usuário com o e-mail '{data['admin_email']}'"}), 409
+                return jsonify({"error": f"Já existe um usuário com o e-mail '{admin_email}'"}), 409
 
         # 3. Create everything in a single transaction.
         # The UNIQUE constraint on tenant.slug catches concurrent duplicates without
@@ -85,15 +99,15 @@ def register(parent: Blueprint) -> None:
                     is_current=True,
                 ))
 
-                if data.get("admin_email") and data.get("admin_password"):
+                if admin_email and admin_password:
                     from app.core.security import hash_password
                     # A3: username unique per tenant — no race condition possible since
                     # this is the first user in a brand-new tenant. DB constraint guards it.
-                    username = data["admin_email"].split("@")[0]
+                    username = admin_email.split("@")[0]
                     session.add(Usuario(
                         username=username,
-                        email=data["admin_email"],
-                        password_hash=hash_password(data["admin_password"]),
+                        email=admin_email,
+                        password_hash=hash_password(admin_password),
                         role="admin",
                         tenant_id=tenant.id,
                         is_active=True,

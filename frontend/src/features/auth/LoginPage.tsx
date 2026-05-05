@@ -65,10 +65,10 @@ export const LoginPage = () => {
     () => {
       const adminRoles = [
         { value: "admin", label: "Administração" },
-        { value: "coordenacao", label: "Coordenação" },
-        { value: "orientacao", label: "Orientação" },
+        { value: "coordenador", label: "Coordenação" },
+        { value: "orientador", label: "Orientação" },
         { value: "professor", label: "Professor" },
-        { value: "direcao", label: "Direção" }
+        { value: "diretor", label: "Direção" }
       ];
       const studentRoles = [
         { value: "aluno", label: "Aluno" },
@@ -95,7 +95,7 @@ export const LoginPage = () => {
   const [rememberMe, setRememberMe] = useState(() => readStorage("colabora.login.remember", "true") === "true");
   const [login, { isLoading }] = useLoginMutation();
   const { data: schools } = useListPublicTenantsQuery();
-  const [selectedSchool, setSelectedSchool] = useState(() => readStorage("colabora.login.school", "central"));
+  const [selectedSchool, setSelectedSchool] = useState(() => readStorage("colabora.login.school", ""));
 
   const resolveErrorMessage = (err: unknown) => {
     if (err && typeof err === "object" && "status" in err) {
@@ -118,11 +118,15 @@ export const LoginPage = () => {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
+    if (!selectedSchool) {
+      setError("Selecione a escola para acessar.");
+      return;
+    }
     try {
       const response = await login({
         username,
         password,
-        tenant_slug: selectedSchool !== "central" ? selectedSchool : undefined
+        tenant_slug: selectedSchool
       }).unwrap();
       dispatch(setCredentials(response));
       if (response.user?.tenant_id) dispatch(setTenantId(response.user.tenant_id));
@@ -158,12 +162,9 @@ export const LoginPage = () => {
   useEffect(() => {
     if (schools && schools.length > 0) {
       const schoolSlugs = schools.map(s => s.slug);
-      const isValid = schoolSlugs.includes(selectedSchool) || (!isStudentFlow && selectedSchool === "central");
-      if (!isValid) {
-        setSelectedSchool(isStudentFlow ? schools[0].slug : "central");
-      }
+      if (!schoolSlugs.includes(selectedSchool)) setSelectedSchool(schools[0].slug);
     }
-  }, [isStudentFlow, selectedSchool, schools]);
+  }, [selectedSchool, schools]);
 
   const heroHighlights = [
     { label: "Integração automática", value: "PDF → KPIs", icon: <UploadFileIcon />, color: teal },
@@ -362,11 +363,7 @@ export const LoginPage = () => {
                   <Select
                     labelId="school-label"
                     label="Escola / Unidade"
-                    value={
-                      (selectedSchool === "central" && !isStudentFlow) || (schools?.some(s => s.slug === selectedSchool))
-                        ? selectedSchool
-                        : ""
-                    }
+                    value={schools?.some(s => s.slug === selectedSchool) ? selectedSchool : ""}
                     displayEmpty
                     startAdornment={
                       <InputAdornment position="start">
@@ -375,11 +372,6 @@ export const LoginPage = () => {
                     }
                     onChange={(event: SelectChangeEvent<string>) => setSelectedSchool(event.target.value as string)}
                   >
-                    {!isStudentFlow && (
-                      <MenuItem value="central">
-                        <em>Central / Super Admin</em>
-                      </MenuItem>
-                    )}
                     {schools?.map((school) => (
                       <MenuItem key={school.slug} value={school.slug}>{school.name}</MenuItem>
                     ))}

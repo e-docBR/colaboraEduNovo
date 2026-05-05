@@ -1,5 +1,5 @@
 from typing import Optional
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.repositories.usuario_repository import UsuarioRepository
@@ -14,10 +14,12 @@ class UsuarioService:
 
     def authenticate(self, username: str, password: str, tenant_slug: Optional[str] = None) -> LoginResponse:
         from app.models.tenant import Tenant
+        from app.models.usuario import Usuario
 
         # Resolve tenant first so we scope the user lookup to the correct school.
         # Without this, two schools with the same username would return the wrong user.
         tenant_id: Optional[int] = None
+        user = None
         if tenant_slug:
             tenant = self.repository.session.execute(
                 select(Tenant).where(Tenant.slug == tenant_slug, Tenant.is_active == True)
@@ -25,8 +27,34 @@ class UsuarioService:
             if not tenant:
                 raise UnauthorizedError("Escola não encontrada")
             tenant_id = tenant.id
+            user = self.repository.get_by_username(username, tenant_id=tenant_id)
 
-        user = self.repository.get_by_username(username, tenant_id=tenant_id)
+            # Platform super_admin accounts are not tied to a school, so allow them
+            # to authenticate even when the UI sends a tenant_slug.
+            if not user:
+                user = self.repository.session.execute(
+                    select(Usuario)
+                    .where(
+                        or_(Usuario.username == username, Usuario.email == username),
+                        Usuario.role == "super_admin",
+                    )
+                    .execution_options(include_all_tenants=True)
+                ).scalar_one_or_none()
+        else:
+            # In SaaS mode, tenant context is mandatory for regular users because
+            # usernames and e-mails are unique only inside each school.
+            super_admins = self.repository.session.execute(
+                select(Usuario)
+                .where(
+                    or_(Usuario.username == username, Usuario.email == username),
+                    Usuario.role == "super_admin",
+                )
+                .execution_options(include_all_tenants=True)
+            ).scalars().all()
+            user = super_admins[0] if len(super_admins) == 1 else None
+            if not user:
+                raise UnauthorizedError("Selecione a escola para acessar")
+
         if not user or not verify_password(password, user.password_hash):
             raise UnauthorizedError("Usuário ou senha inválidos")
 

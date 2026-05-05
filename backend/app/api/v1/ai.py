@@ -12,7 +12,7 @@ from ...services.ai_predictor import predict_risk
 def register(bp: Blueprint):
     @bp.route("/ai/risk/<int:aluno_id>", methods=["GET"])
     @jwt_required()
-    @require_roles("admin", "coordenador", "professor", "diretor", "orientador")
+    @require_roles("admin", "super_admin", "coordenador", "professor", "diretor", "orientador")
     def get_student_risk(aluno_id):
         """Returns ML risk prediction for a specific student."""
         try:
@@ -27,7 +27,7 @@ def register(bp: Blueprint):
 
     @bp.route("/ai/interventions/<int:aluno_id>", methods=["GET"])
     @jwt_required()
-    @require_roles("admin", "coordenador", "professor")
+    @require_roles("admin", "super_admin", "coordenador", "professor")
     def get_student_interventions(aluno_id):
         """Returns pedagogical interventions for a specific student."""
         try:
@@ -42,7 +42,7 @@ def register(bp: Blueprint):
 
     @bp.route("/ai/bulk-interventions", methods=["POST"])
     @jwt_required()
-    @require_roles("admin", "coordenador", "professor", "diretor", "orientador")
+    @require_roles("admin", "super_admin", "coordenador", "professor", "diretor", "orientador")
     def get_bulk_interventions():
         """Returns interventions for a list of student IDs (dashboard 'High Risk')."""
         data = request.get_json() or {}

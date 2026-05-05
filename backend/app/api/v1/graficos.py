@@ -5,12 +5,13 @@ from datetime import datetime
 from typing import Callable
 
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import get_jwt, jwt_required
+from flask_jwt_extended import jwt_required
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ...core.database import session_scope
 from ...core.cache import cache_response
+from ...core.decorators import require_roles
 from ...models import Aluno, Nota
 
 DISCIPLINA_NORMALIZACAO = {
@@ -39,10 +40,9 @@ def register(parent: Blueprint) -> None:
 
     @bp.get("/graficos/<string:slug>")
     @jwt_required()
+    @require_roles("admin", "super_admin", "coordenador", "diretor", "orientador", "professor")
     @cache_response(timeout=600, key_prefix="graficos")
     def get_grafico(slug: str):
-        if "aluno" in (get_jwt().get("roles") or []):
-            return jsonify({"error": "Acesso restrito"}), 403
         builder = GRAPH_BUILDERS.get(slug)
         if not builder:
             return jsonify({"error": "Gráfico não encontrado"}), 404

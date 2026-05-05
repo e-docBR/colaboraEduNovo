@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.8] - 2026-05-04
+
+### Melhorias Gerais e Refatorações
+- **Backend API & Serviços**: Atualização e refatoração de diversos endpoints na API v1 (AI, alunos, chat, dashboard, exports, gráficos, notas, relatórios, super_admin, uploads, usuários) e serviços core (AI predictor, ingestão, intervenções, ocorrências e usuários).
+- **Segurança e Core**: Melhorias no `security.py` e ajustes no `aluno_repository.py`.
+- **Testes Backend**: Ampliação da cobertura de testes automatizados (`test_auth.py`, `test_health.py`, `test_ingestion.py`).
+- **Frontend & Mobile**: Ajustes no fluxo de autenticação e UI no painel web (`LoginPage.tsx`) e no aplicativo mobile (`login.tsx`, `perfil.tsx`, `api.ts`, `auth.store.ts`).
+- **Infraestrutura**: Atualização do script `entrypoint.sh` e remoção do arquivo rastreado indevidamente `letsencrypt/acme.json`.
+
 ## [1.6.7] - 2026-05-04
 
 ### Segurança e Governança

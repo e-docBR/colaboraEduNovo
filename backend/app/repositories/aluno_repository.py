@@ -79,18 +79,18 @@ class AlunoRepository(BaseRepository[Aluno]):
         return results, total
 
     def get_with_notes(self, aluno_id: int) -> Tuple[Optional[Aluno], Optional[float], List[Nota]]:
-        # This is already somewhat safe because it's by aluno_id, 
-        # but to be totally strict we should check tenant.
-        # However, the Aluno.get(aluno_id) is used.
-        aluno = self.get(aluno_id)
-        if not aluno:
-            return None, None, []
-            
         from flask import g
         tenant_id = getattr(g, "tenant_id", None)
         year_id = getattr(g, "academic_year_id", None)
-        
-        if tenant_id and aluno.tenant_id != tenant_id:
+
+        aluno_query = self.session.query(Aluno).filter(Aluno.id == aluno_id)
+        if tenant_id:
+            aluno_query = aluno_query.filter(Aluno.tenant_id == tenant_id)
+        if year_id:
+            aluno_query = aluno_query.filter(Aluno.academic_year_id == year_id)
+
+        aluno = aluno_query.first()
+        if not aluno:
             return None, None, []
 
         media_query = self.session.query(func.avg(Nota.total)).filter(Nota.aluno_id == aluno_id)

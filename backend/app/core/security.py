@@ -75,9 +75,13 @@ def is_token_revoked(jti: str) -> bool:
     except Exception as exc:
         logger.warning(
             f"Redis unavailable for blocklist check (jti={jti}): {exc}. "
-            "Failing OPEN — relying on JWT expiry claim."
+            "Relying on environment-specific revocation policy."
         )
-        return False  # Let the token's own 'exp' claim be the guard
+        from .config import settings
+        # In production, fail closed so a Redis outage cannot silently bypass
+        # logout/password-change revocation. In development/test, keep access
+        # available to avoid local infrastructure failures blocking work.
+        return settings.environment == "production"
 
 
 @jwt.token_in_blocklist_loader

@@ -32,10 +32,13 @@ export default function PerfilScreen() {
     ]);
   };
 
-  const initials = (user?.nome ?? 'U')
+  const displayName = user?.username ?? user?.email ?? 'Usuário';
+  const primaryRole = user?.role ?? 'usuario';
+
+  const initials = displayName
     .split(' ')
     .slice(0, 2)
-    .map((n) => n[0])
+    .map((n: string) => n[0])
     .join('')
     .toUpperCase();
 
@@ -47,8 +50,6 @@ export default function PerfilScreen() {
     super_admin: 'Super Admin',
   };
 
-  const primaryRole = user?.roles?.[0] ?? 'usuario';
-
   return (
     <View style={styles.container}>
       {/* Avatar */}
@@ -56,7 +57,7 @@ export default function PerfilScreen() {
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{initials}</Text>
         </View>
-        <Text style={styles.name}>{user?.nome ?? '—'}</Text>
+        <Text style={styles.name}>{displayName}</Text>
         <View style={styles.roleBadge}>
           <Text style={styles.roleText}>{roleLabel[primaryRole] ?? primaryRole}</Text>
         </View>
@@ -70,7 +71,7 @@ export default function PerfilScreen() {
         <View style={styles.divider} />
         <ProfileRow
           label="Permissões"
-          value={(user?.roles ?? []).join(', ') || '—'}
+          value={primaryRole}
         />
       </View>
 

@@ -1,10 +1,10 @@
 """Dashboard analytics endpoints."""
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import get_jwt, jwt_required
-from sqlalchemy import func
+from flask_jwt_extended import jwt_required
 
 from ...core.database import session_scope
 from ...core.cache import cache_response
+from ...core.decorators import require_roles
 from ...services import build_dashboard_metrics, build_teacher_dashboard
 
 
@@ -13,16 +13,16 @@ def register(parent: Blueprint) -> None:
 
     @bp.get("/dashboard/kpis")
     @jwt_required()
+    @require_roles("admin", "super_admin", "coordenador", "diretor", "orientador", "professor")
     @cache_response(timeout=600, key_prefix="dashboard_kpis")
     def fetch_kpis():
-        if "aluno" in (get_jwt().get("roles") or []):
-            return jsonify({"error": "Acesso restrito"}), 403
         with session_scope() as session:
             metrics = build_dashboard_metrics(session)
         return metrics.to_dict()
 
     @bp.get("/dashboard/professor")
     @jwt_required()
+    @require_roles("admin", "super_admin", "coordenador", "diretor", "orientador", "professor")
     @cache_response(timeout=300, key_prefix="dashboard_professor")
     def fetch_teacher_dashboard():
         query = (request.args.get("q") or "")[:100]  # cap search term length

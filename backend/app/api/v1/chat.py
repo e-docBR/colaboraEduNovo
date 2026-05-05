@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 from loguru import logger
 
+from ...core.decorators import require_roles
 from ...services import process_chat_message
 
 def register(parent: Blueprint) -> None:
@@ -9,6 +10,7 @@ def register(parent: Blueprint) -> None:
 
     @bp.post("/chat")
     @jwt_required()
+    @require_roles("admin", "super_admin", "coordenador", "diretor", "orientador", "professor")
     def chat():
         data = request.json or {}
         message = data.get("message", "")

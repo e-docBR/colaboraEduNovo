@@ -1,7 +1,7 @@
 from sqlalchemy import select
 
 from app.core.database import session_scope
-from app.models import Aluno, Nota, Usuario
+from app.models import AcademicYear, Aluno, Nota, Tenant, Usuario
 from app.services.ingestion import (
     ParsedAlunoRecord,
     ParsedNotaRecord,
@@ -24,9 +24,28 @@ def _cleanup_matricula(matricula: str) -> None:
         session.commit()
 
 
-def test_apply_records_creates_and_updates_aluno_notas():
+def _ensure_test_year() -> tuple[int, int]:
+    with session_scope() as session:
+        tenant = session.query(Tenant).filter(Tenant.slug == "default").first()
+        if not tenant:
+            tenant = Tenant(name="Escola Teste", slug="default", is_active=True)
+            session.add(tenant)
+            session.flush()
+        year = session.query(AcademicYear).filter(
+            AcademicYear.tenant_id == tenant.id,
+            AcademicYear.label == "2026",
+        ).first()
+        if not year:
+            year = AcademicYear(tenant_id=tenant.id, label="2026", is_current=True)
+            session.add(year)
+            session.flush()
+        return tenant.id, year.id
+
+
+def test_apply_records_creates_and_updates_aluno_notas(flask_app):
     matricula = "TEST-INGEST"
     _cleanup_matricula(matricula)
+    tenant_id, academic_year_id = _ensure_test_year()
 
     primeira_execucao = ParsedAlunoRecord(
         matricula=matricula,
@@ -47,7 +66,11 @@ def test_apply_records_creates_and_updates_aluno_notas():
         ],
     )
 
-    assert apply_records([primeira_execucao]) == 1
+    assert apply_records(
+        [primeira_execucao],
+        tenant_id=tenant_id,
+        academic_year_id=academic_year_id,
+    ) == 1
 
     with session_scope() as session:
         aluno = session.execute(select(Aluno).where(Aluno.matricula == matricula)).scalar_one()
@@ -79,12 +102,16 @@ def test_apply_records_creates_and_updates_aluno_notas():
         ],
     )
 
-    assert apply_records([segunda_execucao]) == 1
+    assert apply_records(
+        [segunda_execucao],
+        tenant_id=tenant_id,
+        academic_year_id=academic_year_id,
+    ) == 1
 
     with session_scope() as session:
         aluno = session.execute(select(Aluno).where(Aluno.matricula == matricula)).scalar_one()
         assert aluno.nome == "Fulano Atualizado"
-        assert aluno.turma == "6B"
+        assert aluno.turma == "6º B"
         assert aluno.turno == "VESPERTINO"
         nota = session.execute(
             select(Nota).where(Nota.aluno_id == aluno.id, Nota.disciplina_normalizada == "matematica")
@@ -108,7 +135,7 @@ def test_extract_student_meta_from_pdf_text():
 
     assert meta["nome"] == "ANA KELLY GOMES GONSALVES"
     assert meta["matricula"] == "47270"
-    assert meta["turma"] == "6º ANO A"
+    assert meta["turma"] == "6º A"
     assert meta["turno"] == "Matutino"
 
 
@@ -125,4 +152,4 @@ def test_extract_student_meta_handles_multiple_students_on_page():
     assert len(metas) == 2
     assert metas[0]["matricula"] == "10001"
     assert metas[1]["matricula"] == "10002"
-    assert metas[0]["turma"] == "6º ANO A"
+    assert metas[0]["turma"] == "6º A"

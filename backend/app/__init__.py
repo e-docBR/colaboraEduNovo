@@ -119,6 +119,7 @@ def create_app() -> Flask:
         }
 
     @app.get("/health")
+    @limiter.exempt
     def healthcheck():
         from flask import jsonify as _jsonify
         from sqlalchemy import text as _text
@@ -156,7 +157,7 @@ def create_app() -> Flask:
         system details are not exposed to unauthenticated callers.
         """
         from flask import jsonify as _jsonify, request as _request
-        from flask_jwt_extended import decode_token, exceptions as jwt_exc
+        from flask_jwt_extended import decode_token
         from sqlalchemy import text as _text
         from .core.database import SessionLocal, engine
         from .core.cache import redis_client
@@ -171,6 +172,8 @@ def create_app() -> Flask:
                 is_super_admin = "super_admin" in (data.get("sub_claims", {}).get("roles") or data.get("roles") or [])
             except Exception:
                 pass
+        if not is_super_admin:
+            return _jsonify({"error": "Acesso restrito a Super Administradores"}), 403
 
         checks: dict[str, object] = {}
         overall = "ok"
@@ -215,15 +218,13 @@ def create_app() -> Flask:
         except Exception as exc:
             checks["queue"] = f"unavailable: {exc}"
 
-        # App info (only for authenticated super_admin)
-        if is_super_admin:
-            checks["environment"] = settings.environment
-            checks["db_pool"] = {
-                "size": engine.pool.size(),
-                "checked_in": engine.pool.checkedin(),
-                "checked_out": engine.pool.checkedout(),
-                "overflow": engine.pool.overflow(),
-            }
+        checks["environment"] = settings.environment
+        checks["db_pool"] = {
+            "size": engine.pool.size(),
+            "checked_in": engine.pool.checkedin(),
+            "checked_out": engine.pool.checkedout(),
+            "overflow": engine.pool.overflow(),
+        }
 
         status_code = 200 if overall == "ok" else 503
         return _jsonify({"status": overall, "checks": checks}), status_code

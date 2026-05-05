@@ -80,6 +80,7 @@ def predict_risk(aluno_id: int, session: Session) -> dict:
     """Returns probability and insights about failure risk for a student."""
     from flask import g
     tenant_id = getattr(g, "tenant_id", None)
+    year_id = getattr(g, "academic_year_id", None)
     if not tenant_id:
         return {"score": 0.0, "status": "ERRO", "error": "tenant indisponível"}
 
@@ -102,18 +103,22 @@ def predict_risk(aluno_id: int, session: Session) -> dict:
     try:
         model = joblib.load(model_path)
 
-        aluno = session.get(Aluno, aluno_id)
+        aluno_query = session.query(Aluno).filter(Aluno.id == aluno_id, Aluno.tenant_id == tenant_id)
+        if year_id:
+            aluno_query = aluno_query.filter(Aluno.academic_year_id == year_id)
+        aluno = aluno_query.first()
         if not aluno:
             return {"score": 0.0, "status": "INEXISTENTE"}
 
         # Single aggregation query instead of N+1 loop (A-08 fix)
-        row = session.execute(
-            select(
+        notas_query = select(
                 func.avg(Nota.total).label("mean_score"),
                 func.count(Nota.id).filter(Nota.total < 60).label("low_grades"),
                 func.sum(Nota.faltas).label("faltas"),
-            ).where(Nota.aluno_id == aluno_id)
-        ).one()
+            ).where(Nota.aluno_id == aluno_id, Nota.tenant_id == tenant_id)
+        if year_id:
+            notas_query = notas_query.where(Nota.academic_year_id == year_id)
+        row = session.execute(notas_query).one()
 
         mean_score = float(row.mean_score or 0)
         low_grades = int(row.low_grades or 0)

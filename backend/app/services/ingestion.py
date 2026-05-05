@@ -79,6 +79,9 @@ def enqueue_pdf(filepath: Path, *, turno: str | None = None, turma: str | None =
         academic_year_id=academic_year_id,
         job_timeout=600
     )
+    job.meta["tenant_id"] = tenant_id
+    job.meta["academic_year_id"] = academic_year_id
+    job.save_meta()
     logger.info("Enqueued job {} for file {}", job.id, filepath.name)
     return job.id
 

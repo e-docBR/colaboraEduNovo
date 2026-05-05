@@ -16,7 +16,11 @@ def _safe(value) -> str:
     """Convert any value to a safe string for CSV/Excel cells."""
     if value is None:
         return ""
-    return str(value)
+    text = str(value)
+    # Prevent spreadsheet formula injection when CSV/XLSX is opened by staff.
+    if text.startswith(("=", "+", "-", "@", "\t", "\r")):
+        return "'" + text
+    return text
 
 
 def _float_or_empty(value) -> str:

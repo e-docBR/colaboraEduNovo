@@ -7,6 +7,7 @@ import * as SecureStore from 'expo-secure-store';
 
 // Use the local network IP for development; replace with production URL for release builds.
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:5000/api/v1';
+const TENANT_SLUG = process.env.EXPO_PUBLIC_TENANT_SLUG;
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,
@@ -75,7 +76,11 @@ export interface LoginResponse {
 
 export const authApi = {
   login: (email: string, password: string) =>
-    apiClient.post<LoginResponse>('/auth/login', { username: email, password }), // Backend expects username
+    apiClient.post<LoginResponse>('/auth/login', {
+      username: email,
+      password,
+      tenant_slug: TENANT_SLUG,
+    }), // Backend expects username
   me: () => apiClient.get<LoginResponse['user']>('/usuarios/me'), // Fixed endpoint
 };
 

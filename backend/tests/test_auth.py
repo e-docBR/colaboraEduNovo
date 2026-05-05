@@ -1,9 +1,24 @@
 import io
 
+from app.core.database import session_scope
+from app.core.security import generate_tokens
+from app.models import AcademicYear, Aluno, Tenant
+
+
+def _headers_for(flask_app, role: str, *, tenant_id: int = 1, academic_year_id: int = 1):
+    with flask_app.app_context():
+        tokens = generate_tokens(
+            identity="999",
+            roles=[role],
+            extra_claims={"tenant_id": tenant_id, "academic_year_id": academic_year_id},
+        )
+    return {"Authorization": f"Bearer {tokens['access_token']}"}
+
 def test_login_success(client, admin_user):
     response = client.post("/api/v1/auth/login", json={
         "username": "admin_test",
-        "password": "admin123"
+        "password": "admin123",
+        "tenant_slug": "default",
     })
     assert response.status_code == 200
     data = response.json
@@ -14,6 +29,14 @@ def test_login_failure(client):
     response = client.post("/api/v1/auth/login", json={
         "username": "wrong",
         "password": "wrong"
+    })
+    assert response.status_code == 401
+
+
+def test_regular_user_login_requires_tenant(client, admin_user):
+    response = client.post("/api/v1/auth/login", json={
+        "username": "admin_test",
+        "password": "admin123",
     })
     assert response.status_code == 401
 
@@ -28,7 +51,8 @@ def test_change_password(client, auth_headers):
     # After change, the old token is revoked — must log in again with the new password
     response = client.post("/api/v1/auth/login", json={
         "username": "admin_test",
-        "password": "NewPass456"
+        "password": "NewPass456",
+        "tenant_slug": "default",
     })
     assert response.status_code == 200
 
@@ -48,3 +72,83 @@ def test_upload_photo(client, auth_headers):
     assert "photo_url" in response.json
     # Filename is UUID-based, not the original name — just verify the URL path prefix
     assert response.json["photo_url"].startswith("/api/v1/static/photos/")
+
+
+def test_admin_cannot_create_super_admin(client, auth_headers):
+    response = client.post("/api/v1/usuarios", headers=auth_headers, json={
+        "username": "evil_super",
+        "password": "StrongPass1",
+        "role": "super_admin",
+    })
+    assert response.status_code == 403
+
+
+def test_admin_cannot_create_admin(client, auth_headers):
+    response = client.post("/api/v1/usuarios", headers=auth_headers, json={
+        "username": "evil_admin",
+        "password": "StrongPass1",
+        "role": "admin",
+    })
+    assert response.status_code == 403
+
+
+def test_responsavel_cannot_access_dashboard(client, flask_app, admin_user):
+    response = client.get("/api/v1/dashboard/professor", headers=_headers_for(flask_app, "responsavel"))
+    assert response.status_code == 403
+
+
+def test_staff_cannot_read_aluno_from_other_tenant(client, flask_app, admin_user):
+    with session_scope() as session:
+        tenant = Tenant(name="Outra Escola", slug="outra", is_active=True)
+        session.add(tenant)
+        session.flush()
+        year = AcademicYear(tenant_id=tenant.id, label="2026", is_current=True)
+        session.add(year)
+        session.flush()
+        aluno = Aluno(
+            matricula="TENANT2-001",
+            nome="Aluno Outro Tenant",
+            turma="1A",
+            turno="Matutino",
+            tenant_id=tenant.id,
+            academic_year_id=year.id,
+        )
+        session.add(aluno)
+        session.flush()
+        other_aluno_id = aluno.id
+
+    response = client.get(
+        f"/api/v1/alunos/{other_aluno_id}",
+        headers=_headers_for(flask_app, "professor", tenant_id=1, academic_year_id=1),
+    )
+    assert response.status_code == 404
+
+
+def test_super_admin_cannot_create_tenant_with_weak_admin_password(client, flask_app):
+    response = client.post(
+        "/api/v1/admin/tenants",
+        headers=_headers_for(flask_app, "super_admin"),
+        json={
+            "name": "Escola Senha Fraca",
+            "slug": "escola-senha-fraca",
+            "admin_email": "admin-fraco@example.com",
+            "admin_password": "fraca",
+        },
+    )
+    assert response.status_code == 400
+    assert "senha" in response.json["error"].lower()
+
+
+def test_super_admin_cannot_create_tenant_with_invalid_slug(client, flask_app):
+    response = client.post(
+        "/api/v1/admin/tenants",
+        headers=_headers_for(flask_app, "super_admin"),
+        json={
+            "name": "Escola Slug Inválido",
+            "slug": "../outra",
+            "admin_email": "admin-slug@example.com",
+            "admin_password": "StrongPass1",
+        },
+    )
+    assert response.status_code == 400
+    assert "slug" in response.json["error"].lower()

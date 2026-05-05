@@ -46,5 +46,6 @@ venv/
 
 # Local Data & Debug
 data/
+letsencrypt/acme.json
 Mat_Inicial/
 debug_*.py

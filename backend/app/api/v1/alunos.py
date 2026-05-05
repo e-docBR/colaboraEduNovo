@@ -144,13 +144,15 @@ def register(parent: Blueprint) -> None:
     def get_aluno_ocorrencias_summary(aluno_id: int):
         from ...models import Ocorrencia
         from sqlalchemy import func
+        from flask import g
         with session_scope() as session:
-            rows = (
-                session.query(Ocorrencia.tipo, func.count(Ocorrencia.id))
-                .filter(Ocorrencia.aluno_id == aluno_id)
-                .group_by(Ocorrencia.tipo)
-                .all()
+            query = session.query(Ocorrencia.tipo, func.count(Ocorrencia.id)).filter(
+                Ocorrencia.aluno_id == aluno_id,
+                Ocorrencia.tenant_id == g.tenant_id,
             )
+            if getattr(g, "academic_year_id", None):
+                query = query.filter(Ocorrencia.academic_year_id == g.academic_year_id)
+            rows = query.group_by(Ocorrencia.tipo).all()
             return jsonify([{"tipo": tipo, "total": total} for tipo, total in rows])
 
     @bp.get("/alunos/<int:aluno_id>/boletim/pdf")

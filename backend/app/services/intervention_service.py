@@ -29,11 +29,24 @@ class PedagogicalInterventionService:
         Analyzes a student's performance and generates actionable pedagogical interventions.
         """
         try:
-            aluno = session.get(Aluno, aluno_id)
+            from flask import g
+            tenant_id = getattr(g, "tenant_id", None)
+            year_id = getattr(g, "academic_year_id", None)
+
+            aluno_query = session.query(Aluno).filter(Aluno.id == aluno_id)
+            if tenant_id:
+                aluno_query = aluno_query.filter(Aluno.tenant_id == tenant_id)
+            if year_id:
+                aluno_query = aluno_query.filter(Aluno.academic_year_id == year_id)
+            aluno = aluno_query.first()
             if not aluno:
                 return {}
 
             stm = select(Nota).where(Nota.aluno_id == aluno_id)
+            if tenant_id:
+                stm = stm.where(Nota.tenant_id == tenant_id)
+            if year_id:
+                stm = stm.where(Nota.academic_year_id == year_id)
             notas = session.execute(stm).scalars().all()
             
             if not notas:

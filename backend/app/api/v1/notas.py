@@ -127,7 +127,7 @@ def register(parent: Blueprint) -> None:
     def update_nota(nota_id: int):
         claims = get_jwt()
         roles = claims.get("roles", [])
-        if "admin" not in roles:
+        if not ({"admin", "super_admin"} & set(roles)):
              return jsonify({"error": "Acesso negado. Apenas administradores podem editar notas."}), 403
 
         payload = request.get_json() or {}

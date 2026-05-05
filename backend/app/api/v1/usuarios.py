@@ -118,9 +118,16 @@ def register(parent: Blueprint) -> None:
             return jsonify({"error": "Usuário deve ter no máximo 50 caracteres"}), 400
         if role not in VALID_ROLES:
             return jsonify({"error": f"Role inválido. Valores aceitos: {sorted(VALID_ROLES)}"}), 400
+        roles = get_jwt().get("roles") or []
+        is_super_admin = "super_admin" in roles
+        if role in ("admin", "super_admin") and not is_super_admin:
+            return jsonify({"error": "Permissão insuficiente para criar este papel"}), 403
+        if bool(payload.get("is_admin")) and not is_super_admin:
+            return jsonify({"error": "Apenas super_admin pode conceder privilégios de administrador"}), 403
 
-        from app.core.validators import validate_password_strength
+        from app.core.validators import validate_password_strength, validate_username
         try:
+            validate_username(username)
             validate_password_strength(password)
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400

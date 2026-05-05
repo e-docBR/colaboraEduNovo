@@ -30,7 +30,7 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const { data } = await authApi.login(email.trim().toLowerCase(), password);
-      await signIn(data.access_token, data.user);
+      await signIn(data.access_token, data.refresh_token, data.user);
       router.replace('/(tabs)');
     } catch (error: unknown) {
       const msg =

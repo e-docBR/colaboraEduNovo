@@ -19,7 +19,7 @@ interface AuthState {
   isLoading: boolean;
 
   /** Call after successful login API response */
-  signIn: (token: string, user: User) => Promise<void>;
+  signIn: (token: string, refreshToken: string, user: User) => Promise<void>;
 
   /** Clears all credentials and navigates to login */
   signOut: () => Promise<void>;
@@ -47,8 +47,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isAuthenticated: false,
   isLoading: true,
 
-  signIn: async (token, user) => {
+  signIn: async (token, refreshToken, user) => {
     await SecureStore.setItemAsync('access_token', token);
+    await SecureStore.setItemAsync('refresh_token', refreshToken);
     await SecureStore.setItemAsync('user_data', JSON.stringify(user));
     await SecureStore.setItemAsync('last_active', String(Date.now()));
     set({ token, user, isAuthenticated: true });
@@ -61,6 +62,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       _inactivityTimer = null;
     }
     await SecureStore.deleteItemAsync('access_token');
+    await SecureStore.deleteItemAsync('refresh_token');
     await SecureStore.deleteItemAsync('user_data');
     await SecureStore.deleteItemAsync('last_active');
     set({ token: null, user: null, isAuthenticated: false });
@@ -84,6 +86,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         if (elapsed > INACTIVITY_TIMEOUT_MS) {
           // Session timed out — clear everything
           await SecureStore.deleteItemAsync('access_token');
+          await SecureStore.deleteItemAsync('refresh_token');
           await SecureStore.deleteItemAsync('user_data');
           await SecureStore.deleteItemAsync('last_active');
           set({ isLoading: false });
@@ -121,4 +124,3 @@ AppState.addEventListener('change', (nextState: AppStateStatus) => {
     }
   }
 });
-

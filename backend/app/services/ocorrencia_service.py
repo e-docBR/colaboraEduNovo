@@ -48,6 +48,7 @@ class OcorrenciaService:
 
     def create(self, data: OcorrenciaCreate) -> OcorrenciaSchema:
         from flask import g
+        from app.models import Aluno
         dt = datetime.now()
         if data.data_registro:
             try:
@@ -57,6 +58,18 @@ class OcorrenciaService:
                     f"data_registro inválido: '{data.data_registro}'. "
                     "Use o formato ISO-8601 (ex: '2024-05-15T14:30:00')."
                 ) from exc
+
+        if not getattr(g, "academic_year_id", None):
+            raise ValueError("Nenhum ano letivo ativo configurado para esta escola")
+
+        aluno_query = self.repository.session.query(Aluno).filter(
+            Aluno.id == data.aluno_id,
+            Aluno.tenant_id == g.tenant_id,
+        )
+        if getattr(g, "academic_year_id", None):
+            aluno_query = aluno_query.filter(Aluno.academic_year_id == g.academic_year_id)
+        if not aluno_query.first():
+            raise ValueError("Aluno informado não existe nesta escola/ano letivo")
 
         payload = {
             "aluno_id": data.aluno_id,

@@ -101,11 +101,16 @@ def register(parent: Blueprint) -> None:
     @jwt_required()
     def get_job_status(job_id):
         from rq.job import Job, NoSuchJobError
+        from flask import g
         from ...core.queue import redis_conn
 
         try:
             job = Job.fetch(job_id, connection=redis_conn)
         except NoSuchJobError:
+            return jsonify({"error": "Job não encontrado"}), 404
+
+        job_tenant_id = job.meta.get("tenant_id")
+        if job_tenant_id is None or int(job_tenant_id) != int(g.tenant_id):
             return jsonify({"error": "Job não encontrado"}), 404
 
         return jsonify({
