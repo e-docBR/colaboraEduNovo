@@ -1,7 +1,6 @@
 from io import BytesIO
 from xhtml2pdf import pisa
 from flask import render_template
-from typing import Optional
 
 class DocumentService:
     @staticmethod

@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 from flask import g
 from sqlalchemy import create_engine, event
-from sqlalchemy.orm import scoped_session, sessionmaker, Session
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.query import Query
 from sqlalchemy.ext.declarative import declarative_base
 

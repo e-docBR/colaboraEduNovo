@@ -5,9 +5,16 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
-// Use the local network IP for development; replace with production URL for release builds.
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:5000/api/v1';
-const TENANT_SLUG = process.env.EXPO_PUBLIC_TENANT_SLUG;
+// Use the local emulator URL only for development. Production builds must define
+// the public API explicitly to avoid shipping an app pointed at localhost.
+const configuredBaseUrl = process.env.EXPO_PUBLIC_API_URL;
+
+if (process.env.NODE_ENV === 'production' && !configuredBaseUrl) {
+  throw new Error('EXPO_PUBLIC_API_URL é obrigatório em builds de produção.');
+}
+
+const BASE_URL = configuredBaseUrl ?? 'http://10.0.2.2:5000/api/v1';
+export const DEFAULT_TENANT_SLUG = process.env.EXPO_PUBLIC_TENANT_SLUG;
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,
@@ -74,12 +81,19 @@ export interface LoginResponse {
   };
 }
 
+export interface PublicTenant {
+  id: number;
+  name: string;
+  slug: string;
+}
+
 export const authApi = {
-  login: (email: string, password: string) =>
+  listTenants: () => apiClient.get<PublicTenant[]>('/auth/public-tenants'),
+  login: (email: string, password: string, tenantSlug?: string) =>
     apiClient.post<LoginResponse>('/auth/login', {
       username: email,
       password,
-      tenant_slug: TENANT_SLUG,
+      tenant_slug: tenantSlug ?? DEFAULT_TENANT_SLUG,
     }), // Backend expects username
   me: () => apiClient.get<LoginResponse['user']>('/usuarios/me'), // Fixed endpoint
 };
@@ -93,9 +107,19 @@ export interface Aluno {
   academic_year_id: number;
 }
 
+export interface PaginatedResponse<T> {
+  items: T[];
+  meta: {
+    page: number;
+    per_page: number;
+    total: number;
+    pages?: number;
+  };
+}
+
 export const alunosApi = {
-  list: (params?: { turma?: string; turno?: string; offset?: number; limit?: number; search?: string }) =>
-    apiClient.get<Aluno[]>('/alunos', { params }),
+  list: (params?: { turma?: string; turno?: string; page?: number; per_page?: number; q?: string }) =>
+    apiClient.get<PaginatedResponse<Aluno>>('/alunos', { params }),
   get: (id: number) => apiClient.get<Aluno>(`/alunos/${id}`),
 };
 
@@ -160,7 +184,7 @@ export interface Ocorrencia {
 
 export const ocorrenciasApi = {
   listByAluno: (alunoId: number) =>
-    apiClient.get<Ocorrencia[]>('/ocorrencias', { params: { aluno_id: alunoId } }),
+    apiClient.get<PaginatedResponse<Ocorrencia>>('/ocorrencias', { params: { aluno_id: alunoId } }),
 };
 
 // --- Dashboard ---
@@ -168,9 +192,11 @@ export interface DashboardSummary {
   total_alunos: number;
   total_turmas: number;
   media_geral: number;
-  alunos_risco: number;
+  alunos_em_risco: number;
+  ocorrencias_abertas?: number;
+  comunicados_recentes?: number;
 }
 
 export const dashboardApi = {
-  summary: () => apiClient.get<DashboardSummary>('/dashboard/summary'),
+  summary: () => apiClient.get<DashboardSummary>('/dashboard/kpis'),
 };

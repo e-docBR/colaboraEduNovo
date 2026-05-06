@@ -1,5 +1,5 @@
 """Pedagogical Intervention Service for ColaboraEdu."""
-from typing import List, Dict, Any
+from typing import Dict, Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from ..models import Nota, Aluno

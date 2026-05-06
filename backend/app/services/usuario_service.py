@@ -22,7 +22,7 @@ class UsuarioService:
         user = None
         if tenant_slug:
             tenant = self.repository.session.execute(
-                select(Tenant).where(Tenant.slug == tenant_slug, Tenant.is_active == True)
+                select(Tenant).where(Tenant.slug == tenant_slug, Tenant.is_active.is_(True))
             ).scalar_one_or_none()
             if not tenant:
                 raise UnauthorizedError("Escola não encontrada")
@@ -71,7 +71,7 @@ class UsuarioService:
             current_year = self.repository.session.execute(
                 select(AcademicYear).where(
                     AcademicYear.tenant_id == user.tenant_id,
-                    AcademicYear.is_current == True,
+                    AcademicYear.is_current.is_(True),
                 )
             ).scalar_one_or_none()
             if current_year:

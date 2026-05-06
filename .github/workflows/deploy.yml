@@ -52,11 +52,12 @@ jobs:
           ssh -i ~/.ssh/deploy_key \
               -o StrictHostKeyChecking=no \
               "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
-              "cd ${{ secrets.SERVER_PATH }} && \
-               docker compose -f docker-compose.prod.yml pull 2>/dev/null || true && \
+              "bash -lc 'cd ${{ secrets.SERVER_PATH }} && \
+               ./scripts/prod-preflight.sh && \
+               (docker compose -f docker-compose.prod.yml pull 2>/dev/null || true) && \
                docker compose -f docker-compose.prod.yml up -d --build --remove-orphans && \
                docker compose -f docker-compose.prod.yml exec -T backend flask --app app db upgrade && \
-               docker image prune -f"
+               docker image prune -f'"
 
       - name: Smoke test
         run: |

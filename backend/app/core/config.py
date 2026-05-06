@@ -1,6 +1,7 @@
 """Application settings loaded via pydantic-settings."""
 from functools import lru_cache
 from typing import List
+from urllib.parse import urlparse
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
@@ -55,6 +56,30 @@ class Settings(BaseSettings):
                 raise ValueError("SECRET_KEY insegura para produção")
             if self.jwt_secret_key in ("dev-jwt", "") or len(self.jwt_secret_key) < 32:
                 raise ValueError("JWT_SECRET_KEY insegura para produção")
+            if self.secret_key == self.jwt_secret_key:
+                raise ValueError("SECRET_KEY e JWT_SECRET_KEY devem ser diferentes em produção")
+            if self.database_url.startswith("sqlite"):
+                raise ValueError("DATABASE_URL não pode usar SQLite em produção")
+            redis = urlparse(self.redis_url)
+            if redis.scheme not in {"redis", "rediss"}:
+                raise ValueError("REDIS_URL deve apontar para Redis em produção")
+            if redis.hostname in {"localhost", "127.0.0.1"}:
+                raise ValueError("REDIS_URL não pode apontar para localhost em produção")
+            if not redis.password:
+                raise ValueError("REDIS_URL deve exigir senha em produção")
+            if not self.allowed_origins:
+                raise ValueError("ALLOWED_ORIGINS é obrigatório em produção")
+            for origin in self.allowed_origins:
+                parsed = urlparse(origin)
+                if origin == "*" or parsed.scheme != "https":
+                    raise ValueError("ALLOWED_ORIGINS deve conter apenas origens HTTPS em produção")
+                if parsed.hostname in {"localhost", "127.0.0.1"}:
+                    raise ValueError("ALLOWED_ORIGINS não pode conter localhost em produção")
+            frontend = urlparse(self.frontend_url)
+            if frontend.scheme != "https" or frontend.hostname in {"localhost", "127.0.0.1", None}:
+                raise ValueError("FRONTEND_URL deve ser uma URL HTTPS pública em produção")
+            if not self.smtp_server or not self.smtp_from:
+                raise ValueError("SMTP_SERVER e SMTP_FROM são obrigatórios em produção")
         return self
 
 

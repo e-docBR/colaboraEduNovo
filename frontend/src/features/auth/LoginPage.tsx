@@ -48,6 +48,7 @@ import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 const teal = "#14b8a6";
 const emerald = "#10b981";
 const amber = "#f59e0b";
+const SUPER_ADMIN_ACCESS = "__super_admin__";
 
 export const LoginPage = () => {
   const dispatch = useAppDispatch();
@@ -64,6 +65,7 @@ export const LoginPage = () => {
   const roleOptions = useMemo(
     () => {
       const adminRoles = [
+        { value: "super_admin", label: "Super Admin" },
         { value: "admin", label: "Administração" },
         { value: "coordenador", label: "Coordenação" },
         { value: "orientador", label: "Orientação" },
@@ -95,7 +97,10 @@ export const LoginPage = () => {
   const [rememberMe, setRememberMe] = useState(() => readStorage("colabora.login.remember", "true") === "true");
   const [login, { isLoading }] = useLoginMutation();
   const { data: schools } = useListPublicTenantsQuery();
-  const [selectedSchool, setSelectedSchool] = useState(() => readStorage("colabora.login.school", ""));
+  const [selectedSchool, setSelectedSchool] = useState(() => {
+    const stored = readStorage("colabora.login.school", "");
+    return stored === "central" ? SUPER_ADMIN_ACCESS : stored;
+  });
 
   const resolveErrorMessage = (err: unknown) => {
     if (err && typeof err === "object" && "status" in err) {
@@ -126,7 +131,7 @@ export const LoginPage = () => {
       const response = await login({
         username,
         password,
-        tenant_slug: selectedSchool
+        tenant_slug: selectedSchool === SUPER_ADMIN_ACCESS ? undefined : selectedSchool
       }).unwrap();
       dispatch(setCredentials(response));
       if (response.user?.tenant_id) dispatch(setTenantId(response.user.tenant_id));
@@ -162,9 +167,10 @@ export const LoginPage = () => {
   useEffect(() => {
     if (schools && schools.length > 0) {
       const schoolSlugs = schools.map(s => s.slug);
+      if (!isStudentFlow && selectedSchool === SUPER_ADMIN_ACCESS) return;
       if (!schoolSlugs.includes(selectedSchool)) setSelectedSchool(schools[0].slug);
     }
-  }, [selectedSchool, schools]);
+  }, [isStudentFlow, selectedSchool, schools]);
 
   const heroHighlights = [
     { label: "Integração automática", value: "PDF → KPIs", icon: <UploadFileIcon />, color: teal },
@@ -363,20 +369,35 @@ export const LoginPage = () => {
                   <Select
                     labelId="school-label"
                     label="Escola / Unidade"
-                    value={schools?.some(s => s.slug === selectedSchool) ? selectedSchool : ""}
+                    value={
+                      (!isStudentFlow && selectedSchool === SUPER_ADMIN_ACCESS) || schools?.some(s => s.slug === selectedSchool)
+                        ? selectedSchool
+                        : ""
+                    }
                     displayEmpty
                     startAdornment={
                       <InputAdornment position="start">
                         <BusinessIcon fontSize="small" sx={{ color: "text.disabled", ml: 0.5 }} />
                       </InputAdornment>
                     }
-                    onChange={(event: SelectChangeEvent<string>) => setSelectedSchool(event.target.value as string)}
+                    onChange={(event: SelectChangeEvent<string>) => {
+                      const value = event.target.value as string;
+                      setSelectedSchool(value);
+                      if (value === SUPER_ADMIN_ACCESS) setSelectedRole("super_admin");
+                    }}
                   >
+                    {!isStudentFlow && (
+                      <MenuItem value={SUPER_ADMIN_ACCESS}>
+                        <em>Central / Super Admin</em>
+                      </MenuItem>
+                    )}
                     {schools?.map((school) => (
                       <MenuItem key={school.slug} value={school.slug}>{school.name}</MenuItem>
                     ))}
                   </Select>
-                  <FormHelperText>Selecione a unidade que deseja acessar.</FormHelperText>
+                  <FormHelperText>
+                    {selectedSchool === SUPER_ADMIN_ACCESS ? "Acesso central da plataforma." : "Selecione a unidade que deseja acessar."}
+                  </FormHelperText>
                 </FormControl>
 
                 <FormControl fullWidth>
@@ -390,7 +411,14 @@ export const LoginPage = () => {
                         <BadgeIcon fontSize="small" sx={{ color: "text.disabled", ml: 0.5 }} />
                       </InputAdornment>
                     }
-                    onChange={(event: SelectChangeEvent<string>) => setSelectedRole(event.target.value as string)}
+                    onChange={(event: SelectChangeEvent<string>) => {
+                      const value = event.target.value as string;
+                      setSelectedRole(value);
+                      if (value === "super_admin") setSelectedSchool(SUPER_ADMIN_ACCESS);
+                      if (value !== "super_admin" && selectedSchool === SUPER_ADMIN_ACCESS && schools?.[0]?.slug) {
+                        setSelectedSchool(schools[0].slug);
+                      }
+                    }}
                   >
                     {roleOptions.map((role) => (
                       <MenuItem key={role.value} value={role.value}>{role.label}</MenuItem>

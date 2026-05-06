@@ -110,12 +110,20 @@ services:
     labels:
       - "traefik.enable=true"
       # HTTPS
-      - "traefik.http.routers.backend.rule=Host(`${DOMAIN}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.backend.rule=Host(`${DOMAIN}`) && (PathPrefix(`/api`) || Path(`/health`))"
       - "traefik.http.routers.backend.entrypoints=websecure"
       - "traefik.http.routers.backend.tls.certresolver=myresolver"
+      - "traefik.http.routers.backend.middlewares=security-headers"
       - "traefik.http.services.backend.loadbalancer.server.port=5000"
+      # Security headers at the edge
+      - "traefik.http.middlewares.security-headers.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.security-headers.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.security-headers.headers.stsPreload=true"
+      - "traefik.http.middlewares.security-headers.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.security-headers.headers.frameDeny=true"
+      - "traefik.http.middlewares.security-headers.headers.referrerPolicy=strict-origin-when-cross-origin"
       # HTTP → HTTPS redirect
-      - "traefik.http.routers.backend-http.rule=Host(`${DOMAIN}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.backend-http.rule=Host(`${DOMAIN}`) && (PathPrefix(`/api`) || Path(`/health`))"
       - "traefik.http.routers.backend-http.entrypoints=web"
       - "traefik.http.routers.backend-http.middlewares=redirect-to-https"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
@@ -192,6 +200,7 @@ services:
       - "traefik.http.routers.frontend.rule=Host(`${DOMAIN}`)"
       - "traefik.http.routers.frontend.entrypoints=websecure"
       - "traefik.http.routers.frontend.tls.certresolver=myresolver"
+      - "traefik.http.routers.frontend.middlewares=security-headers"
       - "traefik.http.services.frontend.loadbalancer.server.port=80"
       # HTTP → HTTPS redirect
       - "traefik.http.routers.frontend-http.rule=Host(`${DOMAIN}`)"
@@ -217,7 +226,7 @@ services:
       - "traefik.http.routers.monitoring.rule=Host(`monitor.${DOMAIN}`)"
       - "traefik.http.routers.monitoring.entrypoints=websecure"
       - "traefik.http.routers.monitoring.tls.certresolver=myresolver"
-      - "traefik.http.routers.monitoring.middlewares=monitor-auth"
+      - "traefik.http.routers.monitoring.middlewares=monitor-auth,security-headers"
       - "traefik.http.services.monitoring.loadbalancer.server.port=3001"
       - "traefik.http.routers.monitoring-http.rule=Host(`monitor.${DOMAIN}`)"
       - "traefik.http.routers.monitoring-http.entrypoints=web"

@@ -98,7 +98,7 @@ export const ChatWidget = () => {
             };
             setMessages((prev) => [...prev, botMsg]);
 
-        } catch (error) {
+        } catch {
             const errorMsg: Message = {
                 id: (Date.now() + 1).toString(),
                 text: "Desculpe, tive um problema ao processar sua solicitação complexa.",

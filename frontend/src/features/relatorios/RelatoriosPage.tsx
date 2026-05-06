@@ -1,4 +1,4 @@
-import { Box, Card, CardActionArea, CardContent, Typography, useTheme, Chip, Stack } from "@mui/material";
+import { Box, Card, CardActionArea, Typography, useTheme, Chip, Stack } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { ArrowForward } from "@mui/icons-material";
 import { RELATORIOS, RelatorioDefinition } from "./config";
@@ -17,9 +17,6 @@ const getVariantColor = (variant: string, theme: any) => {
 };
 
 export const RelatoriosPage = () => {
-  const navigate = useNavigate();
-  const theme = useTheme();
-
   return (
     <Box sx={{ minHeight: "100vh" }}>
       {/* Header - Compact */}
@@ -51,15 +48,15 @@ export const RelatoriosPage = () => {
           }
         }}
       >
-        {RELATORIOS.map((relatorio, index) => (
-          <ReportCard key={relatorio.slug} relatorio={relatorio} index={index} />
+        {RELATORIOS.map((relatorio) => (
+          <ReportCard key={relatorio.slug} relatorio={relatorio} />
         ))}
       </Box>
     </Box>
   );
 };
 
-const ReportCard = ({ relatorio, index }: { relatorio: RelatorioDefinition; index: number }) => {
+const ReportCard = ({ relatorio }: { relatorio: RelatorioDefinition }) => {
   const navigate = useNavigate();
   const theme = useTheme();
   const accentColor = getVariantColor(relatorio.variant, theme);

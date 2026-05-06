@@ -62,9 +62,12 @@ class AIAnalystEngine:
                 filters['serie'] = ano_match.group(1)
         
         # 2. Extract Turno
-        if 'MATUTINO' in msg_upper or 'MANH' in msg_upper: filters['turno'] = 'Matutino'
-        if 'VESPERTINO' in msg_upper or 'TARDE' in msg_upper: filters['turno'] = 'Vespertino'
-        if 'NOTURNO' in msg_upper or 'NOITE' in msg_upper: filters['turno'] = 'Noturno'
+        if 'MATUTINO' in msg_upper or 'MANH' in msg_upper:
+            filters['turno'] = 'Matutino'
+        if 'VESPERTINO' in msg_upper or 'TARDE' in msg_upper:
+            filters['turno'] = 'Vespertino'
+        if 'NOTURNO' in msg_upper or 'NOITE' in msg_upper:
+            filters['turno'] = 'Noturno'
 
         # 3. Extract Trimester
         tri_match = re.search(r'([1-3])\s*(?:º|O)?\s*(?:TRIMESTRE|TRI)', msg_upper)
@@ -165,9 +168,12 @@ class AIAnalystEngine:
         target_col = Nota.total
         title_suffix = "Global"
         
-        if tri == 1: target_col, title_suffix = Nota.trimestre1, "1º Tri"
-        elif tri == 2: target_col, title_suffix = Nota.trimestre2, "2º Tri"
-        elif tri == 3: target_col, title_suffix = Nota.trimestre3, "3º Tri"
+        if tri == 1:
+            target_col, title_suffix = Nota.trimestre1, "1º Tri"
+        elif tri == 2:
+            target_col, title_suffix = Nota.trimestre2, "2º Tri"
+        elif tri == 3:
+            target_col, title_suffix = Nota.trimestre3, "3º Tri"
 
         query = select(
             Aluno.turma, 
@@ -339,7 +345,7 @@ class AIAnalystEngine:
     def _analyze_status_stats(self, session: Session, filters: dict) -> AIResponse:
         """Count students by status (APR, REP, REC, etc)."""
         query = select(Nota.situacao, func.count(Nota.id))\
-            .where(Nota.situacao != None)\
+            .where(Nota.situacao.is_not(None))\
             .group_by(Nota.situacao)
         
         if filters.get('turma'):
@@ -362,7 +368,7 @@ class AIAnalystEngine:
 
     def _analyze_comunicados(self, session: Session, filters: dict) -> AIResponse:
         """List current notices."""
-        query = select(Comunicado).where(Comunicado.arquivado == False).order_by(desc(Comunicado.data_envio)).limit(5)
+        query = select(Comunicado).where(Comunicado.arquivado.is_(False)).order_by(desc(Comunicado.data_envio)).limit(5)
         results = session.execute(query).scalars().all()
         
         if not results:

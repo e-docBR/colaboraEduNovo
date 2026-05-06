@@ -19,7 +19,7 @@ def register(parent: Blueprint) -> None:
         from ...models.tenant import Tenant
         with session_scope() as session:
             tenants = session.execute(
-                select(Tenant).where(Tenant.is_active == True)
+                select(Tenant).where(Tenant.is_active.is_(True))
             ).scalars().all()
             return jsonify([{"id": t.id, "name": t.name, "slug": t.slug} for t in tenants])
 
@@ -134,7 +134,7 @@ def register(parent: Blueprint) -> None:
             # Scope the lookup to the specific tenant to avoid resetting the wrong
             # account when the same e-mail exists in more than one school.
             tenant = session.execute(
-                select(Tenant).where(Tenant.slug == tenant_slug, Tenant.is_active == True)
+                select(Tenant).where(Tenant.slug == tenant_slug, Tenant.is_active.is_(True))
             ).scalar_one_or_none()
 
             if not tenant:
@@ -145,7 +145,7 @@ def register(parent: Blueprint) -> None:
                 .filter(
                     Usuario.email == email,
                     Usuario.tenant_id == tenant.id,
-                    Usuario.is_active == True,
+                    Usuario.is_active.is_(True),
                 )
                 .execution_options(include_all_tenants=True)
                 .first()

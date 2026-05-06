@@ -25,15 +25,6 @@ export const AlunoForm = ({ initialData, onSubmit, onCancel, isLoading }: AlunoF
         }
     }, [initialData]);
 
-    const formatPhoneNumber = (value: string) => {
-        const digits = value.replace(/\D/g, "");
-        if (digits.length <= 10) {
-            return digits.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
-        } else {
-            return digits.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3");
-        }
-    };
-
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
         let newValue = value;

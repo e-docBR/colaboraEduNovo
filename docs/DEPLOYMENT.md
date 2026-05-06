@@ -91,7 +91,7 @@ O arquivo `docker-compose.prod.yml` provisiona:
 - **Traefik v2** — proxy reverso com TLS automático (Let's Encrypt)
 - **PostgreSQL 15** — banco de dados com senha
 - **Redis 7** — cache e filas com senha e persistência
-- **Backend** — Gunicorn (2 workers, 4 threads)
+- **Backend** — Gunicorn (4 workers, 4 threads)
 - **Worker** — RQ worker para processamento assíncrono
 - **Frontend** — build Nginx otimizado
 
@@ -102,45 +102,54 @@ O arquivo `docker-compose.prod.yml` provisiona:
 cp .env.example .env
 nano .env  # preencha TODAS as variáveis (veja seção abaixo)
 
-# 2. Aponte o DNS do seu domínio para o IP do servidor
+# 2. Valide variáveis obrigatórias e compose de produção
+./scripts/prod-preflight.sh
+
+# 3. Aponte o DNS do seu domínio para o IP do servidor
 # (A record: seu-dominio.com → IP do servidor)
 
-# 3. Inicie os containers
+# 4. Inicie os containers
 docker-compose -f docker-compose.prod.yml up -d --build
 
-# 4. Aguarde o Traefik obter o certificado SSL (1-2 minutos)
+# 5. Aguarde o Traefik obter o certificado SSL (1-2 minutos)
 docker-compose -f docker-compose.prod.yml logs -f traefik
 
-# 5. Inicialize o banco de dados
+# 6. Inicialize o banco de dados
 docker-compose -f docker-compose.prod.yml exec backend flask --app app init-db
 
-# 6. Crie o super-admin inicial
+# 7. Crie o super-admin inicial
 docker-compose -f docker-compose.prod.yml exec backend flask --app app create-admin \
   --username admin \
   --email admin@suaescola.com.br
 
 # O comando imprime a senha gerada aleatoriamente — salve-a!
 
-# 7. Verifique o status
+# 8. Verifique o status
 docker-compose -f docker-compose.prod.yml ps
-curl https://seu-dominio.com/api/v1/health
+curl https://seu-dominio.com/health
 ```
 
 ### Atualização em Produção
 
 ```bash
 # 1. Backup preventivo
-docker-compose -f docker-compose.prod.yml exec postgres \
-  pg_dump -U ${POSTGRES_USER} ${POSTGRES_DB} > backup_pre_update_$(date +%Y%m%d).sql
+docker-compose -f docker-compose.prod.yml exec -T postgres \
+  pg_dump -U ${POSTGRES_USER} ${POSTGRES_DB} | gzip > backup_pre_update_$(date +%Y%m%d).sql.gz
 
 # 2. Atualizar código
 git pull origin main
 
-# 3. Rebuild e restart
+# 3. Validar configuração antes de mexer nos containers
+./scripts/prod-preflight.sh
+
+# 4. Rebuild e restart
 docker-compose -f docker-compose.prod.yml up -d --build
 
-# 4. Executar migrações (se houver)
+# 5. Executar migrações (se houver)
 docker-compose -f docker-compose.prod.yml exec backend flask --app app db upgrade
+
+# 6. Smoke test
+curl -f https://${DOMAIN}/health
 ```
 
 ---
@@ -286,22 +295,20 @@ docker-compose -f docker-compose.prod.yml exec postgres \
   pg_dump -U ${POSTGRES_USER} ${POSTGRES_DB} \
   > backup_$(date +%Y%m%d_%H%M%S).sql
 
-# Restaurar
-docker-compose -f docker-compose.prod.yml exec -T postgres \
-  psql -U ${POSTGRES_USER} ${POSTGRES_DB} \
-  < backup_20260410_120000.sql
+# Restaurar dump gzipado com confirmação explícita
+scripts/restore-postgres-backup.sh backup_20260410_120000.sql.gz
 ```
 
-### Backup Automático (cron)
+### Backup Automático
 
-Adicione ao crontab do servidor:
+O `docker-compose.prod.yml` já inclui o serviço `pgbackup`, que executa backup diário às 02:00, valida tamanho mínimo do dump e mantém retenção local de 7 dias.
 
 ```bash
-# Backup diário às 2h da manhã
-0 2 * * * cd /opt/colaboraedu && docker-compose -f docker-compose.prod.yml exec -T postgres \
-  pg_dump -U colabora_user colabora_edu \
-  | gzip > /backups/db_$(date +\%Y\%m\%d).sql.gz
+docker-compose -f docker-compose.prod.yml logs pgbackup
+docker volume inspect colaboraedu-produc_pgbackups
 ```
+
+Para produção com várias escolas, replique esse volume para armazenamento externo, como S3-compatible/Object Storage, Hetzner Storage Box ou outro destino fora do servidor.
 
 ### Monitoramento
 
@@ -313,7 +320,7 @@ docker-compose -f docker-compose.prod.yml ps
 docker-compose -f docker-compose.prod.yml logs -f
 
 # Saúde da API
-curl https://seu-dominio.com/api/v1/health
+curl https://seu-dominio.com/health
 
 # Recursos dos containers
 docker stats
@@ -419,6 +426,9 @@ docker-compose -f docker-compose.prod.yml exec backend \
 - [ ] `ALLOWED_ORIGINS` configurado apenas com domínios próprios
 - [ ] SMTP configurado para recuperação de senha
 - [ ] Backup automático do banco configurado
+- [ ] Restore testado com `scripts/restore-postgres-backup.sh`
+- [ ] `./scripts/prod-preflight.sh` passando no servidor
+- [ ] GitHub Actions CI passando antes do deploy
 - [ ] `.env` não versionado no git (verificar `.gitignore`)
 - [ ] Firewall: apenas portas 80 e 443 abertas externamente
 - [ ] Super-admin com senha trocada após primeiro login

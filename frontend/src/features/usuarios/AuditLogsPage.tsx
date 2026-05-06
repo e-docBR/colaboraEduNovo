@@ -9,7 +9,6 @@ import {
     Chip,
     Divider,
     Grid2 as Grid,
-    useTheme,
     Fade,
     TextField,
     MenuItem,
@@ -41,8 +40,6 @@ const getActionColor = (action: string): "error" | "warning" | "success" | "info
 };
 
 export const AuditLogsPage = () => {
-    const theme = useTheme();
-
     const [page, setPage] = useState(1);
     const [actionFilter, setActionFilter] = useState("");
     const [targetTypeFilter, setTargetTypeFilter] = useState("");

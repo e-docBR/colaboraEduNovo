@@ -366,7 +366,6 @@ def register(parent: Blueprint) -> None:
     @bp.get("/usuarios/me")
     @jwt_required()
     def get_me():
-        from flask import g
         user_id = int(get_jwt_identity())
         
         with session_scope() as session:

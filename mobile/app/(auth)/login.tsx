@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -12,14 +12,28 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
-import { authApi } from '../../lib/api';
+import { useQuery } from '@tanstack/react-query';
+import { authApi, DEFAULT_TENANT_SLUG } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth.store';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [selectedTenantSlug, setSelectedTenantSlug] = useState(DEFAULT_TENANT_SLUG ?? '');
   const [loading, setLoading] = useState(false);
   const signIn = useAuthStore((s) => s.signIn);
+
+  const { data: tenants = [], isLoading: tenantsLoading } = useQuery({
+    queryKey: ['public-tenants'],
+    queryFn: () => authApi.listTenants().then((r) => r.data),
+  });
+
+  useEffect(() => {
+    if (selectedTenantSlug || tenants.length === 0) return;
+
+    const defaultTenant = tenants.find((tenant) => tenant.slug === DEFAULT_TENANT_SLUG);
+    setSelectedTenantSlug(defaultTenant?.slug ?? tenants[0].slug);
+  }, [selectedTenantSlug, tenants]);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -27,9 +41,18 @@ export default function LoginScreen() {
       return;
     }
 
+    if (!selectedTenantSlug) {
+      Alert.alert('Atenção', 'Selecione a escola para continuar.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const { data } = await authApi.login(email.trim().toLowerCase(), password);
+      const { data } = await authApi.login(
+        email.trim().toLowerCase(),
+        password,
+        selectedTenantSlug,
+      );
       await signIn(data.access_token, data.refresh_token, data.user);
       router.replace('/(tabs)');
     } catch (error: unknown) {
@@ -66,6 +89,37 @@ export default function LoginScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Entrar na plataforma</Text>
           <Text style={styles.cardSubtitle}>Use suas credenciais institucionais</Text>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Escola</Text>
+            {tenantsLoading ? (
+              <View style={styles.tenantLoading}>
+                <ActivityIndicator color="#3b82f6" size="small" />
+                <Text style={styles.tenantLoadingText}>Carregando escolas...</Text>
+              </View>
+            ) : (
+              <View style={styles.tenantList}>
+                {tenants.map((tenant) => {
+                  const active = selectedTenantSlug === tenant.slug;
+                  return (
+                    <TouchableOpacity
+                      key={tenant.slug}
+                      style={[styles.tenantChip, active && styles.tenantChipActive]}
+                      onPress={() => setSelectedTenantSlug(tenant.slug)}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        style={[styles.tenantChipText, active && styles.tenantChipTextActive]}
+                        numberOfLines={1}
+                      >
+                        {tenant.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </View>
 
           {/* Email */}
           <View style={styles.inputGroup}>
@@ -215,6 +269,45 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 16,
     color: '#f1f5f9',
+  },
+  tenantLoading: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+  },
+  tenantLoadingText: {
+    color: '#94a3b8',
+    fontSize: 13,
+  },
+  tenantList: {
+    gap: 8,
+  },
+  tenantChip: {
+    minHeight: 48,
+    justifyContent: 'center',
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+  },
+  tenantChipActive: {
+    borderColor: '#3b82f6',
+    backgroundColor: '#172554',
+  },
+  tenantChipText: {
+    color: '#94a3b8',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  tenantChipTextActive: {
+    color: '#f8fafc',
   },
   button: {
     backgroundColor: '#3b82f6',

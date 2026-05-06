@@ -159,9 +159,12 @@ def register(parent: Blueprint) -> None:
             if not tenant:
                 return jsonify({"error": "Escola não encontrada"}), 404
             
-            if "name" in data: tenant.name = data["name"]
-            if "is_active" in data: tenant.is_active = data["is_active"]
-            if "domain" in data: tenant.domain = data["domain"]
+            if "name" in data:
+                tenant.name = data["name"]
+            if "is_active" in data:
+                tenant.is_active = data["is_active"]
+            if "domain" in data:
+                tenant.domain = data["domain"]
             
             return jsonify({"message": "Escola atualizada com sucesso"}), 200
 

@@ -22,7 +22,7 @@ import { MouseEvent, useState, useEffect } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
-import { logout, updateUser } from "../../features/auth/authSlice";
+import { logout } from "../../features/auth/authSlice";
 import { setAcademicYearId, setTenantId } from "../../features/app/appSlice";
 import { useUploadPhotoMutation, useListAcademicYearsQuery, useListPublicTenantsQuery, api } from "../../lib/api";
 import { ThemeToggle } from "./ThemeToggle";
@@ -163,7 +163,7 @@ export const TopBar = ({ onMenuClick }: { onMenuClick?: () => void }) => {
 
   const showSearch = ["/app", "/app/", "/app/alunos", "/app/turmas"].includes(location.pathname);
 
-  const [uploadPhoto, { isLoading: isUploadingPhoto }] = useUploadPhotoMutation();
+  const [uploadPhoto] = useUploadPhotoMutation();
   const [photoSnackbar, setPhotoSnackbar] = useState<{ open: boolean; message: string; severity: "success" | "error" }>({ open: false, message: "", severity: "success" });
 
   const handleMenuOpen = (event: MouseEvent<HTMLElement>) => setAnchorEl(event.currentTarget);

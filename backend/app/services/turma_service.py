@@ -1,4 +1,3 @@
-from unicodedata import normalize
 from statistics import mean
 from typing import Optional, List, Dict
 from sqlalchemy.orm import Session
@@ -18,7 +17,8 @@ class TurmaService:
         self.repository = TurmaRepository(session)
 
     def _slugify(self, value: str) -> str:
-        if not value: return ""
+        if not value:
+            return ""
         import re
         from unicodedata import normalize as u_norm
         normalized = u_norm("NFKD", value).encode("ascii", "ignore").decode("ascii")

@@ -603,7 +603,7 @@ export const api = createApi({
         method: "PATCH",
         body
       }),
-      invalidatesTags: (result, _error, { id }) => ["Notas", { type: "Alunos", id: result?.aluno?.id }]
+      invalidatesTags: (result) => ["Notas", { type: "Alunos", id: result?.aluno?.id }]
     }),
     getNotasFiltros: builder.query<NotasFiltrosResponse, void>({
       query: () => "/notas/filtros",
@@ -906,4 +906,3 @@ export const {
   useGetStudentRiskQuery,
   useGetBulkInterventionsMutation
 } = api;
-

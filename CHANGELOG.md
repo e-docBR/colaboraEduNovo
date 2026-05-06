@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.9] - 2026-05-06
+
+### Melhorias de Login e Multi-Tenant
+- **Seletor de Escola (Web e Mobile)**: Otimização da tela de login para suportar nativamente seleções de perfil e tenants. No web, adicionado suporte explícito para acesso `Central / Super Admin`. No mobile, implementada listagem de escolas via chips para escolha antes da autenticação.
+- **Backend & Core**: Ajustes nas configurações do core, tratamento de ingestão de dados (`ingestion.py`) e serviços de chat IA (`ai_chat.py`).
+
+### Infraestrutura e CI/CD
+- **Workflows Automáticos**: Atualizações extensas no `.github/workflows/ci.yml` e ajustes no workflow de deploy para maior estabilidade na integração contínua.
+- **Docker e Deploy**: Ajustes no `docker-compose.prod.yml`, `Makefile` e documentação detalhada no `DEPLOYMENT.md`.
+
 ## [1.6.8] - 2026-05-04
 
 ### Melhorias Gerais e Refatorações

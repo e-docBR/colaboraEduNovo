@@ -166,13 +166,6 @@ def build_teacher_dashboard(session: Session, query: str | None = None, turno: s
 
     # 2. Risk Alerts (Simulated AI or Heuristic)
     # Fetch top 10 risky students based on grades < 60
-    base_stm = select(Aluno, func.avg(Nota.total).label("media")) \
-        .join(Nota) \
-        .group_by(Aluno.id) \
-        .having(func.avg(Nota.total) < 60) \
-        .order_by("media") \
-        .limit(10)
-    
     # We can't easily apply WHERE after GROUP BY/HAVING in this structure without subqueries or careful ordering.
     # Instead, we apply filters to the JOIN source.
     # Re-writing query:
@@ -202,9 +195,6 @@ def build_teacher_dashboard(session: Session, query: str | None = None, turno: s
         })
 
     # 3. Classes Count
-    stm_classes = select(func.count(func.distinct(Aluno.turma)))
-    # If filtering by Aluno properties, we just query from Aluno
-    stm_classes_src = select(func.count(func.distinct(Aluno.turma)))
     # apply_filters expects a statement that has Aluno. 
     # Let's fix apply_filters usage or create a fresh one.
     stm_c = select(func.count(func.distinct(Aluno.turma)))

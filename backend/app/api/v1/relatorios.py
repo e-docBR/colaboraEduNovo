@@ -157,7 +157,8 @@ def build_disciplinas_notas_baixas(
 
     acumulado = {}
     for d_nome, soma, qtd in query.all():
-        if not d_nome: continue
+        if not d_nome:
+            continue
         d_norm = normalizacao.get(d_nome.upper(), d_nome.upper())
         bucket = acumulado.setdefault(d_norm, {"soma": 0.0, "qtd": 0})
         bucket["soma"] += float(soma or 0)
@@ -165,7 +166,8 @@ def build_disciplinas_notas_baixas(
 
     result = []
     for d_nome, val in acumulado.items():
-        if not val["qtd"]: continue
+        if not val["qtd"]:
+            continue
         media = val["soma"] / val["qtd"]
         result.append({"disciplina": d_nome, "media": round(media, 1)})
 

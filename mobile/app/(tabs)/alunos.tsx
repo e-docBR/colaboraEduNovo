@@ -68,16 +68,18 @@ export default function AlunosScreen() {
     isFetchingNextPage,
   } = useInfiniteQuery({
     queryKey: ['alunos', debouncedSearch],
-    queryFn: ({ pageParam = 0 }) =>
+    queryFn: ({ pageParam = 1 }) =>
       alunosApi
-        .list({ offset: pageParam as number, limit: PAGE_SIZE, search: debouncedSearch || undefined })
+        .list({ page: pageParam as number, per_page: PAGE_SIZE, q: debouncedSearch || undefined })
         .then((r) => r.data),
-    getNextPageParam: (lastPage, allPages) =>
-      lastPage.length === PAGE_SIZE ? allPages.length * PAGE_SIZE : undefined,
-    initialPageParam: 0,
+    getNextPageParam: (lastPage) => {
+      const loaded = lastPage.meta.page * lastPage.meta.per_page;
+      return loaded < lastPage.meta.total ? lastPage.meta.page + 1 : undefined;
+    },
+    initialPageParam: 1,
   });
 
-  const allAlunos: Aluno[] = data?.pages.flat() ?? [];
+  const allAlunos: Aluno[] = data?.pages.flatMap((page) => page.items) ?? [];
 
   return (
     <View style={styles.container}>

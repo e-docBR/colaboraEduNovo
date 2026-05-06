@@ -6,7 +6,6 @@ import AppsIcon from "@mui/icons-material/Apps";
 import {
   Box,
   Card,
-  Stack,
   TextField,
   InputAdornment,
   Alert,
@@ -90,7 +89,7 @@ export const NotasPage = () => {
   const { data, isFetching, isError } = useListNotasQuery(queryFilters);
   const { data: turmasData } = useListTurmasQuery();
   const { data: filtrosData } = useGetNotasFiltrosQuery();
-  const notas = data?.items ?? [];
+  const notas = useMemo(() => data?.items ?? [], [data?.items]);
 
   const normalizedSearch = search.trim().toLowerCase();
   const filteredNotas = useMemo(() => {

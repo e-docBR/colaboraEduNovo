@@ -1,4 +1,3 @@
-import re
 from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.core.validators import validate_password_strength, validate_username

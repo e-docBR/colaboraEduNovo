@@ -1,7 +1,6 @@
 """Endpoints para gráficos dinâmicos do dashboard."""
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Callable
 
 from flask import Blueprint, jsonify, request

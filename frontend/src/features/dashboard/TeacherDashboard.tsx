@@ -9,7 +9,6 @@ import {
     Grid2 as Grid,
     List,
     ListItem,
-    ListItemText,
     Typography,
     Chip,
     TextField,

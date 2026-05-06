@@ -5,7 +5,6 @@ import {
   Card,
   CardActionArea,
   CardContent,
-  Chip,
   CircularProgress,
   FormControl,
   Grid2 as Grid,
@@ -409,8 +408,6 @@ export const GraficosPage = () => {
                     const value = heatmap.values.get(`${turmaNome}-${disciplina}`) ?? 0;
                     // Color scale blue -> white -> red ?? No, usually heatmap is one color.
                     // Let's use opacity of Primary Color.
-                    const intensity = Math.min(1, Math.max(0, value / 100)); // assumes 0-100 scale
-
                     // Simple heatmap logic: <50 red, >70 green, else yellow
                     let bgColor = "transparent";
                     let textColor = theme.palette.text.primary;

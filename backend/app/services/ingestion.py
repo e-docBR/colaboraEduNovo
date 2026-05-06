@@ -6,7 +6,6 @@ import re
 from pathlib import Path
 from typing import Iterable, Sequence
 from unicodedata import normalize as u_normalize
-from uuid import uuid4
 
 import pdfplumber
 from loguru import logger
@@ -14,7 +13,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..core.database import session_scope
-from ..models import Aluno, Nota, AcademicYear, Tenant
+from ..core.queue import queue
+from ..models import Aluno, Nota, AcademicYear
 from .accounts import ensure_aluno_user
 
 
@@ -66,8 +66,6 @@ MI_TURMA_PATTERN = re.compile(r"Série:\s*(?P<content>.+?)(?:\s+INEP|$)")
 MI_TURNO_PATTERN = re.compile(r"Turno:\s*(?P<turno>\w+)")
 MI_YEAR_PATTERN = re.compile(r"Ano:\s*(?P<year>\d{4})")
 
-
-from ..core.queue import queue
 
 def enqueue_pdf(filepath: Path, *, turno: str | None = None, turma: str | None = None, tenant_id: int | None = None, academic_year_id: int | None = None) -> str:
     job = queue.enqueue(
@@ -494,17 +492,28 @@ def _upsert_aluno(session: Session, record: ParsedAlunoRecord, tenant_id: int | 
     aluno.academic_year_id = academic_year_id # Update to current processing year
     
     # Update personal info if provided
-    if record.sexo: aluno.sexo = record.sexo
-    if record.data_nascimento: aluno.data_nascimento = record.data_nascimento
-    if record.naturalidade: aluno.naturalidade = record.naturalidade
-    if record.zona: aluno.zona = record.zona
-    if record.endereco: aluno.endereco = record.endereco
-    if record.filiacao: aluno.filiacao = record.filiacao
-    if record.telefones: aluno.telefones = record.telefones
-    if record.cpf: aluno.cpf = record.cpf
-    if record.nis: aluno.nis = record.nis
-    if record.inep: aluno.inep = record.inep
-    if record.situacao_anterior: aluno.situacao_anterior = record.situacao_anterior
+    if record.sexo:
+        aluno.sexo = record.sexo
+    if record.data_nascimento:
+        aluno.data_nascimento = record.data_nascimento
+    if record.naturalidade:
+        aluno.naturalidade = record.naturalidade
+    if record.zona:
+        aluno.zona = record.zona
+    if record.endereco:
+        aluno.endereco = record.endereco
+    if record.filiacao:
+        aluno.filiacao = record.filiacao
+    if record.telefones:
+        aluno.telefones = record.telefones
+    if record.cpf:
+        aluno.cpf = record.cpf
+    if record.nis:
+        aluno.nis = record.nis
+    if record.inep:
+        aluno.inep = record.inep
+    if record.situacao_anterior:
+        aluno.situacao_anterior = record.situacao_anterior
 
     # Only update matricula if it was a placeholder SEM- and we now have a real one
     if aluno.matricula.startswith("SEM-") and not record.matricula.startswith("SEM-"):

@@ -114,7 +114,7 @@ def resolve_tenant_context():
             from app.models.academic_year import AcademicYear
             current_year = session.query(AcademicYear).filter(
                 AcademicYear.tenant_id == tenant.id,
-                AcademicYear.is_current == True
+                AcademicYear.is_current.is_(True)
             ).first()
             if current_year:
                 g.academic_year_id = current_year.id
@@ -135,4 +135,3 @@ def tenant_required():
             return f(*args, **kwargs)
         return decorated_function
     return decorator
-

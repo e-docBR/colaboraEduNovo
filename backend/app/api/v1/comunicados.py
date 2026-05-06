@@ -271,11 +271,11 @@ def register(parent: Blueprint) -> None:
             )
             result = [
                 {
-                    "usuario_id": l.ComunicadoLeitura.usuario_id,
-                    "username": l.username,
-                    "data_leitura": l.ComunicadoLeitura.data_leitura.isoformat(),
+                    "usuario_id": leitura.ComunicadoLeitura.usuario_id,
+                    "username": leitura.username,
+                    "data_leitura": leitura.ComunicadoLeitura.data_leitura.isoformat(),
                 }
-                for l in leituras
+                for leitura in leituras
             ]
             return jsonify({
                 "comunicado_id": comunicado_id,

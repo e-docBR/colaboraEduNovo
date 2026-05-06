@@ -16,7 +16,7 @@
 # =============================================================================
 
 .DEFAULT_GOAL := help
-.PHONY: help setup infra backend worker frontend dev docker test lint stop clean migrate
+.PHONY: help setup infra backend worker frontend dev docker test lint audit prod-preflight restore-backup stop clean migrate
 
 VENV       := .venv
 PYTHON     := $(VENV)/bin/python
@@ -40,6 +40,9 @@ help:
 	@echo "  make migrate    Roda flask db upgrade"
 	@echo "  make test       Executa pytest"
 	@echo "  make lint       Executa ruff check"
+	@echo "  make audit      Audita dependências Python, frontend e mobile"
+	@echo "  make prod-preflight Valida .env e docker-compose de produção"
+	@echo "  make restore-backup BACKUP=arquivo.sql.gz  Restaura backup PostgreSQL"
 	@echo "  make stop       Para containers de infra"
 	@echo "  make clean      Remove caches e temporários"
 	@echo ""
@@ -124,6 +127,20 @@ test:
 # ── Lint ─────────────────────────────────────────────────────────────────────
 lint:
 	$(RUFF) check app
+
+# ── Auditoria de dependências ────────────────────────────────────────────────
+audit:
+	cd backend && .venv/bin/pip-audit
+	cd frontend && npm audit --audit-level=moderate
+	cd mobile && npm audit --audit-level=moderate
+
+# ── Produção ─────────────────────────────────────────────────────────────────
+prod-preflight:
+	./scripts/prod-preflight.sh
+
+restore-backup:
+	@[ -n "$(BACKUP)" ] || (echo "Uso: make restore-backup BACKUP=/caminho/backup.sql.gz" && exit 1)
+	./scripts/restore-postgres-backup.sh "$(BACKUP)"
 
 # ── Parar infra ───────────────────────────────────────────────────────────────
 stop:

@@ -2,7 +2,6 @@
  * Home / Dashboard tab screen.
  * Shows summary cards with key metrics from the backend.
  */
-import { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -13,7 +12,7 @@ import {
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../../lib/auth.store';
-import { dashboardApi, type DashboardSummary } from '../../lib/api';
+import { dashboardApi } from '../../lib/api';
 
 interface MetricCardProps {
   label: string;
@@ -96,7 +95,7 @@ export default function HomeScreen() {
           />
           <MetricCard
             label="Alunos em Risco"
-            value={data.alunos_risco ?? '—'}
+            value={data.alunos_em_risco ?? '—'}
             emoji="⚠️"
             color="#ef4444"
           />

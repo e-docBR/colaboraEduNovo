@@ -22,7 +22,6 @@ import {
   ListItem,
   ListItemText,
   ListItemIcon,
-  Paper,
   Button
 } from "@mui/material";
 import { useEffect, useState } from "react";
@@ -30,7 +29,6 @@ import GradeIcon from "@mui/icons-material/Grade";
 import DownloadIcon from "@mui/icons-material/Download";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import NotificationsIcon from "@mui/icons-material/Notifications";
-import CircleIcon from "@mui/icons-material/Circle";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 
 import { useAppSelector } from "../../app/hooks";

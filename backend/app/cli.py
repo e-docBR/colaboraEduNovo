@@ -277,7 +277,6 @@ def register_cli(app):
             flask maintenance anonymize-pii --days 730 --dry-run
         """
         import datetime
-        from sqlalchemy import select, update
 
         if days < 365:
             click.secho("Mínimo de 365 dias para anonimização.", fg="red")

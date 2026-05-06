@@ -161,8 +161,6 @@ def create_app() -> Flask:
         from sqlalchemy import text as _text
         from .core.database import SessionLocal, engine
         from .core.cache import redis_client
-        import importlib.metadata as _meta
-
         # Lightweight JWT guard (no decorator so we can return structured JSON)
         auth_header = _request.headers.get("Authorization", "")
         is_super_admin = False

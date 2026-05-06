@@ -79,7 +79,7 @@ export const TurmasPage = () => {
     refetchOnMountOrArgChange: true,
     refetchOnFocus: true
   });
-  const turmas = data?.items ?? [];
+  const turmas = useMemo(() => data?.items ?? [], [data?.items]);
 
   const [updateTurma, { isLoading: isUpdating }] = useUpdateTurmaMutation();
   const [deleteTurma, { isLoading: isDeleting }] = useDeleteTurmaMutation();

@@ -113,7 +113,7 @@ export default function AlunoDetailScreen() {
 
   const { data: ocorrencias, isLoading: ocorrLoading, refetch: refetchOcorr } = useQuery({
     queryKey: ['ocorrencias', alunoId],
-    queryFn: () => ocorrenciasApi.listByAluno(alunoId).then((r) => r.data),
+    queryFn: () => ocorrenciasApi.listByAluno(alunoId).then((r) => r.data.items),
     enabled: !!alunoId && tab === 'ocorrencias',
   });
 
