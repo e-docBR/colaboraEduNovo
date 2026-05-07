@@ -113,7 +113,7 @@ class AlunoService:
         aluno = self.repository.create(data)
         log_action(self.repository.session, self.user_id, "CREATE", "Aluno", aluno.id, data)
         from app.services.accounts import ensure_aluno_user, ensure_responsavel_user
-        ensure_aluno_user(self.repository.session, aluno)
+        _usuario_aluno, senha_aluno = ensure_aluno_user(self.repository.session, aluno)
         ensure_responsavel_user(self.repository.session, aluno)
         return AlunoListSchema(
             id=aluno.id,
@@ -121,7 +121,8 @@ class AlunoService:
             nome=aluno.nome,
             turma=aluno.turma,
             turno=aluno.turno,
-            status=aluno.status
+            status=aluno.status,
+            senha_inicial=senha_aluno,
         )
 
     def update_aluno(self, aluno_id: int, data: dict) -> Optional[AlunoListSchema]:

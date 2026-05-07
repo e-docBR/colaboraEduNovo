@@ -160,6 +160,7 @@ export type AlunoSummary = {
   email?: string | null;
   email_responsavel?: string | null;
   telefone_responsavel?: string | null;
+  senha_inicial?: string | null;
 };
 
 

@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, Text, DateTime, ForeignKey, func
+from sqlalchemy import Index, String, Text, DateTime, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..core.database import Base
@@ -24,6 +24,11 @@ class Comunicado(Base, TenantYearMixin):
     target_value = mapped_column(String(100), nullable=True)
     
     arquivado: Mapped[bool] = mapped_column(default=False)
+
+    __table_args__ = (
+        # Índice composto para queries de comunicados por destinatário (frequentes em /comunicados)
+        Index("idx_comunicado_target", "tenant_id", "target_type", "target_value"),
+    )
 
     def to_dict(self):
         data = {

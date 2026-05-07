@@ -39,6 +39,8 @@ def register(parent: Blueprint) -> None:
         turma = (request.form.get("turma") or "").strip()
         if not turno or not turma:
             return jsonify({"error": "turno e turma são obrigatórios"}), 400
+        if len(turno) > 60 or len(turma) > 60:
+            return jsonify({"error": "turno e turma devem ter no máximo 60 caracteres"}), 400
 
         file = request.files["file"]
         filename = secure_filename(file.filename)

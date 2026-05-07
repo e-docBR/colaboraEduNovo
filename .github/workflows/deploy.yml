@@ -44,13 +44,12 @@ jobs:
             --exclude='.env' \
             --exclude='data/' \
             --exclude='letsencrypt/' \
-            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            -e "ssh -i ~/.ssh/deploy_key" \
             ./ "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.SERVER_PATH }}/"
 
       - name: Deploy on server
         run: |
           ssh -i ~/.ssh/deploy_key \
-              -o StrictHostKeyChecking=no \
               "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
               "bash -lc 'cd ${{ secrets.SERVER_PATH }} && \
                ./scripts/prod-preflight.sh && \

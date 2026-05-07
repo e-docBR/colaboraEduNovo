@@ -86,7 +86,8 @@ export const LoginPage = () => {
     return localStorage.getItem(key) ?? fallback;
   };
 
-  const [username, setUsername] = useState(() => readStorage("colabora.login.username", ""));
+  // Username não é persistido no localStorage — usar autocomplete nativo do browser
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -146,17 +147,12 @@ export const LoginPage = () => {
   };
 
   useEffect(() => {
-    if (rememberMe) {
-      localStorage.setItem("colabora.login.username", username);
-    } else {
-      localStorage.removeItem("colabora.login.username");
-    }
-  }, [rememberMe, username]);
-
-  useEffect(() => {
+    // Persiste apenas preferências de UI não-sensíveis (escola, papel, remember)
     localStorage.setItem("colabora.login.role", selectedRole);
     localStorage.setItem("colabora.login.remember", rememberMe.toString());
     localStorage.setItem("colabora.login.school", selectedSchool);
+    // Remove qualquer username que possa ter sido salvo em versões anteriores
+    localStorage.removeItem("colabora.login.username");
   }, [selectedRole, rememberMe, selectedSchool]);
 
   useEffect(() => {

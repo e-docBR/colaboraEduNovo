@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import secrets
 from unicodedata import normalize
 
 from loguru import logger
@@ -27,13 +28,16 @@ def build_aluno_username(aluno: Aluno) -> str:
     return f"{prefix}{aluno.matricula}".lower()
 
 
-def ensure_aluno_user(session: Session, aluno: Aluno) -> Usuario:
+def ensure_aluno_user(session: Session, aluno: Aluno) -> tuple[Usuario, str | None]:
     """Garante que exista um usuário vinculado ao aluno informado.
+
+    Retorna (usuario, senha_inicial) onde senha_inicial é não-None apenas
+    quando uma nova conta é criada. Em lookups de contas existentes retorna None.
 
     Lookup order:
     1. by (tenant_id, role=aluno, matricula) — cross-year stable identifier
     2. by (tenant_id, username) — fallback for legacy accounts without matricula
-    3. create new account
+    3. create new account with random password
     """
     from sqlalchemy.exc import IntegrityError
 
@@ -47,7 +51,7 @@ def ensure_aluno_user(session: Session, aluno: Aluno) -> Usuario:
     ).first()
     if usuario:
         usuario.aluno_id = aluno.id  # point to current year's aluno row
-        return usuario
+        return usuario, None
 
     # 2. Fallback for legacy accounts created before the matricula field existed
     usuario = session.query(Usuario).filter(
@@ -57,13 +61,14 @@ def ensure_aluno_user(session: Session, aluno: Aluno) -> Usuario:
     if usuario:
         usuario.aluno_id = aluno.id
         usuario.matricula = aluno.matricula  # backfill
-        return usuario
+        return usuario, None
 
-    # 3. Create new account
+    # 3. Create new account with cryptographically random initial password
+    initial_password = secrets.token_urlsafe(16)
     try:
         usuario = Usuario(
             username=username,
-            password_hash=hash_password(aluno.matricula),
+            password_hash=hash_password(initial_password),
             role="aluno",
             aluno_id=aluno.id,
             matricula=aluno.matricula,
@@ -73,6 +78,7 @@ def ensure_aluno_user(session: Session, aluno: Aluno) -> Usuario:
         session.add(usuario)
         session.flush()
         logger.info("Usuário aluno {} criado para o tenant {}", username, aluno.tenant_id)
+        return usuario, initial_password
     except IntegrityError:
         session.rollback()
         usuario = session.query(Usuario).filter(
@@ -81,12 +87,15 @@ def ensure_aluno_user(session: Session, aluno: Aluno) -> Usuario:
         if usuario and not usuario.matricula:
             usuario.matricula = aluno.matricula
             usuario.aluno_id = aluno.id
+        return usuario, None
 
-    return usuario
 
+def ensure_responsavel_user(session: Session, aluno: Aluno) -> tuple[Usuario, str | None]:
+    """Garante que exista um usuário responsável vinculado ao aluno informado.
 
-def ensure_responsavel_user(session: Session, aluno: Aluno) -> Usuario:
-    """Garante que exista um usuário responsável vinculado ao aluno informado."""
+    Retorna (usuario, senha_inicial) onde senha_inicial é não-None apenas
+    quando uma nova conta é criada.
+    """
     from sqlalchemy.exc import IntegrityError
 
     username = f"resp_{aluno.matricula}"
@@ -99,7 +108,7 @@ def ensure_responsavel_user(session: Session, aluno: Aluno) -> Usuario:
     ).first()
     if usuario:
         usuario.aluno_id = aluno.id
-        return usuario
+        return usuario, None
 
     # Fallback by username for legacy accounts
     usuario = session.query(Usuario).filter(
@@ -108,12 +117,13 @@ def ensure_responsavel_user(session: Session, aluno: Aluno) -> Usuario:
     if usuario:
         usuario.aluno_id = aluno.id
         usuario.matricula = aluno.matricula
-        return usuario
+        return usuario, None
 
+    initial_password = secrets.token_urlsafe(16)
     try:
         usuario = Usuario(
             username=username,
-            password_hash=hash_password(aluno.matricula),
+            password_hash=hash_password(initial_password),
             role="responsavel",
             aluno_id=aluno.id,
             matricula=aluno.matricula,
@@ -123,6 +133,7 @@ def ensure_responsavel_user(session: Session, aluno: Aluno) -> Usuario:
         session.add(usuario)
         session.flush()
         logger.info("Usuário responsável {} criado para o tenant {}", username, aluno.tenant_id)
+        return usuario, initial_password
     except IntegrityError:
         session.rollback()
         usuario = session.query(Usuario).filter(
@@ -131,8 +142,7 @@ def ensure_responsavel_user(session: Session, aluno: Aluno) -> Usuario:
         if usuario and not usuario.matricula:
             usuario.matricula = aluno.matricula
             usuario.aluno_id = aluno.id
-
-    return usuario
+        return usuario, None
 
 
 def ensure_all_aluno_users(session: Session) -> int:

@@ -48,6 +48,7 @@ class AlunoListSchema(AlunoBase):
     faltas: Optional[int] = None
     media_faltas: Optional[float] = None
     status: Optional[str] = None
+    senha_inicial: Optional[str] = None
 
 
 class AlunoDetailSchema(AlunoBase):

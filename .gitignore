@@ -14,8 +14,9 @@ instance/
 .env
 .env.*
 evo_.env
-# Exceção: template de dev (sem segredos reais) deve ser commitado
-!.env.development
+# Templates de ambiente (sem segredos reais) devem ser commitados
+!.env.example
+!.env.development.example
 .mypy_cache/
 pytest.cache/
 htmlcov/

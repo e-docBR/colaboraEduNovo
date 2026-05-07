@@ -25,7 +25,7 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import AddIcon from "@mui/icons-material/Add";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link as RouterLink, useSearchParams } from "react-router-dom";
 
 import { useListAlunosQuery, useListTurmasQuery, useCreateAlunoMutation } from "../../lib/api";
@@ -83,6 +83,17 @@ export const AlunosPage = () => {
   const [open, setOpen] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [credentialsDialog, setCredentialsDialog] = useState<{ nome: string; username: string; senha: string } | null>(null);
+  const credentialsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Auto-oculta credenciais após 60 segundos para reduzir exposição em tela
+  useEffect(() => {
+    if (credentialsDialog) {
+      credentialsTimerRef.current = setTimeout(() => setCredentialsDialog(null), 60_000);
+    }
+    return () => {
+      if (credentialsTimerRef.current) clearTimeout(credentialsTimerRef.current);
+    };
+  }, [credentialsDialog]);
 
   const user = useAppSelector((state) => state.auth.user);
   const [createAluno, { isLoading: isCreating }] = useCreateAlunoMutation();
@@ -102,7 +113,8 @@ export const AlunosPage = () => {
       setCredentialsDialog({
         nome: aluno.nome,
         username: buildUsername(aluno.nome, aluno.matricula),
-        senha: aluno.matricula,
+        // Usa senha gerada pelo backend; fallback para matrícula em contas já existentes
+        senha: aluno.senha_inicial ?? aluno.matricula,
       });
     } catch (error: any) {
       const msg = error?.data?.error ?? error?.data?.message ?? "Erro ao cadastrar aluno. Tente novamente.";

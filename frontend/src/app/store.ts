@@ -12,7 +12,11 @@ export const store = configureStore({
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
-      serializableCheck: false
+      serializableCheck: {
+        // RTK Query usa FormData e outros objetos não-serializáveis internamente
+        ignoredActions: ["api/executeQuery/fulfilled", "api/executeMutation/fulfilled"],
+        ignoredPaths: ["api.queries", "api.mutations"],
+      },
     }).concat(api.middleware)
 });
 

@@ -44,8 +44,11 @@ def register(parent: Blueprint) -> None:
                 log_action(session, response.user.id, "LOGIN_SUCCESS", "Usuario", response.user.id, {"ip": ip})
                 return jsonify(response.model_dump())
             except Exception:
-                # Loga tentativa de login falha sem revelar qual campo estava errado
-                log_action(session, None, "LOGIN_FAILED", "Usuario", None, {"username": payload.username, "ip": ip})
+                # Garante que o log de falha não mascara a exceção original
+                try:
+                    log_action(session, None, "LOGIN_FAILED", "Usuario", None, {"username": payload.username, "ip": ip})
+                except Exception:
+                    pass
                 raise
 
     @bp.post("/auth/refresh")
@@ -153,7 +156,8 @@ def register(parent: Blueprint) -> None:
 
             if user:
                 token = secrets.token_urlsafe(32)
-                redis_client.setex(f"pwd_reset:{token}", 3600, str(user.id))
+                # Armazena user_id:tenant_id para validar isolamento de tenant no reset
+                redis_client.setex(f"pwd_reset:{token}", 3600, f"{user.id}:{tenant.id}")
 
                 reset_url = f"{settings.frontend_url}/redefinir-senha?token={token}"
                 body = (
@@ -194,16 +198,27 @@ def register(parent: Blueprint) -> None:
             return jsonify({"error": str(exc)}), 400
 
         redis_key = f"pwd_reset:{token}"
-        user_id_bytes = redis_client.getdel(redis_key)
-        if not user_id_bytes:
+        stored = redis_client.getdel(redis_key)
+        if not stored:
             return jsonify({"error": "Token inválido ou expirado"}), 400
 
-        user_id = int(user_id_bytes)
+        # Valor armazenado: "user_id:tenant_id"
+        parts = stored.split(":", 1)
+        if len(parts) != 2:
+            return jsonify({"error": "Token inválido ou expirado"}), 400
+        try:
+            user_id = int(parts[0])
+            token_tenant_id = int(parts[1])
+        except ValueError:
+            return jsonify({"error": "Token inválido ou expirado"}), 400
 
         with session_scope() as session:
             user = session.get(Usuario, user_id)
             if not user or not user.is_active:
                 return jsonify({"error": "Usuário não encontrado"}), 404
+            # Valida que o token pertence ao tenant correto (defesa em profundidade)
+            if user.tenant_id != token_tenant_id:
+                return jsonify({"error": "Token inválido ou expirado"}), 400
 
             user.password_hash = hash_password(new_password)
             user.must_change_password = False

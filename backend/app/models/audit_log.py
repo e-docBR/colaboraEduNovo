@@ -1,12 +1,7 @@
-from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, Index, Integer, String, DateTime, ForeignKey, JSON, func
 from sqlalchemy.orm import relationship
 
 from ..core.database import Base
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 class AuditLog(Base):
@@ -14,13 +9,18 @@ class AuditLog(Base):
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True)
-    # C3: tenant isolation for audit logs
-    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True)
     action = Column(String(50), nullable=False)
     target_type = Column(String(50), nullable=False)
     target_id = Column(String(50), nullable=True)
     details = Column(JSON, nullable=True)
-    timestamp = Column(DateTime(timezone=True), default=_utcnow)
+    # server_default garante timezone consistente independente do app server
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        # Índice composto para queries de auditoria por tenant+período (frequentes)
+        Index("idx_audit_tenant_ts", "tenant_id", "timestamp"),
+    )
 
     usuario = relationship("Usuario")
 

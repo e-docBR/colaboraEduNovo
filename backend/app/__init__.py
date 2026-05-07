@@ -51,12 +51,17 @@ def create_app() -> Flask:
     # In production we require Redis-backed storage; per-process in-memory storage
     # would allow up to (workers × limit) attempts per window, undermining brute-force
     # protection.
+    # RATELIMIT_STORAGE_FALLBACK_STRATEGY="raise" faz o limiter levantar StorageError
+    # quando o Redis cai em tempo de execução. O handler abaixo converte isso em 503,
+    # garantindo que autenticação falhe de forma segura (fail-closed) em vez de
+    # permitir brute-force ilimitado (fail-open).
     try:
         settings_redis = getattr(settings, 'redis_url', None)
         if settings_redis:
             app.config["RATELIMIT_STORAGE_URI"] = settings_redis
+            app.config["RATELIMIT_STORAGE_FALLBACK_STRATEGY"] = "raise"
         limiter.init_app(app)
-        logger.info("Flask-Limiter configured with Redis storage")
+        logger.info("Flask-Limiter configured with Redis storage (fallback=raise)")
     except Exception as e:
         logger.error(f"Flask-Limiter failed to configure Redis storage: {e}")
         if settings.environment == "production":

@@ -3,6 +3,19 @@ from pydantic import ValidationError as PydanticValidationError
 from .exceptions import AppError
 
 def register_error_handlers(app):
+    # Quando Redis cai em tempo de execução, o Flask-Limiter levanta StorageError.
+    # Retornamos 503 para que o cliente saiba que o serviço está temporariamente
+    # indisponível em vez de silenciosamente permitir requisições ilimitadas.
+    try:
+        from limits.errors import StorageError
+
+        @app.errorhandler(StorageError)
+        def handle_storage_error(_error):
+            from loguru import logger as _logger
+            _logger.error("Rate limit storage (Redis) unavailable — returning 503")
+            return jsonify({"error": "Serviço temporariamente indisponível. Tente novamente em instantes."}), 503
+    except ImportError:
+        pass
     
     @app.errorhandler(AppError)
     def handle_app_error(error):

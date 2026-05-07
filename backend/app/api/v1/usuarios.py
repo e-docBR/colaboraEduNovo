@@ -346,8 +346,8 @@ def register(parent: Blueprint) -> None:
                 if old_url:
                     old_filename = old_url.rsplit("/", 1)[-1]
                     old_path = (photos_dir / old_filename).resolve()
-                    # Guard against path traversal before deleting
-                    if str(old_path).startswith(str(photos_dir.resolve()) + "/"):
+                    # is_relative_to() é robusto contra symlinks e normaliza o path
+                    if old_path.is_relative_to(photos_dir.resolve()):
                         try:
                             old_path.unlink(missing_ok=True)
                         except OSError:
