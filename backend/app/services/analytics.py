@@ -1,7 +1,7 @@
 """Analytics service responsible for KPIs and reports."""
 from dataclasses import dataclass
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from ..models import Aluno, Nota
@@ -150,19 +150,17 @@ def build_teacher_dashboard(session: Session, query: str | None = None, turno: s
     subq = apply_filters(subq)
     subq = subq.group_by(Nota.aluno_id).subquery()
     
-    # Bucket queries
-    ranges = [
-        (0, 20, "0-20"),
-        (20, 40, "20-40"),
-        (40, 60, "40-60"),
-        (60, 80, "60-80"),
-        (80, 101, "80-100")
-    ]
-    
-    for start, end, label in ranges:
-        stm_dist = select(func.count()).select_from(subq).where(subq.c.media >= start, subq.c.media < end)
-        count = session.execute(stm_dist).scalar() or 0
-        dist[label] = int(count)
+    # Single query with CASE to bucket all students at once (replaces 5 separate queries)
+    bucket_col = case(
+        (subq.c.media < 20, "0-20"),
+        (subq.c.media < 40, "20-40"),
+        (subq.c.media < 60, "40-60"),
+        (subq.c.media < 80, "60-80"),
+        else_="80-100",
+    ).label("bucket")
+    stm_buckets = select(bucket_col, func.count().label("cnt")).select_from(subq).group_by(bucket_col)
+    for row in session.execute(stm_buckets).all():
+        dist[row.bucket] = int(row.cnt)
 
     # 2. Risk Alerts (Simulated AI or Heuristic)
     # Fetch top 10 risky students based on grades < 60

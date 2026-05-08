@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { usuarioSchema, getFieldErrors, type ZodFieldErrors } from "../../lib/schemas";
 import {
   Alert,
   Box,
@@ -350,6 +351,7 @@ type UsuarioDialogProps = {
 // Modal centraliza criação/edição para manter a experiência consistente.
 const UsuarioDialog = ({ open, onClose, onSubmit, initialData, isSaving, error }: UsuarioDialogProps) => {
   const [values, setValues] = useState<UsuarioFormValues>(emptyFormState);
+  const [fieldErrors, setFieldErrors] = useState<ZodFieldErrors>({});
 
   useEffect(() => {
     if (!open) {
@@ -379,6 +381,12 @@ const UsuarioDialog = ({ open, onClose, onSubmit, initialData, isSaving, error }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const result = usuarioSchema.safeParse({ username: values.username.trim(), role: values.role });
+    if (!result.success) {
+      setFieldErrors(getFieldErrors(result));
+      return;
+    }
+    setFieldErrors({});
     const payload: UsuarioFormValues = {
       username: values.username.trim(),
       role: values.role || undefined,
@@ -404,6 +412,8 @@ const UsuarioDialog = ({ open, onClose, onSubmit, initialData, isSaving, error }
             onChange={(event) => handleChange("username", event.target.value)}
             required
             fullWidth
+            error={!!fieldErrors.username}
+            helperText={fieldErrors.username}
           />
           <TextField
             label="Senha"

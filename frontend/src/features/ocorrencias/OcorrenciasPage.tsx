@@ -47,6 +47,8 @@ import AddIcon from "@mui/icons-material/Add";
 import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
 import NotificationsIcon from "@mui/icons-material/Notifications";
 
+import { ocorrenciaSchema, getFieldErrors, type ZodFieldErrors } from "../../lib/schemas";
+
 import {
     useCreateOcorrenciaMutation,
     useListOcorrenciasQuery,
@@ -88,6 +90,7 @@ export const OcorrenciasPage = () => {
     });
     const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
 
+    const [fieldErrors, setFieldErrors] = useState<ZodFieldErrors>({});
     const [open, setOpen] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
     const [alunoId, setAlunoId] = useState<number | null>(null);
@@ -173,6 +176,12 @@ export const OcorrenciasPage = () => {
 
     const handleSave = async () => {
         if (!alunoId) return;
+        const result = ocorrenciaSchema.safeParse({ aluno_id: alunoId, tipo, descricao, gravidade });
+        if (!result.success) {
+            setFieldErrors(getFieldErrors(result));
+            return;
+        }
+        setFieldErrors({});
         try {
             if (editingId) {
                 await updateOcorrencia({
@@ -710,6 +719,8 @@ export const OcorrenciasPage = () => {
                                         value={descricao}
                                         onChange={(e) => setDescricao(e.target.value)}
                                         placeholder="O que aconteceu?"
+                                        error={!!fieldErrors.descricao}
+                                        helperText={fieldErrors.descricao}
                                     />
                                 </Grid>
                             </Grid>

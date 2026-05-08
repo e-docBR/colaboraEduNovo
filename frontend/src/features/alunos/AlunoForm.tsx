@@ -1,6 +1,7 @@
 import { Alert, Box, Button, MenuItem, TextField, Divider, Grid, Typography } from "@mui/material";
 import { useEffect, useState } from "react";
 import { AlunoSummary } from "../../lib/api";
+import { alunoSchema, getFieldErrors, type ZodFieldErrors } from "../../lib/schemas";
 
 interface AlunoFormProps {
     initialData?: Partial<AlunoSummary>;
@@ -18,6 +19,7 @@ export const AlunoForm = ({ initialData, onSubmit, onCancel, isLoading }: AlunoF
         turma: "",
         turno: "Matutino",
     });
+    const [fieldErrors, setFieldErrors] = useState<ZodFieldErrors>({});
 
     useEffect(() => {
         if (initialData) {
@@ -52,6 +54,12 @@ export const AlunoForm = ({ initialData, onSubmit, onCancel, isLoading }: AlunoF
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        const result = alunoSchema.safeParse(formData);
+        if (!result.success) {
+            setFieldErrors(getFieldErrors(result));
+            return;
+        }
+        setFieldErrors({});
         onSubmit(formData);
     };
 
@@ -67,6 +75,8 @@ export const AlunoForm = ({ initialData, onSubmit, onCancel, isLoading }: AlunoF
                 onChange={handleChange}
                 autoFocus
                 size="small"
+                error={!!fieldErrors.nome}
+                helperText={fieldErrors.nome}
             />
             <TextField
                 margin="normal"
@@ -77,6 +87,8 @@ export const AlunoForm = ({ initialData, onSubmit, onCancel, isLoading }: AlunoF
                 value={formData.matricula}
                 onChange={handleChange}
                 size="small"
+                error={!!fieldErrors.matricula}
+                helperText={fieldErrors.matricula}
             />
             <TextField
                 margin="normal"
@@ -87,6 +99,8 @@ export const AlunoForm = ({ initialData, onSubmit, onCancel, isLoading }: AlunoF
                 value={formData.turma}
                 onChange={handleChange}
                 size="small"
+                error={!!fieldErrors.turma}
+                helperText={fieldErrors.turma}
             />
             <TextField
                 select
@@ -194,6 +208,8 @@ export const AlunoForm = ({ initialData, onSubmit, onCancel, isLoading }: AlunoF
                         value={formData.telefones ?? ""}
                         onChange={handleChange}
                         size="small"
+                        error={!!fieldErrors.telefones}
+                        helperText={fieldErrors.telefones}
                     />
                 </Grid>
                 <Grid item xs={6}>
@@ -205,6 +221,8 @@ export const AlunoForm = ({ initialData, onSubmit, onCancel, isLoading }: AlunoF
                         value={formData.email ?? ""}
                         onChange={handleChange}
                         size="small"
+                        error={!!fieldErrors.email}
+                        helperText={fieldErrors.email}
                     />
                 </Grid>
                 <Grid item xs={6}>
@@ -216,6 +234,8 @@ export const AlunoForm = ({ initialData, onSubmit, onCancel, isLoading }: AlunoF
                         value={formData.cpf ?? ""}
                         onChange={handleChange}
                         size="small"
+                        error={!!fieldErrors.cpf}
+                        helperText={fieldErrors.cpf}
                     />
                 </Grid>
                 <Grid item xs={6}>
@@ -287,7 +307,8 @@ export const AlunoForm = ({ initialData, onSubmit, onCancel, isLoading }: AlunoF
                         onChange={handleChange}
                         size="small"
                         placeholder="email@exemplo.com"
-                        helperText="Usado para envio de notificações por e-mail"
+                        error={!!fieldErrors.email_responsavel}
+                        helperText={fieldErrors.email_responsavel ?? "Usado para envio de notificações por e-mail"}
                     />
                 </Grid>
                 <Grid item xs={12} md={6}>
@@ -300,7 +321,8 @@ export const AlunoForm = ({ initialData, onSubmit, onCancel, isLoading }: AlunoF
                         onChange={handleChange}
                         size="small"
                         placeholder="(73) 99999-9999"
-                        helperText="Número com DDD — usado para envio de WhatsApp"
+                        error={!!fieldErrors.telefone_responsavel}
+                        helperText={fieldErrors.telefone_responsavel ?? "Número com DDD — usado para envio de WhatsApp"}
                     />
                 </Grid>
             </Grid>
