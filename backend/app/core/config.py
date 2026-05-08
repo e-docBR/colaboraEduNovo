@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     # Error monitoring
     sentry_dsn: str = Field(default="", alias="SENTRY_DSN")
 
+    # Billing (Stripe)
+    stripe_secret_key: str = Field(default="", alias="STRIPE_SECRET_KEY")
+    stripe_webhook_secret: str = Field(default="", alias="STRIPE_WEBHOOK_SECRET")
+    stripe_price_id: str = Field(default="", alias="STRIPE_PRICE_ID")
+
     # Commercial Settings
     commercial_mode: str = Field(default="saas", alias="COMMERCIAL_MODE") # saas or dedicated
     enable_registration: bool = Field(default=True, alias="ENABLE_REGISTRATION")

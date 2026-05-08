@@ -349,6 +349,21 @@ export type Tenant = {
   domain?: string;
   created_at?: string;
   academic_years?: Array<{ id: number; label: string; is_current: boolean }>;
+  plano?: string;
+  plano_ativo?: boolean;
+  plano_expira_em?: string | null;
+};
+
+export type BillingStatusResponse = {
+  plano: string;
+  plano_ativo: boolean;
+  plano_expira_em: string | null;
+  has_subscription: boolean;
+};
+
+export type BillingCheckoutResponse = {
+  url: string;
+  type: "checkout" | "portal";
 };
 
 export type AlunoUpdatePayload = { id: number } & Partial<AlunoSummary>;
@@ -910,6 +925,16 @@ export const api = createApi({
         method: "POST",
         body
       })
+    }),
+    getBillingStatus: builder.query<BillingStatusResponse, void>({
+      query: () => "/billing/status",
+      providesTags: ["Dashboard"]
+    }),
+    createBillingCheckout: builder.mutation<BillingCheckoutResponse, void>({
+      query: () => ({
+        url: "/billing/checkout",
+        method: "POST"
+      })
     })
   })
 });
@@ -971,5 +996,7 @@ export const {
   useDeleteTenantMutation,
   useGetInterventionsQuery,
   useGetStudentRiskQuery,
-  useGetBulkInterventionsMutation
+  useGetBulkInterventionsMutation,
+  useGetBillingStatusQuery,
+  useCreateBillingCheckoutMutation
 } = api;

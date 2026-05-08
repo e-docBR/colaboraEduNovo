@@ -73,7 +73,17 @@ def resolve_tenant_context():
         
         if not tenant.is_active:
              return jsonify({"error": "Acesso desativado para esta instituição"}), 403
-        
+
+        # F5: Block access for tenants with lapsed billing (allow billing/checkout + auth endpoints)
+        billing_exempt_prefixes = ("/auth/", "/billing/")
+        path = request.path
+        billing_blocked = (
+            not tenant.plano_ativo
+            and not any(path.endswith(p) or f"/{p.strip('/')}" in path for p in billing_exempt_prefixes)
+        )
+        if billing_blocked:
+            return jsonify({"error": "Plano inativo. Acesse o painel de faturamento para regularizar."}), 402
+
         # Store in Flask GLOBAL g
         g.tenant = tenant
         g.tenant_id = tenant.id
