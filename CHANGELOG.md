@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file.
 
+O projeto segue [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`.  
+Cada versão é marcada como uma **tag Git** (`v1.7.0`, `v1.6.9`, …) permitindo baixar
+ou restaurar qualquer release via `git checkout vX.Y.Z` ou pelo GitHub → *Releases*.
+
+---
+
+## [1.7.0] - 2026-05-08
+
+### Correções de Infraestrutura e Migrations
+
+#### Ambiente de Desenvolvimento
+- **`REDIS_URL` corrigida no `.env`**: endereço Docker `redis:6379` substituído por
+  `localhost:6389` (porta exposta pelo `docker-compose.yml`), eliminando o erro
+  `Temporary failure in name resolution` que impedia todas as requisições.
+- **`.env` limpo**: removida linha `# DATABASE_URL=sqlite://…` comentada que causava
+  concatenação inválida no `grep` do `Makefile`, resultando em `database "colabora_edu\nsqlite://…" does not exist`.
+
+#### Migrations
+- **Conflito de revision ID resolvido**: duas migrations possuíam o ID `a1b2c3d4e5f6`.
+  A migration `add_soft_delete` foi renomeada para `a1b2c3d4e5f7` e a cadeia
+  linearizada.
+- **Cadeia de migrations corrigida e aplicada**:
+  - `b2c3d4e5f6a7` (billing Stripe nos tenants) → agora parte da cadeia principal.
+  - `c9f2a8b3d1e4` (índices compostos audit_logs/comunicados) → encadeado após billing.
+  - `a1b2c3d4e5f7` (soft delete em alunos e usuários) → head atual.
+- **3 migrations pendentes aplicadas** ao banco de produção/desenvolvimento:
+  colunas `plano`, `plano_ativo`, `plano_expira_em`, `stripe_customer_id`,
+  `stripe_subscription_id` adicionadas à tabela `tenants`; índices de performance
+  criados; colunas `deleted_at` e `is_archived` adicionadas a `alunos` e `usuarios`.
+
+---
+
 ## [1.6.9] - 2026-05-06
 
 ### Melhorias de Login e Multi-Tenant
