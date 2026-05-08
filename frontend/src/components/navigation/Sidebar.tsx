@@ -155,8 +155,8 @@ const SidebarInner = ({ mobile }: { mobile?: boolean }) => {
               },
               "&:hover": {
                 backgroundColor: (theme) => theme.palette.mode === "light"
-                  ? "rgba(20, 184, 166, 0.04)"
-                  : "rgba(20, 184, 166, 0.08)"
+                  ? "rgba(10, 60, 160, 0.05)"
+                  : "rgba(10, 60, 160, 0.18)"
               }
 
             }}
