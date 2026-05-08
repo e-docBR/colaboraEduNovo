@@ -1,6 +1,6 @@
 """Endpoints para configuração do assistente de IA por tenant.
 
-Acesso restrito a admin e super_admin.
+Acesso restrito EXCLUSIVAMENTE ao super_admin.
 Permite configurar: provider, modelo, api_key, nome, temperatura, prompt extra.
 """
 from flask import Blueprint, g, jsonify, request
@@ -8,7 +8,7 @@ from flask_jwt_extended import jwt_required
 from loguru import logger
 from sqlalchemy import select
 
-from ...core.decorators import admin_required
+from ...core.decorators import require_roles
 from ...core.database import session_scope
 from ...models.ai_configuration import AIConfiguration
 from ...models import Tenant
@@ -51,7 +51,7 @@ def register(parent: Blueprint) -> None:
 
     @bp.get("/ai-settings")
     @jwt_required()
-    @admin_required
+    @require_roles("super_admin")
     def get_ai_settings():
         """Retorna a configuração atual de IA do tenant."""
         tenant_id = g.tenant_id
@@ -98,7 +98,7 @@ def register(parent: Blueprint) -> None:
 
     @bp.put("/ai-settings")
     @jwt_required()
-    @admin_required
+    @require_roles("super_admin")
     def update_ai_settings():
         """Cria ou atualiza a configuração de IA do tenant."""
         tenant_id = g.tenant_id
@@ -145,7 +145,7 @@ def register(parent: Blueprint) -> None:
 
     @bp.post("/ai-settings/test")
     @jwt_required()
-    @admin_required
+    @require_roles("super_admin")
     def test_ai_settings():
         """Testa a conexão com o LLM configurado."""
         body = request.json or {}
@@ -173,7 +173,7 @@ def register(parent: Blueprint) -> None:
 
     @bp.delete("/ai-settings/key")
     @jwt_required()
-    @admin_required
+    @require_roles("super_admin")
     def clear_api_key():
         """Remove a API key salva (desativa o LLM)."""
         tenant_id = g.tenant_id

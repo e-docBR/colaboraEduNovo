@@ -72,7 +72,7 @@ const SidebarInner = ({ mobile }: { mobile?: boolean }) => {
       base.push({ label: "Intervenções IA", icon: <AutoFixHighIcon />, path: `${appBasePath}/ia/intervencoes-em-lote` });
     }
 
-    if (user?.role === "admin" || user?.role === "super_admin") {
+    if (user?.role === "super_admin") {
       base.push({ label: "Config. Assistente IA", icon: <SmartToyIcon />, path: `${appBasePath}/admin/ia` });
     }
 
