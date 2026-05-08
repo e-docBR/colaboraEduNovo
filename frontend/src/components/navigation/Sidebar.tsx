@@ -36,13 +36,16 @@ const staffNavItems = [
 ];
 
 const alunoNavItems = [{ label: "Meu Boletim", icon: <PeopleIcon />, path: `${appBasePath}/meu-boletim` }];
+const responsavelNavItems = [{ label: "Portal do Responsável", icon: <PeopleIcon />, path: `${appBasePath}/portal-responsavel` }];
 
 const SidebarInner = ({ mobile }: { mobile?: boolean }) => {
   const user = useAppSelector((state) => state.auth.user);
-  const isAluno = user?.role === "aluno" || user?.role === "responsavel";
+  const isAluno = user?.role === "aluno";
+  const isResponsavel = user?.role === "responsavel";
   const isAdmin = Boolean(user?.is_admin || user?.role === "admin");
 
   const items = useMemo(() => {
+    if (isResponsavel) return responsavelNavItems;
     if (isAluno) return alunoNavItems;
     const base = [...staffNavItems];
 
@@ -72,7 +75,7 @@ const SidebarInner = ({ mobile }: { mobile?: boolean }) => {
     base.splice(2, 0, { label: "Ocorrências", icon: <WarningAmberIcon />, path: `${appBasePath}/ocorrencias` });
 
     return base;
-  }, [isAluno, isAdmin, user?.role]);
+  }, [isAluno, isResponsavel, isAdmin, user?.role]);
 
   return (
     <Box

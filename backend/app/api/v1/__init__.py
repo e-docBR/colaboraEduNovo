@@ -1,7 +1,7 @@
 """Versioned API blueprint."""
 from flask import Blueprint, request
 
-from . import alunos, auth, dashboard, exports, graficos, notas, relatorios, turmas, uploads, usuarios, comunicados, ocorrencias, audit, chat, academic_years, super_admin, ai
+from . import alunos, auth, dashboard, exports, graficos, notas, relatorios, responsavel, turmas, uploads, usuarios, comunicados, ocorrencias, audit, chat, academic_years, super_admin, ai
 
 api_v1_bp = Blueprint("api_v1", __name__)
 
@@ -27,6 +27,7 @@ exports.register(api_v1_bp)
 graficos.register(api_v1_bp)
 notas.register(api_v1_bp)
 relatorios.register(api_v1_bp)
+responsavel.register(api_v1_bp)
 turmas.register(api_v1_bp)
 uploads.register(api_v1_bp)
 usuarios.register(api_v1_bp)

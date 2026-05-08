@@ -33,6 +33,7 @@ const AuditLogsPage = lazy(() => import("../features/usuarios/AuditLogsPage").th
 const ComunicadosPage = lazy(() => import("../features/comunicados/ComunicadosPage").then(m => ({ default: m.ComunicadosPage })));
 const OcorrenciasPage = lazy(() => import("../features/ocorrencias/OcorrenciasPage").then(m => ({ default: m.OcorrenciasPage })));
 const TenantsPage = lazy(() => import("../features/super-admin/TenantsPage").then(m => ({ default: m.TenantsPage })));
+const PortalResponsavelPage = lazy(() => import("../features/responsavel/PortalResponsavelPage").then(m => ({ default: m.PortalResponsavelPage })));
 
 const PageLoader = () => (
   <Box display="flex" alignItems="center" justifyContent="center" minHeight={300}>
@@ -136,6 +137,7 @@ export const appRouter = createBrowserRouter([
       { path: "ocorrencias", element: wrap(<OcorrenciasPage />) },
       { path: "ia/intervencoes-em-lote", element: wrap(<BulkInterventionPage />) },
       { path: "meu-boletim", element: wrap(<MeuBoletimPage />) },
+      { path: "portal-responsavel", element: wrap(<PortalResponsavelPage />) },
       { path: "admin/escolas", element: wrap(<TenantsPage />) }
     ]
   },

@@ -247,6 +247,26 @@ type UploadBoletimResponse = {
   turma: string;
 };
 
+export type MeuFilhoResponse = {
+  aluno: AlunoDetail;
+  ocorrencias: {
+    id: number;
+    tipo: string;
+    descricao: string;
+    data_registro: string | null;
+    resolvida: boolean;
+    observacao_pais?: string | null;
+    gravidade?: string | null;
+  }[];
+  comunicados: {
+    id: number;
+    titulo: string;
+    conteudo: string;
+    data_envio: string | null;
+    lido: boolean;
+  }[];
+};
+
 export type CsvImportResponse = {
   status: string;
   job_id: string;
@@ -536,6 +556,10 @@ export const api = createApi({
     getMyAluno: builder.query<AlunoDetail, void>({
       query: () => "/alunos/me",
       providesTags: ["Alunos"]
+    }),
+    getMeuFilho: builder.query<MeuFilhoResponse, void>({
+      query: () => "/responsavel/meu-filho",
+      providesTags: ["Alunos", "Ocorrencias", "Comunicados"]
     }),
     getAlunoOcorrenciasSummary: builder.query<{ tipo: string; total: number }[], number>({
       query: (alunoId) => `/alunos/${alunoId}/ocorrencias/summary`,
@@ -897,6 +921,7 @@ export const {
   useGetTeacherDashboardQuery,
   useGetAlunoQuery,
   useGetMyAlunoQuery,
+  useGetMeuFilhoQuery,
   useGetAlunoOcorrenciasSummaryQuery,
   useListAlunosQuery,
   useListTurmasQuery,
