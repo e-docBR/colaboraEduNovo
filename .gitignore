@@ -50,3 +50,4 @@ data/
 letsencrypt/acme.json
 Mat_Inicial/
 debug_*.py
+landingPage/
