@@ -41,17 +41,17 @@ def test_regular_user_login_requires_tenant(client, admin_user):
     assert response.status_code == 401
 
 def test_change_password(client, auth_headers):
-    # New password must satisfy strength rules: 8+ chars, uppercase, digit
+    # New password must satisfy: 8+ chars, uppercase, digit, special char
     response = client.post("/api/v1/auth/change-password", headers=auth_headers, json={
         "current_password": "admin123",
-        "new_password": "NewPass456"
+        "new_password": "NewPass456!"
     })
     assert response.status_code == 204
 
     # After change, the old token is revoked — must log in again with the new password
     response = client.post("/api/v1/auth/login", json={
         "username": "admin_test",
-        "password": "NewPass456",
+        "password": "NewPass456!",
         "tenant_slug": "default",
     })
     assert response.status_code == 200

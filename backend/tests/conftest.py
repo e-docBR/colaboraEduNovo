@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import fakeredis
 import pytest
 from sqlalchemy import create_engine
 from app import create_app
@@ -7,32 +8,6 @@ from app.core.database import Base, SessionLocal, session_scope
 import app.core.database
 from app.models import AcademicYear, Tenant, Usuario
 from app.core.security import hash_password
-
-
-class FakeRedis:
-    def __init__(self):
-        self.store = {}
-
-    def ping(self):
-        return True
-
-    def setex(self, key, _ttl, value):
-        self.store[key] = value
-        return True
-
-    def exists(self, key):
-        return 1 if key in self.store else 0
-
-    def getdel(self, key):
-        return self.store.pop(key, None)
-
-    def get(self, key):
-        return self.store.get(key)
-
-    def incr(self, key):
-        value = int(self.store.get(key, 0)) + 1
-        self.store[key] = value
-        return value
 
 
 @pytest.fixture(scope="session")
@@ -72,7 +47,9 @@ def flask_app(db_engine):
     })
     config_module.settings.redis_url = original_redis_url
     import app.core.cache as cache_module
-    cache_module.redis_client = FakeRedis()
+    cache_module.redis_client = fakeredis.FakeRedis()
+    from app.core.extensions import limiter
+    limiter.enabled = False
     yield app
     config_module.settings.upload_folder = original_upload_folder
 

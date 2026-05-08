@@ -29,7 +29,7 @@ def register(parent: Blueprint) -> None:
         try:
             payload = LoginRequest(**(request.get_json() or {}))
         except ValidationError as e:
-            return jsonify({"error": "Dados inválidos", "details": e.errors()}), 422
+            return jsonify({"error": "Dados inválidos", "details": e.errors(include_context=False)}), 422
 
         ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
         with session_scope() as session:
@@ -91,7 +91,7 @@ def register(parent: Blueprint) -> None:
         try:
             payload = ChangePasswordRequest(**(request.get_json() or {}))
         except ValidationError as e:
-            return jsonify({"error": "Dados inválidos", "details": e.errors()}), 422
+            return jsonify({"error": "Dados inválidos", "details": e.errors(include_context=False)}), 422
 
         user_id = int(get_jwt_identity())
 
@@ -202,8 +202,9 @@ def register(parent: Blueprint) -> None:
         if not stored:
             return jsonify({"error": "Token inválido ou expirado"}), 400
 
-        # Valor armazenado: "user_id:tenant_id"
-        parts = stored.split(":", 1)
+        # Valor armazenado: "user_id:tenant_id" (Redis retorna bytes)
+        stored_str = stored.decode("utf-8") if isinstance(stored, bytes) else stored
+        parts = stored_str.split(":", 1)
         if len(parts) != 2:
             return jsonify({"error": "Token inválido ou expirado"}), 400
         try:

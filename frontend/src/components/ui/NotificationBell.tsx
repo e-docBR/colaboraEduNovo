@@ -21,12 +21,12 @@ import {
   Typography,
   Tooltip,
 } from "@mui/material";
-import { MouseEvent, useMemo, useState } from "react";
+import { memo, MouseEvent, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppSelector } from "../../app/hooks";
 import { useListComunicadosQuery, useMarkComunicadoReadMutation } from "../../lib/api";
 
-export const NotificationBell = () => {
+const NotificationBellInner = () => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const navigate = useNavigate();
   const user = useAppSelector((state) => state.auth.user);
@@ -242,3 +242,5 @@ export const NotificationBell = () => {
     </>
   );
 };
+
+export const NotificationBell = memo(NotificationBellInner);

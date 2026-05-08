@@ -409,12 +409,19 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
   let result = await rawBaseQuery(args, api, extraOptions);
 
   if (result.error?.status === 429) {
-    return {
-      error: {
-        status: 429,
-        data: { error: "Muitas tentativas. Aguarde alguns instantes e tente novamente." },
-      } as FetchBaseQueryError,
-    };
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await new Promise<void>((r) => setTimeout(r, 2 ** attempt * 1000));
+      result = await rawBaseQuery(args, api, extraOptions);
+      if (result.error?.status !== 429) break;
+    }
+    if (result.error?.status === 429) {
+      return {
+        error: {
+          status: 429,
+          data: { error: "Muitas tentativas. Aguarde alguns instantes e tente novamente." },
+        } as FetchBaseQueryError,
+      };
+    }
   }
 
   if (result.error?.status === 401) {

@@ -18,7 +18,7 @@ import {
   TextField,
   Typography
 } from "@mui/material";
-import { MouseEvent, useState, useEffect, useRef } from "react";
+import { memo, MouseEvent, useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
@@ -133,7 +133,7 @@ const TenantSelector = () => {
   );
 };
 
-export const TopBar = ({ onMenuClick }: { onMenuClick?: () => void }) => {
+const TopBarInner = ({ onMenuClick }: { onMenuClick?: () => void }) => {
   const user = useAppSelector((state) => state.auth.user);
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
@@ -373,3 +373,5 @@ export const TopBar = ({ onMenuClick }: { onMenuClick?: () => void }) => {
     </Box>
   );
 };
+
+export const TopBar = memo(TopBarInner);

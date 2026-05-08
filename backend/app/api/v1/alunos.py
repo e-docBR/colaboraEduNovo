@@ -1,5 +1,5 @@
 """Alunos endpoints."""
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from pydantic import ValidationError
 
@@ -97,9 +97,12 @@ def register(parent: Blueprint) -> None:
              return jsonify(e.errors()), 400
              
         user_id = int(get_jwt_identity())
+        aluno_data = payload.model_dump()
+        aluno_data["tenant_id"] = getattr(g, "tenant_id", None)
+        aluno_data["academic_year_id"] = getattr(g, "academic_year_id", None)
         with session_scope() as session:
             service = AlunoService(session, user_id=user_id)
-            aluno = service.create_aluno(payload.model_dump())
+            aluno = service.create_aluno(aluno_data)
             from ...core.cache import invalidate_tenant_cache
             invalidate_tenant_cache()
             return jsonify(aluno.model_dump()), 201

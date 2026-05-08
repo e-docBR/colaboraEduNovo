@@ -11,7 +11,7 @@ import NotificationsIcon from "@mui/icons-material/Notifications";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
 import { NavLink } from "react-router-dom";
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { useAppSelector } from "../../app/hooks";
 
 const appBasePath = "/app";
@@ -36,7 +36,7 @@ const staffNavItems = [
 
 const alunoNavItems = [{ label: "Meu Boletim", icon: <PeopleIcon />, path: `${appBasePath}/meu-boletim` }];
 
-export const Sidebar = ({ mobile }: { mobile?: boolean }) => {
+const SidebarInner = ({ mobile }: { mobile?: boolean }) => {
   const user = useAppSelector((state) => state.auth.user);
   const isAluno = user?.role === "aluno" || user?.role === "responsavel";
   const isAdmin = Boolean(user?.is_admin || user?.role === "admin");
@@ -192,3 +192,5 @@ export const Sidebar = ({ mobile }: { mobile?: boolean }) => {
     </Box>
   );
 };
+
+export const Sidebar = memo(SidebarInner);
