@@ -33,6 +33,11 @@ COMUNICADO_WRITE_ROLES: frozenset[str] = frozenset(
 # Roles that can view full reports and charts
 REPORT_ROLES: frozenset[str] = STAFF_ROLES
 
+# Roles that can access the AI chat assistant (gestores pedagógicos)
+AI_CHAT_ROLES: frozenset[str] = frozenset(
+    {"admin", "super_admin", "diretor", "coordenador", "orientador"}
+)
+
 # Roles that can upload PDF boletins and trigger ingestion
 UPLOAD_ROLES: frozenset[str] = frozenset({"admin", "super_admin"})
 

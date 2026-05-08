@@ -11,6 +11,29 @@ export interface ChatResponse {
   type: "text" | "table" | "chart";
   data?: any;
   chart_config?: any;
+  ai_name?: string;
+}
+
+export interface AIInfo {
+  ai_name: string;
+  llm_active: boolean;
+  tenant_name: string;
+}
+
+export interface AISettings {
+  configured: boolean;
+  is_active: boolean;
+  provider: string;
+  model_name: string;
+  api_key: string;
+  api_key_set?: boolean;
+  ai_name: string;
+  temperature: number;
+  system_prompt: string;
+  display_name: string;
+  tenant_name: string;
+  available_providers: string[];
+  provider_models: Record<string, { id: string; label: string }[]>;
 }
 
 
@@ -522,7 +545,7 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
 export const api = createApi({
   reducerPath: "boletinsApi",
   baseQuery: baseQueryWithReauth,
-  tagTypes: ["Dashboard", "Alunos", "Notas", "Uploads", "Turmas", "Usuarios", "Comunicados", "Ocorrencias", "Graficos"],
+  tagTypes: ["Dashboard", "Alunos", "Notas", "Uploads", "Turmas", "Usuarios", "Comunicados", "Ocorrencias", "Graficos", "AISettings"],
   endpoints: (builder) => ({
     login: builder.mutation<LoginResponse, LoginRequest>({
       query: (body) => ({
@@ -822,6 +845,41 @@ export const api = createApi({
       })
     }),
 
+    getAIInfo: builder.query<AIInfo, void>({
+      query: () => "/ai-settings/info",
+      providesTags: ["AISettings"]
+    }),
+
+    getAISettings: builder.query<AISettings, void>({
+      query: () => "/ai-settings",
+      providesTags: ["AISettings"]
+    }),
+
+    updateAISettings: builder.mutation<{ message: string; display_name: string; is_active: boolean }, Partial<AISettings>>({
+      query: (body) => ({
+        url: "/ai-settings",
+        method: "PUT",
+        body
+      }),
+      invalidatesTags: ["AISettings"]
+    }),
+
+    testAISettings: builder.mutation<{ ok: boolean; message: string }, { provider: string; api_key: string; model_name: string }>({
+      query: (body) => ({
+        url: "/ai-settings/test",
+        method: "POST",
+        body
+      })
+    }),
+
+    clearAIKey: builder.mutation<{ message: string }, void>({
+      query: () => ({
+        url: "/ai-settings/key",
+        method: "DELETE"
+      }),
+      invalidatesTags: ["AISettings"]
+    }),
+
     listAuditLogs: builder.query<AuditLogResponse, AuditLogParams | void>({
       query: (params) => ({
         url: "/audit-logs",
@@ -981,6 +1039,11 @@ export const {
   useDeleteOcorrenciaMutation,
   useRenotificarOcorrenciaMutation,
   useChatMutation,
+  useGetAIInfoQuery,
+  useGetAISettingsQuery,
+  useUpdateAISettingsMutation,
+  useTestAISettingsMutation,
+  useClearAIKeyMutation,
   useListAuditLogsQuery,
   useCreateAlunoMutation,
   useUpdateAlunoMutation,

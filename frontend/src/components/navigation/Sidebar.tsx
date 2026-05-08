@@ -10,6 +10,7 @@ import ManageAccountsIcon from "@mui/icons-material/ManageAccounts";
 import NotificationsIcon from "@mui/icons-material/Notifications";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
+import SmartToyIcon from "@mui/icons-material/SmartToy";
 import ArchiveIcon from "@mui/icons-material/Archive";
 import { NavLink } from "react-router-dom";
 import { memo, useMemo } from "react";
@@ -69,6 +70,10 @@ const SidebarInner = ({ mobile }: { mobile?: boolean }) => {
 
     if (isAdmin || user?.role === "coordenador") {
       base.push({ label: "Intervenções IA", icon: <AutoFixHighIcon />, path: `${appBasePath}/ia/intervencoes-em-lote` });
+    }
+
+    if (user?.role === "admin" || user?.role === "super_admin") {
+      base.push({ label: "Config. Assistente IA", icon: <SmartToyIcon />, path: `${appBasePath}/admin/ia` });
     }
 
     base.splice(1, 0, { label: "Comunicados", icon: <NotificationsIcon />, path: `${appBasePath}/comunicados` });

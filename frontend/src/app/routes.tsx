@@ -34,6 +34,7 @@ const ComunicadosPage = lazy(() => import("../features/comunicados/ComunicadosPa
 const OcorrenciasPage = lazy(() => import("../features/ocorrencias/OcorrenciasPage").then(m => ({ default: m.OcorrenciasPage })));
 const TenantsPage = lazy(() => import("../features/super-admin/TenantsPage").then(m => ({ default: m.TenantsPage })));
 const PortalResponsavelPage = lazy(() => import("../features/responsavel/PortalResponsavelPage").then(m => ({ default: m.PortalResponsavelPage })));
+const AISettingsPage = lazy(() => import("../features/ai-chat/AISettingsPage"));
 
 const PageLoader = () => (
   <Box display="flex" alignItems="center" justifyContent="center" minHeight={300}>
@@ -138,7 +139,8 @@ export const appRouter = createBrowserRouter([
       { path: "ia/intervencoes-em-lote", element: wrap(<BulkInterventionPage />) },
       { path: "meu-boletim", element: wrap(<MeuBoletimPage />) },
       { path: "portal-responsavel", element: wrap(<PortalResponsavelPage />) },
-      { path: "admin/escolas", element: wrap(<TenantsPage />) }
+      { path: "admin/escolas", element: wrap(<TenantsPage />) },
+      { path: "admin/ia", element: wrap(<AISettingsPage />) }
     ]
   },
   {
