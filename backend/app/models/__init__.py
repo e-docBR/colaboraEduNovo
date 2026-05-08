@@ -8,5 +8,6 @@ from .ocorrencia import Ocorrencia
 from .audit_log import AuditLog
 from .tenant import Tenant
 from .academic_year import AcademicYear
+from .ai_configuration import AIConfiguration
 
-__all__ = ["Aluno", "Nota", "Usuario", "Comunicado", "ComunicadoLeitura", "Ocorrencia", "AuditLog", "Tenant", "AcademicYear"]
+__all__ = ["Aluno", "Nota", "Usuario", "Comunicado", "ComunicadoLeitura", "Ocorrencia", "AuditLog", "Tenant", "AcademicYear", "AIConfiguration"]
