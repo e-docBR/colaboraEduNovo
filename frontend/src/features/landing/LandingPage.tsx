@@ -1,439 +1,652 @@
-import { alpha } from "@mui/material/styles";
+import React from 'react';
 import {
-  Avatar,
   Box,
+  Container,
+  Typography,
   Button,
+  Stack,
+  Grid2 as Grid,
   Card,
   CardContent,
   Chip,
-  Container,
   Divider,
-  Grid,
-  Stack,
-  Typography
-} from "@mui/material";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import InsightsIcon from "@mui/icons-material/Insights";
-import SecurityIcon from "@mui/icons-material/Security";
-import TimelineIcon from "@mui/icons-material/Timeline";
-import GroupsIcon from "@mui/icons-material/Groups";
-import TrendingUpIcon from "@mui/icons-material/TrendingUp";
-import VerifiedIcon from "@mui/icons-material/Verified";
-import SchoolIcon from "@mui/icons-material/School";
-import FamilyRestroomIcon from "@mui/icons-material/FamilyRestroom";
-import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
-import PsychologyIcon from "@mui/icons-material/Psychology";
-import AutorenewIcon from "@mui/icons-material/Autorenew";
-import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
-import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import AssessmentIcon from "@mui/icons-material/Assessment";
-import LockIcon from "@mui/icons-material/Lock";
-import ShieldIcon from "@mui/icons-material/Shield";
-import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-import type { ReactElement } from "react";
-import { useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+  alpha,
+  SvgIcon,
+  SvgIconProps,
+  IconButton,
+  AppBar,
+  Toolbar,
+  Drawer,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+  useScrollTrigger,
+  useMediaQuery,
+  useTheme,
+  ThemeProvider,
+  createTheme,
+} from '@mui/material';
+import { useNavigate } from 'react-router-dom';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import PeopleIcon from '@mui/icons-material/People';
+import SchoolIcon from '@mui/icons-material/School';
+import AssessmentIcon from '@mui/icons-material/Assessment';
+import BarChartIcon from '@mui/icons-material/BarChart';
+import UploadIcon from '@mui/icons-material/Upload';
+import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
+import CampaignIcon from '@mui/icons-material/Campaign';
+import ReportProblemIcon from '@mui/icons-material/ReportProblem';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import PersonIcon from '@mui/icons-material/Person';
+import FamilyRestroomIcon from '@mui/icons-material/FamilyRestroom';
+import SecurityIcon from '@mui/icons-material/Security';
+import LockIcon from '@mui/icons-material/Lock';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import HistoryIcon from '@mui/icons-material/History';
+import DomainIcon from '@mui/icons-material/Domain';
+import CheckCircleOutlineOutlinedIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
+import HubIcon from '@mui/icons-material/Hub';
+import AutoGraphIcon from '@mui/icons-material/AutoGraph';
+import LoginIcon from '@mui/icons-material/Login';
+import PersonOutlineOutlinedIcon from '@mui/icons-material/PersonOutlineOutlined';
+import PsychologyIcon from '@mui/icons-material/Psychology';
+import SupportAgentIcon from '@mui/icons-material/SupportAgent';
+import SupervisorAccountIcon from '@mui/icons-material/SupervisorAccount';
+import MenuIcon from '@mui/icons-material/Menu';
+import CloseIcon from '@mui/icons-material/Close';
 
-import { useAppSelector } from "../../app/hooks";
+import { brand } from '../../theme/brandTokens';
 
-const bp = {
-  teal: "#14b8a6",
-  emerald: "#10b981",
-  amber: "#f59e0b"
-};
+/* ─── SVG Icons for modules (lightweight, no extra deps) ─── */
+function ClassIcon(props: SvgIconProps) {
+  return (
+    <SvgIcon {...props}>
+      <path d="M12 3L1 9l4 2.18v6L12 21l7-3.82v-6l2-1.09V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 15.99l-5 2.73-5-2.73v-3.72L12 15l5-2.73v3.72z" />
+    </SvgIcon>
+  );
+}
 
-const statsAccents = [bp.teal, bp.emerald, bp.amber, bp.teal];
+function GradesIcon(props: SvgIconProps) {
+  return (
+    <SvgIcon {...props}>
+      <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" />
+    </SvgIcon>
+  );
+}
 
-const stats = [
-  { label: "Alunos monitorados", value: "3.240", detail: "Atualização automática por PDF", icon: <AutorenewIcon fontSize="small" /> },
-  { label: "Alertas inteligentes", value: "+480", detail: "Riscos identificados por turno", icon: <NotificationsActiveIcon fontSize="small" /> },
-  { label: "Tempo salvo", value: "72h/sem", detail: "Processos manuais eliminados", icon: <AccessTimeIcon fontSize="small" /> },
-  { label: "Relatórios gerados", value: "+1.800", detail: "Exportações em CSV / PDF", icon: <AssessmentIcon fontSize="small" /> }
+/* ─── Navigation anchors ─── */
+const NAV_LINKS = [
+  { label: 'Plataforma', href: '#plataforma' },
+  { label: 'Recursos', href: '#recursos' },
+  { label: 'Perfis', href: '#perfis' },
+  { label: 'Segurança', href: '#seguranca' },
 ];
 
-const workflows = [
-  {
-    title: "Importação guiada",
-    description: "Arraste os boletins em PDF e deixe o motor de ingestão normalizar turmas, turnos e trimestres automaticamente.",
-    icon: <TimelineIcon />,
-    color: bp.teal
-  },
-  {
-    title: "Diagnósticos instantâneos",
-    description: "KPIs e gráficos cruzam notas, faltas e situação final para evidenciar alunos em risco em segundos.",
-    icon: <InsightsIcon />,
-    color: bp.emerald
-  },
-  {
-    title: "Plano de ação colaborativo",
-    description: "Coordenação, orientação e direção acessam o mesmo painel e registram decisões diretamente nos relatórios.",
-    icon: <GroupsIcon />,
-    color: bp.amber
-  }
+/* ─── Stat items for proof-of-value strip ─── */
+const STATS = [
+  { icon: <PeopleIcon sx={{ fontSize: 32, color: brand.azulPrincipal }} />, value: 'Alunos acompanhados', desc: 'Acompanhamento individual e coletivo do desempenho acadêmico' },
+  { icon: <ClassIcon sx={{ fontSize: 32, color: brand.verde }} />, value: 'Turmas organizadas', desc: 'Gestão completa de turmas, horários e composição' },
+  { icon: <AssessmentIcon sx={{ fontSize: 32, color: brand.dourado }} />, value: 'Relatórios gerados', desc: 'Relatórios detalhados para decisões pedagógicas' },
+  { icon: <NotificationsActiveIcon sx={{ fontSize: 32, color: brand.azulApoio }} />, value: 'Alertas monitorados', desc: 'Ocorrências e alertas registrados em tempo real' },
 ];
 
-const audiences = [
-  {
-    role: "Administração",
-    summary: "Configura usuários, perfis e acompanha ingestões em tempo real.",
-    focus: ["Controle total de permissões", "Histórico de importações", "Exportação completa"],
-    icon: <AdminPanelSettingsIcon />,
-    color: bp.teal
-  },
-  {
-    role: "Coordenação",
-    summary: "Prioriza turmas críticas, compara trimestres e agenda intervenções.",
-    focus: ["Mapa de calor de notas", "Alertas por disciplina", "Lista de alunos em risco"],
-    icon: <SchoolIcon />,
-    color: bp.emerald
-  },
-  {
-    role: "Professores e Orientação",
-    summary: "Recebem insights prontos para orientar alunos e responsáveis.",
-    focus: ["Métricas por turma", "Evolução individual", "Notas e faltas consolidadas"],
-    icon: <PsychologyIcon />,
-    color: bp.amber
-  }
+/* ─── How the platform helps ─── */
+const HELPS = [
+  { icon: <HubIcon sx={{ fontSize: 28, color: brand.azulPrincipal }} />, title: 'Centraliza dados acadêmicos', desc: 'Todos os dados de alunos, turmas e notas em um único lugar, acessível de qualquer dispositivo.' },
+  { icon: <TrendingUpIcon sx={{ fontSize: 28, color: brand.verde }} />, title: 'Acompanha desempenho e frequência', desc: 'Acompanhe de perto o desempenho e a frequência de cada aluno com indicadores claros.' },
+  { icon: <CampaignIcon sx={{ fontSize: 28, color: brand.azulApoio }} />, title: 'Registra ocorrências e comunicados', desc: 'Registre ocorrências disciplinares e envie comunicados de forma rápida e organizada.' },
+  { icon: <PsychologyIcon sx={{ fontSize: 28, color: brand.dourado }} />, title: 'Apoia intervenções pedagógicas', desc: 'Identifique alunos em risco e receba sugestões de intervenção com apoio de inteligência artificial.' },
+  { icon: <AutoGraphIcon sx={{ fontSize: 28, color: brand.verde }} />, title: 'Gera relatórios para gestão', desc: 'Gere relatórios completos e personalizados para apoiar a gestão e as decisões estratégicas.' },
+  { icon: <FamilyRestroomIcon sx={{ fontSize: 28, color: brand.azulPrincipal }} />, title: 'Aproxima escola, aluno e família', desc: 'Conecte escola, alunos e famílias com comunicação transparente e acessível.' },
 ];
 
-const testimonials = [
+/* ─── Access profiles ─── */
+const PROFILES = [
   {
-    name: "Silvana Castro",
-    role: "Coordenadora Pedagógica",
-    quote: "Antes levávamos dias para consolidar notas. Agora, em 10 minutos sabemos quais turmas precisam de reforço e acionamos a equipe com dados.",
-    accent: bp.teal
+    icon: <AdminPanelSettingsIcon sx={{ fontSize: 36, color: brand.azulPrincipal }} />,
+    title: 'Gestão e Secretaria',
+    benefits: ['Cadastro e organização de alunos e turmas', 'Emissão de relatórios institucionais', 'Controle de acessos por unidade escolar'],
   },
   {
-    name: "Rafael Lima",
-    role: "Diretor Acadêmico",
-    quote: "O painel trouxe transparência para toda a liderança. As reuniões agora começam com KPIs e terminam com planos práticos.",
-    accent: bp.emerald
-  }
+    icon: <SupervisorAccountIcon sx={{ fontSize: 36, color: brand.verde }} />,
+    title: 'Direção e Coordenação',
+    benefits: ['Visão panorâmica do desempenho escolar', 'Acompanhamento de ocorrências e intervenções', 'Relatórios para tomadas de decisão'],
+  },
+  {
+    icon: <SupportAgentIcon sx={{ fontSize: 36, color: brand.azulApoio }} />,
+    title: 'Professores e Orientação',
+    benefits: ['Lançamento de notas e frequência', 'Registro de ocorrências pedagógicas', 'Comunicação direta com famílias'],
+  },
+  {
+    icon: <SchoolIcon sx={{ fontSize: 36, color: brand.dourado }} />,
+    title: 'Alunos e Responsáveis',
+    benefits: ['Acompanhamento de notas e boletim', 'Recebimento de comunicados da escola', 'Visualização de ocorrências e alertas'],
+  },
 ];
 
-const proofPoints = [
-  { label: "Autenticação segura", icon: <SecurityIcon />, color: bp.teal },
-  { label: "Controle por perfis", icon: <VerifiedIcon />, color: bp.emerald },
-  { label: "Integração com ingestão PDF", icon: <TrendingUpIcon />, color: bp.amber }
+/* ─── Platform modules ─── */
+const MODULES = [
+  { icon: <DashboardIcon />, label: 'Dashboard' },
+  { icon: <PeopleIcon />, label: 'Alunos' },
+  { icon: <ClassIcon />, label: 'Turmas' },
+  { icon: <GradesIcon />, label: 'Notas' },
+  { icon: <BarChartIcon />, label: 'Gráficos' },
+  { icon: <AssessmentIcon />, label: 'Relatórios' },
+  { icon: <UploadIcon />, label: 'Uploads' },
+  { icon: <ManageAccountsIcon />, label: 'Usuários' },
+  { icon: <CampaignIcon />, label: 'Comunicados' },
+  { icon: <ReportProblemIcon />, label: 'Ocorrências' },
+  { icon: <AutoAwesomeIcon />, label: 'Intervenções com IA' },
+  { icon: <PersonIcon />, label: 'Portal do aluno' },
+  { icon: <FamilyRestroomIcon />, label: 'Portal do responsável' },
 ];
 
-const fadeInUp = {
-  "@keyframes fadeInUp": {
-    from: { opacity: 0, transform: "translateY(28px)" },
-    to: { opacity: 1, transform: "translateY(0)" }
-  }
-};
+/* ─── Security & governance ─── */
+const SECURITY = [
+  { icon: <AdminPanelSettingsIcon sx={{ fontSize: 28, color: brand.azulPrincipal }} />, title: 'Controle por perfis', desc: 'Cada usuário enxerga apenas o que sua função permite, garantindo privacidade e organização.' },
+  { icon: <LockIcon sx={{ fontSize: 28, color: brand.verde }} />, title: 'Autenticação segura', desc: 'Acesso protegido por autenticação robusta, com validação de credenciais e sessões controladas.' },
+  { icon: <DomainIcon sx={{ fontSize: 28, color: brand.azulApoio }} />, title: 'Escolas e tenants', desc: 'Dados organizados por unidade escolar com separação lógica entre instituições no mesmo ambiente.' },
+  { icon: <HistoryIcon sx={{ fontSize: 28, color: brand.dourado }} />, title: 'Logs de auditoria', desc: 'Registro completo de ações realizadas na plataforma, rastreável para conformidade e segurança.' },
+  { icon: <DomainIcon sx={{ fontSize: 28, color: brand.verde }} />, title: 'Dados por unidade escolar', desc: 'Cada escola mantém seus dados organizados e independentes, sem mistura de informações.' },
+];
+
+/* ═══════════════════════════════════════════
+   LANDING PAGE COMPONENT
+   ═══════════════════════════════════════════ */
+
+const landingTheme = createTheme({
+  palette: {
+    mode: 'light',
+    primary: { main: brand.azulPrincipal, dark: brand.azulEscuro, contrastText: brand.branco },
+    secondary: { main: brand.verde },
+    text: { primary: brand.grafite, secondary: brand.cinza500 },
+    background: { default: brand.fundoClaroQuente, paper: brand.branco },
+  },
+  typography: {
+    fontFamily: '"Inter", "DM Sans", "Segoe UI", system-ui, sans-serif',
+    button: { textTransform: 'none', fontWeight: 600 },
+  },
+  shape: { borderRadius: 6 },
+  components: {
+    MuiTypography: {
+      styleOverrides: {
+        root: { color: brand.grafite },
+      },
+    },
+    MuiButton: {
+      styleOverrides: {
+        root: { borderRadius: 6, fontWeight: 600, boxShadow: 'none' },
+        containedPrimary: { backgroundColor: brand.azulPrincipal, '&:hover': { backgroundColor: brand.azulEscuro } },
+      },
+    },
+  },
+});
 
 export const LandingPage = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const navigate = useNavigate();
-  const isAuthenticated = useAppSelector((state) => Boolean(state.auth.accessToken));
-  const primaryCtaLabel = isAuthenticated ? "Ir para o painel" : "Entrar como administrador";
-  const primaryCtaTarget = isAuthenticated ? "/app" : "/login";
-  const studentCtaTarget = "/login?perfil=aluno";
 
-  const chips = useMemo(() => ["Secretaria", "Coordenação", "Orientação", "Direção"], []);
+  const trigger = useScrollTrigger({
+    disableHysteresis: true,
+    threshold: 50,
+  });
 
-  const handlePrimaryCta = () => navigate(primaryCtaTarget);
-  const handleStudentCta = () => navigate(studentCtaTarget);
+  /* ─── Navigation handler ─── */
+  const handleCTA = (path: string) => {
+    if (path.startsWith('#')) {
+      const el = document.querySelector(path);
+      el?.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      navigate(path);
+    }
+  };
 
-  return (
-    <Box sx={{ bgcolor: "background.default" }}>
+  /* ═══════════════════════════
+     HEADER
+     ═══════════════════════════ */
+  const renderHeader = () => (
+    <AppBar
+      position="fixed"
+      elevation={trigger ? 2 : 0}
+      sx={{
+        bgcolor: trigger ? alpha(brand.branco, 0.97) : brand.branco,
+        borderBottom: trigger ? `1px solid ${brand.cinza100}` : '1px solid transparent',
+        backdropFilter: trigger ? 'blur(8px)' : 'none',
+        transition: 'all 0.3s ease',
+      }}
+    >
+      <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 } }}>
+        <Toolbar
+          disableGutters
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            minHeight: { xs: 60, md: 68 },
+          }}
+        >
+          {/* Logo */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <img
+              src="/colaboraedu-logo.png"
+              alt="colaboraEDU"
+              style={{ height: isMobile ? 36 : 44, width: 'auto', objectFit: 'contain' }}
+            />
+          </Box>
 
-      {/* ─── HEADER ──────────────────────────────────────────────── */}
-      <Box
-        component="header"
-        sx={{
-          py: 1.5,
-          borderBottom: 1,
-          borderColor: "divider",
-          position: "sticky",
-          top: 0,
-          bgcolor: "rgba(255,255,255,0.88)",
-          backdropFilter: "blur(20px)",
-          zIndex: 10,
-          boxShadow: "0 1px 12px rgba(0,0,0,0.07)"
-        }}
-      >
-        <Container sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <Stack direction="row" spacing={2} alignItems="center">
-            <Box component="img" src="/colaboraedu4.webp" alt="Colabora EDU" sx={{ height: 36 }} />
-            <Divider orientation="vertical" flexItem sx={{ display: { xs: "none", sm: "block" } }} />
-            <Typography
-              variant="body2"
-              fontWeight={700}
-              sx={{
-                display: { xs: "none", md: "block" },
-                background: `linear-gradient(90deg, ${bp.teal}, ${bp.emerald})`,
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent"
-              }}
-            >
-              Inteligência acadêmica para decisões rápidas
-            </Typography>
-          </Stack>
-          <Stack direction="row" spacing={1.5} alignItems="center">
-            <Button
-              variant="contained"
-              onClick={handlePrimaryCta}
-              sx={{
-                borderRadius: 999,
-                px: 3,
-                background: `linear-gradient(90deg, ${bp.teal}, ${bp.emerald})`,
-                boxShadow: `0 4px 16px ${alpha(bp.teal, 0.35)}`,
-                "&:hover": { boxShadow: `0 6px 24px ${alpha(bp.teal, 0.5)}`, transform: "translateY(-1px)" },
-                transition: "all 0.2s"
-              }}
-            >
-              {primaryCtaLabel}
-            </Button>
-            <Button
-              variant="outlined"
-              onClick={handleStudentCta}
-              sx={{ borderRadius: 999, px: 2.5, borderColor: bp.teal, color: bp.teal, "&:hover": { borderColor: bp.emerald, color: bp.emerald } }}
-            >
-              Acesso aluno/responsável
-            </Button>
-          </Stack>
-        </Container>
-      </Box>
-
-      {/* ─── HERO ────────────────────────────────────────────────── */}
-      <Box
-        component="section"
-        sx={{
-          position: "relative",
-          overflow: "hidden",
-          py: { xs: 10, md: 14 },
-          background: `
-            radial-gradient(circle at 8% 20%, ${alpha(bp.teal, 0.18)}, transparent 40%),
-            radial-gradient(circle at 92% 12%, ${alpha(bp.emerald, 0.14)}, transparent 45%),
-            radial-gradient(circle at 50% 80%, ${alpha(bp.amber, 0.08)}, transparent 50%),
-            linear-gradient(140deg, #040b1c 0%, #071838 60%, #051a12 100%)
-          `
-        }}
-      >
-        <Container>
-          <Grid container spacing={6} alignItems="center">
-            <Grid item xs={12} md={7}>
-              {/* Badge */}
-              <Box
-                sx={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  px: 2,
-                  py: 0.75,
-                  mb: 3,
-                  borderRadius: 999,
-                  border: `1px solid ${alpha(bp.teal, 0.5)}`,
-                  bgcolor: alpha(bp.teal, 0.08),
-                  ...fadeInUp,
-                  animation: "fadeInUp 0.5s ease both"
-                }}
-              >
-                <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: bp.teal, mr: 1, boxShadow: `0 0 8px ${bp.teal}` }} />
-                <Typography variant="caption" fontWeight={700} sx={{ color: bp.teal, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                  Plataforma colaboraEDU
+          {/* Desktop nav links */}
+          {!isMobile && (
+            <Stack direction="row" spacing={3} alignItems="center">
+              {NAV_LINKS.map((link) => (
+                <Typography
+                  key={link.href}
+                  component="a"
+                  href={link.href}
+                  sx={{
+                    color: brand.grafite,
+                    textDecoration: 'none',
+                    fontSize: '0.9rem',
+                    fontWeight: 500,
+                    '&:hover': { color: brand.azulPrincipal },
+                    transition: 'color 0.2s',
+                  }}
+                >
+                  {link.label}
                 </Typography>
+              ))}
+              <Button
+                variant="contained"
+                startIcon={<LoginIcon />}
+                onClick={() => handleCTA('/login')}
+                sx={{ ml: 1, bgcolor: brand.azulPrincipal, '&:hover': { bgcolor: brand.azulApoio } }}
+              >
+                Entrar
+              </Button>
+            </Stack>
+          )}
+
+          {/* Mobile: menu button + CTA */}
+          {isMobile && (
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Button
+                variant="contained"
+                size="small"
+                onClick={() => handleCTA('/login')}
+                sx={{ minHeight: 40, fontSize: '0.85rem', px: 2, bgcolor: brand.azulPrincipal, '&:hover': { bgcolor: brand.azulApoio } }}
+              >
+                Entrar
+              </Button>
+              <IconButton
+                aria-label="Abrir menu"
+                onClick={() => setMobileMenuOpen(true)}
+                sx={{ color: brand.grafite }}
+              >
+                <MenuIcon />
+              </IconButton>
+            </Stack>
+          )}
+        </Toolbar>
+      </Container>
+
+      {/* Mobile drawer */}
+      <Drawer
+        anchor="right"
+        open={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        PaperProps={{
+          sx: { width: 260, bgcolor: brand.branco },
+        }}
+      >
+        <Box sx={{ p: 2, display: 'flex', justifyContent: 'flex-end' }}>
+          <IconButton
+            aria-label="Fechar menu"
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            <CloseIcon />
+          </IconButton>
+        </Box>
+        <List>
+          {NAV_LINKS.map((link) => (
+            <ListItem key={link.href} disablePadding>
+              <ListItemButton
+                component="a"
+                href={link.href}
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <ListItemText
+                  primary={link.label}
+                  primaryTypographyProps={{ fontWeight: 500, color: brand.grafite }}
+                />
+              </ListItemButton>
+            </ListItem>
+          ))}
+        </List>
+        <Box sx={{ p: 2 }}>
+          <Button
+            variant="contained"
+            fullWidth
+            startIcon={<LoginIcon />}
+            onClick={() => handleCTA('/login')}
+            sx={{ bgcolor: brand.azulPrincipal, '&:hover': { bgcolor: brand.azulApoio } }}
+          >
+            Entrar na plataforma
+          </Button>
+        </Box>
+      </Drawer>
+    </AppBar>
+  );
+
+  /* ═══════════════════════════
+     HERO
+     ═══════════════════════════ */
+  const renderHero = () => (
+    <Box
+      id="hero"
+      sx={{
+        pt: { xs: 10, md: 14 },
+        pb: { xs: 6, md: 10 },
+        bgcolor: brand.fundoClaroQuente,
+        minHeight: { xs: 'auto', md: '90vh' },
+        display: 'flex',
+        alignItems: 'center',
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
+      <Box
+        sx={{
+          position: 'absolute',
+          top: -120,
+          right: -80,
+          width: 320,
+          height: 320,
+          borderRadius: '50%',
+          background: `radial-gradient(circle, ${alpha(brand.azulPrincipal, 0.04)} 0%, transparent 70%)`,
+          pointerEvents: 'none',
+          display: { xs: 'none', md: 'block' },
+        }}
+      />
+
+      <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 }, position: 'relative', zIndex: 1 }}>
+        <Grid container spacing={{ xs: 4, md: 6 }} alignItems="center">
+          {/* Text column */}
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Chip
+              label="Plataforma educacional"
+              size="small"
+              sx={{
+                bgcolor: alpha(brand.azulPrincipal, 0.08),
+                color: brand.azulPrincipal,
+                fontWeight: 600,
+                mb: 2,
+                fontSize: '0.8rem',
+              }}
+            />
+            <Typography
+              variant="h1"
+              sx={{ fontSize: { xs: '2.2rem', sm: '2.8rem', md: '3.2rem' }, mb: 2 }}
+            >
+              <Box component="span" sx={{ color: brand.azulPrincipal }}>
+                colabora
               </Box>
+              <Box component="span" sx={{ color: brand.verde, fontWeight: 800 }}>
+                EDU
+              </Box>
+            </Typography>
+            <Typography
+              variant="h4"
+              sx={{
+                color: brand.grafite,
+                fontWeight: 500,
+                fontSize: { xs: '1.1rem', sm: '1.25rem' },
+                mb: 2,
+                lineHeight: 1.5,
+              }}
+            >
+              Gestão acadêmica, comunicação escolar e acompanhamento pedagógico em uma única plataforma.
+            </Typography>
+            <Typography
+              variant="body1"
+              sx={{ color: brand.cinza500, mb: 4, fontSize: { xs: '0.95rem', sm: '1rem' }, maxWidth: 520 }}
+            >
+              Organize alunos, turmas, notas, ocorrências, comunicados e relatórios com dados claros para decisões rápidas.
+            </Typography>
 
-              {/* Title */}
-              <Typography
-                variant="h1"
-                color="white"
-                fontWeight={800}
-                lineHeight={1.1}
-                gutterBottom
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: { xs: 4, md: 0 } }}>
+              <Button
+                variant="contained"
+                size="large"
+                startIcon={<LoginIcon />}
+                onClick={() => handleCTA('/login')}
+                sx={{ px: 4, py: 1.5, fontSize: '1rem', bgcolor: brand.azulPrincipal, '&:hover': { bgcolor: brand.azulApoio } }}
+              >
+                Entrar na plataforma
+              </Button>
+              <Button
+                variant="outlined"
+                size="large"
+                startIcon={<PersonOutlineOutlinedIcon />}
+                onClick={() => handleCTA('/login/aluno')}
                 sx={{
-                  fontSize: { xs: "2.25rem", md: "3rem" },
-                  letterSpacing: "-0.02em",
-                  ...fadeInUp,
-                  animation: "fadeInUp 0.5s ease 0.1s both"
+                  px: 4,
+                  py: 1.5,
+                  fontSize: '1rem',
+                  borderColor: brand.verde,
+                  color: brand.verde,
+                  '&:hover': { borderColor: brand.verde, bgcolor: alpha(brand.verde, 0.06) },
                 }}
               >
-                Inteligência em boletins para{" "}
-                <Box
-                  component="span"
-                  sx={{
-                    background: `linear-gradient(90deg, ${bp.teal}, ${bp.emerald})`,
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent"
-                  }}
-                >
-                  lideranças educacionais.
-                </Box>
-              </Typography>
+                Acesso aluno/responsável
+              </Button>
+            </Stack>
+          </Grid>
 
-              {/* Subtitle */}
-              <Typography
-                variant="h6"
-                color={alpha("#ffffff", 0.75)}
-                fontWeight={400}
-                maxWidth={520}
-                mb={5}
-                lineHeight={1.7}
-                sx={{ ...fadeInUp, animation: "fadeInUp 0.5s ease 0.2s both" }}
-              >
-                Reúna ingestão automatizada, dashboards executivos e trilhas de ação em um único cockpit, pronto para decisões de secretaria, coordenação e direção.
-              </Typography>
-
-              {/* CTA Buttons */}
-              <Stack
-                direction={{ xs: "column", sm: "row" }}
-                spacing={2}
-                mb={5}
-                sx={{ ...fadeInUp, animation: "fadeInUp 0.5s ease 0.3s both" }}
-              >
-                <Button
-                  size="large"
-                  variant="contained"
-                  onClick={handlePrimaryCta}
-                  sx={{
-                    borderRadius: 999,
-                    px: 4,
-                    py: 1.5,
-                    background: `linear-gradient(90deg, ${bp.teal}, ${bp.emerald})`,
-                    boxShadow: `0 4px 24px ${alpha(bp.teal, 0.45)}`,
-                    fontWeight: 700,
-                    "&:hover": { transform: "translateY(-2px)", boxShadow: `0 8px 32px ${alpha(bp.teal, 0.6)}` },
-                    transition: "all 0.2s"
-                  }}
-                >
-                  {primaryCtaLabel}
-                </Button>
-                <Button
-                  size="large"
-                  variant="outlined"
-                  onClick={() => document.getElementById("workflow")?.scrollIntoView({ behavior: "smooth" })}
-                  sx={{
-                    borderRadius: 999, px: 4, py: 1.5,
-                    color: "white", borderColor: alpha("#ffffff", 0.35),
-                    "&:hover": { borderColor: alpha("#ffffff", 0.7), bgcolor: alpha("#ffffff", 0.06) }
-                  }}
-                >
-                  Ver como funciona
-                </Button>
-                <Button
-                  size="large"
-                  variant="outlined"
-                  onClick={handleStudentCta}
-                  sx={{
-                    borderRadius: 999, px: 4, py: 1.5,
-                    color: alpha("#ffffff", 0.85),
-                    borderColor: alpha(bp.emerald, 0.5),
-                    bgcolor: alpha(bp.emerald, 0.06),
-                    "&:hover": { borderColor: bp.emerald, bgcolor: alpha(bp.emerald, 0.12) }
-                  }}
-                >
-                  Portal aluno/responsável
-                </Button>
+          {/* Visual column — dashboard mockup */}
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Box
+              sx={{
+                bgcolor: brand.branco,
+                borderRadius: 2,
+                border: `1px solid ${brand.cinza100}`,
+                p: { xs: 2, md: 3 },
+                boxShadow: '0 8px 32px rgba(10,60,160,0.08)',
+                maxWidth: { xs: '100%', md: 560 },
+                mx: 'auto',
+              }}
+            >
+              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+                <Typography variant="h6" sx={{ fontSize: '0.85rem', color: brand.azulPrincipal, fontWeight: 700 }}>
+                  Dashboard Acadêmico
+                </Typography>
+                <Chip label="2025" size="small" sx={{ bgcolor: alpha(brand.azulPrincipal, 0.08), color: brand.azulPrincipal, fontSize: '0.7rem' }} />
               </Stack>
 
-              {/* Audience chips */}
-              <Stack
-                direction="row"
-                spacing={1}
-                flexWrap="wrap"
-                gap={1}
-                sx={{ ...fadeInUp, animation: "fadeInUp 0.5s ease 0.4s both" }}
-              >
-                {chips.map((label) => (
-                  <Chip
-                    key={label}
-                    label={label}
-                    icon={<CheckCircleIcon style={{ color: bp.teal }} />}
-                    sx={{ bgcolor: alpha("#ffffff", 0.08), color: "white", border: `1px solid ${alpha("#ffffff", 0.15)}`, fontWeight: 500 }}
-                  />
-                ))}
-              </Stack>
-            </Grid>
-
-            {/* Hero card */}
-            <Grid item xs={12} md={5} sx={{ ...fadeInUp, animation: "fadeInUp 0.5s ease 0.25s both" }}>
-              <Card
-                sx={{
-                  p: 3,
-                  background: alpha("#ffffff", 0.05),
-                  backdropFilter: "blur(16px)",
-                  borderRadius: 4,
-                  border: `1px solid ${alpha("#ffffff", 0.15)}`,
-                  boxShadow: `0 24px 64px ${alpha("#000000", 0.4)}`
-                }}
-              >
-                <Stack spacing={2}>
-                  <Stack direction="row" alignItems="center" spacing={2}>
-                    <Avatar src="/colaboraedu3.webp" alt="Marca Colabora" sx={{ width: 56, height: 56 }} />
-                    <Box>
-                      <Typography color="white" fontWeight={700} fontSize="1rem">
-                        Painel Consolidado 360º
+              <Grid container spacing={1.5} sx={{ mb: 2 }}>
+                {[
+                  { label: 'Alunos', val: '1.248', color: brand.azulPrincipal },
+                  { label: 'Turmas', val: '42', color: brand.verde },
+                  { label: 'Aprovados', val: '87%', color: brand.dourado },
+                ].map((s) => (
+                  <Grid size={{ xs: 4 }} key={s.label}>
+                    <Box sx={{ bgcolor: alpha(s.color, 0.06), borderRadius: 1.5, p: 1.5, textAlign: 'center' }}>
+                      <Typography sx={{ fontSize: { xs: '1rem', sm: '1.2rem' }, fontWeight: 700, color: s.color }}>
+                        {s.val}
                       </Typography>
-                      <Typography color={alpha("#ffffff", 0.6)} variant="body2">
-                        Matutino · Vespertino · Noturno
+                      <Typography sx={{ fontSize: '0.65rem', color: brand.cinza500 }}>
+                        {s.label}
                       </Typography>
                     </Box>
-                  </Stack>
-                  <Divider sx={{ borderColor: alpha("#ffffff", 0.12) }} />
-                  <Stack spacing={1.5}>
-                    {proofPoints.map((item) => (
-                      <Stack
-                        key={item.label}
-                        direction="row"
-                        spacing={2}
-                        alignItems="center"
-                        sx={{
-                          p: 1.5,
-                          borderRadius: 2,
-                          bgcolor: alpha("#ffffff", 0.04),
-                          border: `1px solid ${alpha(item.color, 0.2)}`
-                        }}
-                      >
-                        <Avatar sx={{ bgcolor: alpha(item.color, 0.15), color: item.color, width: 36, height: 36 }}>
-                          {item.icon as ReactElement}
-                        </Avatar>
-                        <Typography color="white" fontWeight={500} fontSize="0.9rem">{item.label}</Typography>
-                      </Stack>
-                    ))}
-                  </Stack>
-                </Stack>
-              </Card>
-            </Grid>
-          </Grid>
-        </Container>
-      </Box>
+                  </Grid>
+                ))}
+              </Grid>
 
-      {/* ─── STATS ───────────────────────────────────────────────── */}
-      <Container sx={{ py: { xs: 6, md: 8 } }}>
-        <Grid container spacing={3}>
-          {stats.map((stat, i) => (
-            <Grid item xs={12} sm={6} md={3} key={stat.label}>
-              <Card
+              <Box sx={{ px: 1 }}>
+                <Stack direction="row" alignItems="flex-end" spacing={1} sx={{ height: 80 }}>
+                  {[45, 65, 55, 80, 70, 60, 90, 75, 85, 50, 72, 68].map((h, i) => (
+                    <Box
+                      key={i}
+                      sx={{
+                        flex: 1,
+                        height: `${h}%`,
+                        bgcolor: i === 6 ? brand.verde : alpha(brand.azulPrincipal, 0.2 + h / 300),
+                        borderRadius: '4px 4px 0 0',
+                        transition: 'height 0.3s ease',
+                      }}
+                    />
+                  ))}
+                </Stack>
+                <Typography sx={{ fontSize: '0.6rem', color: brand.cinza500, mt: 0.5, textAlign: 'center' }}>
+                  Desempenho mensal
+                </Typography>
+              </Box>
+            </Box>
+          </Grid>
+        </Grid>
+      </Container>
+    </Box>
+  );
+
+  /* ═══════════════════════════
+     PROOF OF VALUE
+     ═══════════════════════════ */
+  const renderStats = () => (
+    <Box sx={{ py: { xs: 5, md: 7 }, bgcolor: brand.azulPrincipal }}>
+      <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 } }}>
+        <Grid container spacing={{ xs: 2, md: 4 }}>
+          {STATS.map((stat, idx) => (
+            <Grid size={{ xs: 6, md: 3 }} key={idx}>
+              <Box
                 sx={{
-                  borderRadius: 3,
-                  borderTop: `4px solid ${statsAccents[i]}`,
-                  border: `1px solid`,
-                  borderColor: "divider",
-                  boxShadow: "0 2px 16px rgba(0,0,0,0.06)",
-                  transition: "transform 0.2s, boxShadow 0.2s",
-                  "&:hover": { transform: "translateY(-4px)", boxShadow: "0 8px 32px rgba(0,0,0,0.1)" },
-                  ...fadeInUp,
-                  animation: `fadeInUp 0.5s ease ${0.05 * i}s both`
+                  textAlign: 'center',
+                  p: { xs: 2, md: 3 },
+                  borderRadius: 2,
+                  bgcolor: alpha(brand.branco, 0.08),
+                  border: `1px solid ${alpha(brand.branco, 0.12)}`,
+                  transition: 'transform 0.2s',
+                  '&:hover': { transform: 'translateY(-2px)' },
                 }}
               >
-                <CardContent sx={{ p: 3 }}>
-                  <Typography
-                    fontWeight={800}
-                    sx={{ fontSize: { xs: "2rem", md: "2.5rem" }, color: statsAccents[i], lineHeight: 1.1 }}
-                  >
-                    {stat.value}
+                <Box sx={{ mb: 1.5, display: 'flex', justifyContent: 'center' }}>
+                  {React.cloneElement(stat.icon, { sx: { fontSize: 32, color: brand.branco } })}
+                </Box>
+                <Typography sx={{ color: brand.branco, fontWeight: 700, fontSize: { xs: '0.9rem', md: '1rem' }, mb: 0.5 }}>
+                  {stat.value}
+                </Typography>
+                <Typography sx={{ color: alpha(brand.branco, 0.7), fontSize: { xs: '0.72rem', md: '0.8rem' }, lineHeight: 1.4 }}>
+                  {stat.desc}
+                </Typography>
+              </Box>
+            </Grid>
+          ))}
+        </Grid>
+      </Container>
+    </Box>
+  );
+
+  /* ═══════════════════════════
+     HOW THE PLATFORM HELPS
+     ═══════════════════════════ */
+  const renderHowItHelps = () => (
+    <Box id="plataforma" sx={{ py: { xs: 6, md: 10 }, bgcolor: brand.fundoClaroQuente }}>
+      <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 } }}>
+        <Box sx={{ textAlign: 'center', mb: { xs: 4, md: 6 } }}>
+          <Chip
+            label="Como a plataforma ajuda"
+            size="small"
+            sx={{ bgcolor: alpha(brand.verde, 0.1), color: brand.verde, fontWeight: 600, mb: 2, fontSize: '0.8rem' }}
+          />
+          <Typography variant="h2" sx={{ fontSize: { xs: '1.7rem', sm: '2rem', md: '2.2rem' }, mb: 1.5 }}>
+            Tudo que sua escola precisa em um só lugar
+          </Typography>
+          <Typography variant="subtitle1" sx={{ maxWidth: 600, mx: 'auto', fontSize: { xs: '0.95rem', sm: '1.05rem' } }}>
+            A colaboraEDU reúne as ferramentas essenciais para gestão acadêmica, acompanhamento pedagógico e comunicação escolar.
+          </Typography>
+        </Box>
+
+        <Grid container spacing={{ xs: 2, md: 3 }}>
+          {HELPS.map((item, idx) => (
+            <Grid size={{ xs: 12, sm: 6, md: 4 }} key={idx}>
+              <Card
+                elevation={0}
+                sx={{
+                  height: '100%',
+                  bgcolor: brand.branco,
+                  border: `1px solid ${brand.cinza100}`,
+                  borderRadius: '8px',
+                  transition: 'box-shadow 0.2s, transform 0.2s',
+                  '&:hover': { boxShadow: '0 4px 16px rgba(10,60,160,0.08)', transform: 'translateY(-2px)' },
+                }}
+              >
+                <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
+                  <Box sx={{ mb: 2 }}>{item.icon}</Box>
+                  <Typography variant="h5" sx={{ fontWeight: 600, fontSize: { xs: '1rem', sm: '1.05rem' }, mb: 1, color: brand.grafite }}>
+                    {item.title}
                   </Typography>
-                  <Typography
-                    variant="caption"
-                    sx={{ textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, color: "text.secondary", display: "block", mt: 0.5 }}
-                  >
-                    {stat.label}
+                  <Typography variant="body2" sx={{ color: brand.cinza500, lineHeight: 1.6, fontSize: { xs: '0.85rem', sm: '0.875rem' } }}>
+                    {item.desc}
                   </Typography>
-                  <Stack direction="row" spacing={0.75} alignItems="center" mt={1.5}>
-                    <Box sx={{ color: statsAccents[i], display: "flex", opacity: 0.7 }}>{stat.icon as ReactElement}</Box>
-                    <Typography variant="body2" color="text.secondary">{stat.detail}</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      </Container>
+    </Box>
+  );
+
+  /* ═══════════════════════════
+     ACCESS PROFILES
+     ═══════════════════════════ */
+  const renderProfiles = () => (
+    <Box id="perfis" sx={{ py: { xs: 6, md: 10 }, bgcolor: brand.branco }}>
+      <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 } }}>
+        <Box sx={{ textAlign: 'center', mb: { xs: 4, md: 6 } }}>
+          <Chip
+            label="Perfis de acesso"
+            size="small"
+            sx={{ bgcolor: alpha(brand.azulPrincipal, 0.08), color: brand.azulPrincipal, fontWeight: 600, mb: 2, fontSize: '0.8rem' }}
+          />
+          <Typography variant="h2" sx={{ fontSize: { xs: '1.7rem', sm: '2rem', md: '2.2rem' }, mb: 1.5 }}>
+            Feito para cada perfil da escola
+          </Typography>
+          <Typography variant="subtitle1" sx={{ maxWidth: 600, mx: 'auto', fontSize: { xs: '0.95rem', sm: '1.05rem' } }}>
+            Cada usuário tem acesso às funcionalidades certas para sua função, com dados organizados e seguros.
+          </Typography>
+        </Box>
+
+        <Grid container spacing={{ xs: 2, md: 3 }}>
+          {PROFILES.map((profile, idx) => (
+            <Grid size={{ xs: 12, sm: 6, md: 3 }} key={idx}>
+              <Card
+                elevation={0}
+                sx={{
+                  height: '100%',
+                  bgcolor: brand.branco,
+                  border: `1px solid ${brand.cinza100}`,
+                  borderRadius: '8px',
+                  transition: 'box-shadow 0.2s, transform 0.2s',
+                  '&:hover': { boxShadow: '0 4px 16px rgba(10,60,160,0.08)', transform: 'translateY(-2px)' },
+                }}
+              >
+                <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
+                  <Box sx={{ mb: 2 }}>{profile.icon}</Box>
+                  <Typography variant="h5" sx={{ fontWeight: 700, fontSize: { xs: '1.05rem', sm: '1.1rem' }, mb: 2, color: brand.grafite }}>
+                    {profile.title}
+                  </Typography>
+                  <Stack spacing={1}>
+                    {profile.benefits.map((b, bi) => (
+                      <Stack key={bi} direction="row" spacing={1} alignItems="flex-start">
+                        <CheckCircleOutlineOutlinedIcon sx={{ fontSize: 18, color: brand.verde, mt: 0.3, flexShrink: 0 }} />
+                        <Typography variant="body2" sx={{ color: brand.cinza500, lineHeight: 1.5, fontSize: { xs: '0.82rem', sm: '0.875rem' } }}>
+                          {b}
+                        </Typography>
+                      </Stack>
+                    ))}
                   </Stack>
                 </CardContent>
               </Card>
@@ -441,416 +654,338 @@ export const LandingPage = () => {
           ))}
         </Grid>
       </Container>
+    </Box>
+  );
 
-      {/* ─── WORKFLOW ─────────────────────────────────────────────── */}
-      <Box
-        component="section"
-        id="workflow"
-        sx={{ py: { xs: 6, md: 10 }, bgcolor: alpha(bp.teal, 0.03), borderTop: "1px solid", borderColor: "divider" }}
-      >
-        <Container>
-          <Stack spacing={1} mb={6} alignItems="center" textAlign="center">
-            <Typography
-              variant="overline"
-              fontWeight={700}
-              sx={{ color: bp.teal, letterSpacing: "0.12em" }}
-            >
-              Fluxo integrado
-            </Typography>
-            <Typography variant="h4" fontWeight={800} letterSpacing="-0.01em">
-              Do PDF bruto à decisão estratégica.
-            </Typography>
-            <Typography variant="body1" color="text.secondary" maxWidth={600}>
-              Automatize ingestões, visualize tendências por turno e direcione ações específicas para cada ciclo acadêmico.
-            </Typography>
-          </Stack>
+  /* ═══════════════════════════
+     PLATFORM MODULES
+     ═══════════════════════════ */
+  const renderModules = () => (
+    <Box id="recursos" sx={{ py: { xs: 6, md: 10 }, bgcolor: brand.fundoClaroQuente }}>
+      <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 } }}>
+        <Box sx={{ textAlign: 'center', mb: { xs: 4, md: 6 } }}>
+          <Chip
+            label="Módulos da plataforma"
+            size="small"
+            sx={{ bgcolor: alpha(brand.dourado, 0.12), color: '#9A7E1C', fontWeight: 600, mb: 2, fontSize: '0.8rem' }}
+          />
+          <Typography variant="h2" sx={{ fontSize: { xs: '1.7rem', sm: '2rem', md: '2.2rem' }, mb: 1.5 }}>
+            Módulos completos para sua escola
+          </Typography>
+          <Typography variant="subtitle1" sx={{ maxWidth: 600, mx: 'auto', fontSize: { xs: '0.95rem', sm: '1.05rem' } }}>
+            Da gestão ao acompanhamento pedagógico, cada módulo foi pensado para facilitar o dia a dia escolar.
+          </Typography>
+        </Box>
 
-          <Grid container spacing={3} alignItems="stretch">
-            {workflows.map((step, index) => (
-              <Grid item xs={12} md={4} key={step.title}>
-                <Card
+        {isMobile ? (
+          <Stack spacing={1.5}>
+            {MODULES.map((mod, idx) => (
+              <Stack
+                key={idx}
+                direction="row"
+                spacing={2}
+                alignItems="center"
+                sx={{ bgcolor: brand.branco, borderRadius: '8px', p: 2, border: `1px solid ${brand.cinza100}` }}
+              >
+                <Box
                   sx={{
-                    height: "100%",
-                    borderRadius: 3,
-                    borderTop: `4px solid ${step.color}`,
-                    border: "1px solid",
-                    borderColor: "divider",
-                    transition: "transform 0.2s, boxShadow 0.2s",
-                    "&:hover": { transform: "translateY(-6px)", boxShadow: 4 }
+                    width: 40,
+                    height: 40,
+                    borderRadius: 1.5,
+                    bgcolor: alpha(brand.azulPrincipal, 0.06),
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
                   }}
                 >
-                  <CardContent sx={{ p: 3 }}>
-                    {/* Step number */}
+                  {React.cloneElement(mod.icon, { sx: { fontSize: 22, color: brand.azulPrincipal } })}
+                </Box>
+                <Typography variant="body1" sx={{ fontWeight: 500, fontSize: '0.9rem', color: brand.grafite }}>
+                  {mod.label}
+                </Typography>
+              </Stack>
+            ))}
+          </Stack>
+        ) : (
+          <Grid container spacing={2}>
+            {MODULES.map((mod, idx) => (
+              <Grid size={{ xs: 6, sm: 4, md: 3 }} key={idx}>
+                <Stack
+                  direction="row"
+                  spacing={1.5}
+                  alignItems="center"
+                  sx={{
+                    bgcolor: brand.branco,
+                    borderRadius: '8px',
+                    p: 2,
+                    border: `1px solid ${brand.cinza100}`,
+                    transition: 'box-shadow 0.2s',
+                    '&:hover': { boxShadow: '0 2px 8px rgba(10,60,160,0.06)' },
+                  }}
+                >
+                  <Box
+                    sx={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 1.5,
+                      bgcolor: alpha(brand.azulPrincipal, 0.06),
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {React.cloneElement(mod.icon, { sx: { fontSize: 20, color: brand.azulPrincipal } })}
+                  </Box>
+                  <Typography variant="body2" sx={{ fontWeight: 500, fontSize: '0.85rem', color: brand.grafite }}>
+                    {mod.label}
+                  </Typography>
+                </Stack>
+              </Grid>
+            ))}
+          </Grid>
+        )}
+      </Container>
+    </Box>
+  );
+
+  /* ═══════════════════════════
+     SECURITY & GOVERNANCE
+     ═══════════════════════════ */
+  const renderSecurity = () => (
+    <Box id="seguranca" sx={{ py: { xs: 6, md: 10 }, bgcolor: brand.branco }}>
+      <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 } }}>
+        <Grid container spacing={{ xs: 4, md: 6 }} alignItems="center">
+          <Grid size={{ xs: 12, md: 7 }}>
+            <Chip
+              label="Segurança e governança"
+              size="small"
+              sx={{ bgcolor: alpha(brand.verde, 0.1), color: brand.verde, fontWeight: 600, mb: 2, fontSize: '0.8rem' }}
+            />
+            <Typography variant="h2" sx={{ fontSize: { xs: '1.7rem', sm: '2rem', md: '2.2rem' }, mb: 2 }}>
+              Seus dados protegidos e organizados
+            </Typography>
+            <Typography variant="subtitle1" sx={{ mb: 4, fontSize: { xs: '0.95rem', sm: '1.05rem' }, maxWidth: 520 }}>
+              A colaboraEDU foi projetada com segurança e governança de dados como prioridade. Cada informação é tratada com rigor e organização.
+            </Typography>
+
+            <Grid container spacing={2}>
+              {SECURITY.map((item, idx) => (
+                <Grid size={{ xs: 12, sm: 6 }} key={idx}>
+                  <Stack direction="row" spacing={2} alignItems="flex-start">
                     <Box
                       sx={{
                         width: 44,
                         height: 44,
-                        borderRadius: "50%",
-                        background: `linear-gradient(135deg, ${step.color}, ${alpha(step.color, 0.6)})`,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        mb: 2,
-                        boxShadow: `0 4px 12px ${alpha(step.color, 0.35)}`
+                        borderRadius: 1.5,
+                        bgcolor: alpha(brand.azulPrincipal, 0.06),
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
                       }}
                     >
-                      <Typography fontWeight={800} fontSize="1.1rem" color="white">{index + 1}</Typography>
+                      {item.icon}
                     </Box>
-                    <Avatar
-                      sx={{ bgcolor: alpha(step.color, 0.1), color: step.color, mb: 2, width: 44, height: 44 }}
-                    >
-                      {step.icon as ReactElement}
-                    </Avatar>
-                    <Typography variant="h6" fontWeight={700} gutterBottom letterSpacing="-0.01em">
-                      {step.title}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" lineHeight={1.7}>
-                      {step.description}
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        </Container>
-      </Box>
-
-      {/* ─── AUDIENCES ───────────────────────────────────────────── */}
-      <Container sx={{ py: { xs: 6, md: 10 } }}>
-        <Stack spacing={1} mb={6} alignItems="center" textAlign="center">
-          <Typography variant="overline" fontWeight={700} sx={{ color: bp.emerald, letterSpacing: "0.12em" }}>
-            Para cada perfil
-          </Typography>
-          <Typography variant="h4" fontWeight={800} letterSpacing="-0.01em">
-            A ferramenta certa para cada líder.
-          </Typography>
-        </Stack>
-        <Grid container spacing={3}>
-          {audiences.map((audience) => (
-            <Grid item xs={12} md={4} key={audience.role}>
-              <Card
-                sx={{
-                  height: "100%",
-                  borderRadius: 3,
-                  border: "1px solid",
-                  borderColor: "divider",
-                  transition: "transform 0.2s, boxShadow 0.2s",
-                  "&:hover": { transform: "translateY(-4px)", boxShadow: 3 }
-                }}
-              >
-                <CardContent sx={{ p: 3 }}>
-                  <Avatar
-                    sx={{ bgcolor: alpha(audience.color, 0.1), color: audience.color, width: 52, height: 52, mb: 2 }}
-                  >
-                    {audience.icon as ReactElement}
-                  </Avatar>
-                  <Box
-                    sx={{
-                      display: "inline-block",
-                      px: 1.5,
-                      py: 0.4,
-                      mb: 1.5,
-                      borderRadius: 999,
-                      bgcolor: alpha(audience.color, 0.1),
-                      color: audience.color,
-                      fontSize: "0.7rem",
-                      fontWeight: 700,
-                      letterSpacing: "0.06em",
-                      textTransform: "uppercase"
-                    }}
-                  >
-                    {audience.role}
-                  </Box>
-                  <Typography variant="h6" fontWeight={700} gutterBottom letterSpacing="-0.01em">
-                    {audience.summary}
-                  </Typography>
-                  <Divider sx={{ my: 2 }} />
-                  <Stack spacing={1}>
-                    {audience.focus.map((item) => (
-                      <Stack key={item} direction="row" spacing={1.5} alignItems="center">
-                        <CheckCircleIcon sx={{ color: audience.color, fontSize: 18 }} />
-                        <Typography variant="body2" color="text.secondary">{item}</Typography>
-                      </Stack>
-                    ))}
-                  </Stack>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      </Container>
-
-      {/* ─── TESTIMONIALS ─────────────────────────────────────────── */}
-      <Box
-        component="section"
-        sx={{
-          py: { xs: 8, md: 12 },
-          background: "linear-gradient(140deg, #0f172a 0%, #1e293b 100%)",
-          borderTop: "1px solid",
-          borderColor: alpha("#ffffff", 0.06)
-        }}
-      >
-        <Container>
-          <Stack spacing={1} mb={6} alignItems="center" textAlign="center">
-            <Typography variant="overline" fontWeight={700} sx={{ color: bp.teal, letterSpacing: "0.12em" }}>
-              Quem usa aprova
-            </Typography>
-            <Typography variant="h4" fontWeight={800} color="white" letterSpacing="-0.01em">
-              Resultados reais em escolas reais.
-            </Typography>
-          </Stack>
-          <Grid container spacing={3}>
-            {testimonials.map((t) => (
-              <Grid item xs={12} md={6} key={t.name}>
-                <Card
-                  sx={{
-                    height: "100%",
-                    borderRadius: 3,
-                    bgcolor: alpha("#ffffff", 0.04),
-                    border: "1px solid",
-                    borderColor: alpha("#ffffff", 0.08),
-                    borderLeft: `4px solid ${t.accent}`,
-                    backdropFilter: "blur(8px)",
-                    transition: "transform 0.2s",
-                    "&:hover": { transform: "translateY(-4px)" }
-                  }}
-                >
-                  <CardContent sx={{ p: 3.5 }}>
-                    <Typography
-                      sx={{
-                        fontSize: "5rem",
-                        lineHeight: 0.7,
-                        color: t.accent,
-                        opacity: 0.35,
-                        fontFamily: "Georgia, serif",
-                        mb: 1,
-                        display: "block"
-                      }}
-                    >
-                      "
-                    </Typography>
-                    <Typography
-                      variant="body1"
-                      color={alpha("#ffffff", 0.85)}
-                      lineHeight={1.75}
-                      fontStyle="italic"
-                      mb={3}
-                    >
-                      {t.quote}
-                    </Typography>
-                    <Stack direction="row" spacing={2} alignItems="center">
-                      <Avatar
-                        sx={{
-                          background: `linear-gradient(135deg, ${t.accent}, ${alpha(t.accent, 0.6)})`,
-                          color: "white",
-                          fontWeight: 800,
-                          width: 44,
-                          height: 44
-                        }}
-                      >
-                        {t.name.charAt(0)}
-                      </Avatar>
-                      <Box>
-                        <Typography color="white" fontWeight={700} fontSize="0.95rem">{t.name}</Typography>
-                        <Typography variant="body2" sx={{ color: alpha(t.accent, 0.85) }}>{t.role}</Typography>
-                      </Box>
-                    </Stack>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        </Container>
-      </Box>
-
-      {/* ─── CTA FINAL ───────────────────────────────────────────── */}
-      <Box
-        component="section"
-        sx={{
-          py: { xs: 8, md: 12 },
-          background: "linear-gradient(140deg, #0a1628 0%, #0f2040 50%, #071a12 100%)"
-        }}
-      >
-        <Container>
-          <Stack spacing={1} mb={6} alignItems="center" textAlign="center">
-            <Typography variant="overline" fontWeight={700} sx={{ color: alpha("#ffffff", 0.5), letterSpacing: "0.12em" }}>
-              Acessos rápidos
-            </Typography>
-            <Typography variant="h4" fontWeight={800} color="white" letterSpacing="-0.01em">
-              Escolha seu portal de entrada.
-            </Typography>
-          </Stack>
-          <Grid container spacing={3} justifyContent="center">
-            {/* Admin portal */}
-            <Grid item xs={12} md={5}>
-              <Card
-                sx={{
-                  height: "100%",
-                  borderRadius: 3,
-                  bgcolor: alpha("#ffffff", 0.04),
-                  border: "1px solid",
-                  borderColor: alpha("#ffffff", 0.1),
-                  borderTop: `4px solid ${bp.teal}`,
-                  transition: "transform 0.2s, boxShadow 0.2s",
-                  "&:hover": { transform: "translateY(-4px)", boxShadow: `0 16px 48px ${alpha(bp.teal, 0.2)}` }
-                }}
-              >
-                <CardContent sx={{ p: 3.5 }}>
-                  <Stack direction="row" spacing={2} alignItems="center" mb={2.5}>
-                    <Avatar sx={{ bgcolor: alpha(bp.teal, 0.15), color: bp.teal, width: 52, height: 52 }}>
-                      <SecurityIcon />
-                    </Avatar>
                     <Box>
-                      <Typography color="white" fontWeight={700} fontSize="1rem">Portal Administrativo</Typography>
-                      <Typography variant="caption" color={alpha("#ffffff", 0.55)}>Gestores, secretaria e coordenação</Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '0.95rem', mb: 0.5, color: brand.grafite }}>
+                        {item.title}
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: brand.cinza500, lineHeight: 1.5, fontSize: '0.82rem' }}>
+                        {item.desc}
+                      </Typography>
                     </Box>
                   </Stack>
-                  <Stack spacing={1.2} mb={3}>
-                    {["Importações e usuários", "KPIs por turno e série", "Relatórios consolidados"].map((item) => (
-                      <Stack key={item} direction="row" spacing={1.5} alignItems="center">
-                        <CheckCircleIcon sx={{ color: bp.teal, fontSize: 18 }} />
-                        <Typography variant="body2" color={alpha("#ffffff", 0.8)}>{item}</Typography>
-                      </Stack>
-                    ))}
-                  </Stack>
-                  <Button
-                    fullWidth
-                    variant="contained"
-                    endIcon={<ArrowForwardIcon />}
-                    onClick={handlePrimaryCta}
-                    sx={{
-                      borderRadius: 2,
-                      py: 1.5,
-                      background: `linear-gradient(90deg, ${bp.teal}, ${bp.emerald})`,
-                      boxShadow: `0 4px 16px ${alpha(bp.teal, 0.4)}`,
-                      fontWeight: 700,
-                      "&:hover": { boxShadow: `0 8px 24px ${alpha(bp.teal, 0.6)}` }
-                    }}
-                  >
-                    {primaryCtaLabel}
-                  </Button>
-                </CardContent>
-              </Card>
-            </Grid>
-
-            {/* Student portal */}
-            <Grid item xs={12} md={5}>
-              <Card
-                sx={{
-                  height: "100%",
-                  borderRadius: 3,
-                  bgcolor: alpha("#ffffff", 0.04),
-                  border: "1px solid",
-                  borderColor: alpha("#ffffff", 0.1),
-                  borderTop: `4px solid ${bp.emerald}`,
-                  transition: "transform 0.2s, boxShadow 0.2s",
-                  "&:hover": { transform: "translateY(-4px)", boxShadow: `0 16px 48px ${alpha(bp.emerald, 0.2)}` }
-                }}
-              >
-                <CardContent sx={{ p: 3.5 }}>
-                  <Stack direction="row" spacing={2} alignItems="center" mb={2.5}>
-                    <Avatar sx={{ bgcolor: alpha(bp.emerald, 0.15), color: bp.emerald, width: 52, height: 52 }}>
-                      <SchoolIcon />
-                    </Avatar>
-                    <Box>
-                      <Typography color="white" fontWeight={700} fontSize="1rem">Portal Aluno/Responsável</Typography>
-                      <Typography variant="caption" color={alpha("#ffffff", 0.55)}>Acompanhe notas, faltas e mensagens</Typography>
-                    </Box>
-                  </Stack>
-                  <Stack spacing={1.2} mb={3}>
-                    {["Visualização de boletins", "Linha do tempo de notificações", "Orientações personalizadas"].map((item) => (
-                      <Stack key={item} direction="row" spacing={1.5} alignItems="center">
-                        <FamilyRestroomIcon sx={{ color: bp.emerald, fontSize: 18 }} />
-                        <Typography variant="body2" color={alpha("#ffffff", 0.8)}>{item}</Typography>
-                      </Stack>
-                    ))}
-                  </Stack>
-                  <Button
-                    fullWidth
-                    variant="outlined"
-                    endIcon={<ArrowForwardIcon />}
-                    onClick={handleStudentCta}
-                    sx={{
-                      borderRadius: 2,
-                      py: 1.5,
-                      borderColor: bp.emerald,
-                      color: bp.emerald,
-                      fontWeight: 700,
-                      "&:hover": { bgcolor: alpha(bp.emerald, 0.1), borderColor: bp.emerald }
-                    }}
-                  >
-                    Acessar como aluno/responsável
-                  </Button>
-                </CardContent>
-              </Card>
+                </Grid>
+              ))}
             </Grid>
           </Grid>
-        </Container>
-      </Box>
 
-      {/* ─── FOOTER ──────────────────────────────────────────────── */}
-      <Box
-        component="footer"
-        sx={{ py: 6, borderTop: 1, borderColor: "divider", bgcolor: "background.paper" }}
-      >
-        <Container>
-          <Grid container spacing={4} justifyContent="space-between">
-            {/* Brand */}
-            <Grid item xs={12} md={4}>
-              <Stack spacing={1.5}>
-                <Box component="img" src="/colaboraedu3.webp" alt="Colabora EDU" sx={{ height: 40, width: "fit-content" }} />
-                <Typography variant="body2" color="text.secondary" maxWidth={260} lineHeight={1.7}>
-                  Plataforma de inteligência acadêmica para secretarias, coordenações e direções escolares.
-                </Typography>
-                <Typography variant="caption" color="text.disabled">
-                  © {new Date().getFullYear()} ColaboraEDU — Todos os direitos reservados.
-                </Typography>
-              </Stack>
-            </Grid>
-
-            {/* Links */}
-            <Grid item xs={6} md={3}>
-              <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: "0.08em", display: "block", mb: 2 }}>
-                Plataforma
+          <Grid size={{ xs: 12, md: 5 }}>
+            <Box
+              sx={{
+                bgcolor: alpha(brand.azulPrincipal, 0.03),
+                borderRadius: 3,
+                p: { xs: 3, md: 4 },
+                border: `1px solid ${alpha(brand.azulPrincipal, 0.08)}`,
+                textAlign: 'center',
+              }}
+            >
+              <SecurityIcon sx={{ fontSize: 64, color: brand.azulPrincipal, mb: 2 }} />
+              <Typography
+                variant="h4"
+                sx={{ fontSize: { xs: '1.2rem', md: '1.4rem' }, mb: 1, color: brand.azulPrincipal, fontWeight: 700 }}
+              >
+                Proteção em cada camada
               </Typography>
-              <Stack spacing={1.2}>
-                {["Política de Privacidade", "Termos de Uso", "Suporte técnico"].map((link) => (
-                  <Typography key={link} variant="body2" color="text.secondary" sx={{ cursor: "pointer", "&:hover": { color: bp.teal } }}>
-                    {link}
-                  </Typography>
+              <Typography variant="body2" sx={{ color: brand.cinza500, lineHeight: 1.6, maxWidth: 340, mx: 'auto' }}>
+                Da autenticação ao armazenamento, cada etapa é projetada para manter seus dados seguros e acessíveis apenas para quem deve.
+              </Typography>
+              <Stack direction="row" spacing={2} justifyContent="center" sx={{ mt: 3, flexWrap: 'wrap', gap: 1 }}>
+                {['Autenticação', 'Autorização', 'Auditoria', 'Criptografia'].map((tag) => (
+                  <Chip
+                    key={tag}
+                    label={tag}
+                    size="small"
+                    sx={{ bgcolor: alpha(brand.azulPrincipal, 0.08), color: brand.azulPrincipal, fontWeight: 500, fontSize: '0.75rem' }}
+                  />
                 ))}
               </Stack>
-            </Grid>
-
-            {/* Security badges */}
-            <Grid item xs={6} md={4}>
-              <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: "0.08em", display: "block", mb: 2 }}>
-                Segurança
-              </Typography>
-              <Stack spacing={1.5}>
-                <Stack direction="row" spacing={1.5} alignItems="center">
-                  <Avatar sx={{ bgcolor: alpha(bp.teal, 0.1), color: bp.teal, width: 32, height: 32 }}>
-                    <LockIcon fontSize="small" />
-                  </Avatar>
-                  <Typography variant="body2" color="text.secondary">Ambiente seguro e monitorado</Typography>
-                </Stack>
-                <Stack direction="row" spacing={1.5} alignItems="center">
-                  <Avatar sx={{ bgcolor: alpha(bp.emerald, 0.1), color: bp.emerald, width: 32, height: 32 }}>
-                    <ShieldIcon fontSize="small" />
-                  </Avatar>
-                  <Typography variant="body2" color="text.secondary">Dados criptografados em trânsito</Typography>
-                </Stack>
-                <Stack direction="row" spacing={1.5} alignItems="center">
-                  <Avatar sx={{ bgcolor: alpha(bp.amber, 0.1), color: bp.amber, width: 32, height: 32 }}>
-                    <VerifiedIcon fontSize="small" />
-                  </Avatar>
-                  <Typography variant="body2" color="text.secondary">Autenticação JWT + RBAC</Typography>
-                </Stack>
-              </Stack>
-            </Grid>
+            </Box>
           </Grid>
-        </Container>
-      </Box>
+        </Grid>
+      </Container>
     </Box>
+  );
+
+  /* ═══════════════════════════
+     FINAL CTA
+     ═══════════════════════════ */
+  const renderFinalCTA = () => (
+    <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: brand.fundoClaroQuente }}>
+      <Container maxWidth="md" sx={{ px: { xs: 2, sm: 3 }, textAlign: 'center' }}>
+        <Typography variant="h2" sx={{ fontSize: { xs: '1.7rem', sm: '2rem', md: '2.2rem' }, mb: 2 }}>
+          Escolha seu portal de entrada
+        </Typography>
+        <Typography variant="subtitle1" sx={{ mb: { xs: 4, md: 5 }, fontSize: { xs: '0.95rem', sm: '1.05rem' }, maxWidth: 480, mx: 'auto' }}>
+          Acesse a plataforma com seu perfil ou entre como aluno ou responsável para acompanhar a vida escolar.
+        </Typography>
+
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center">
+          <Button
+            variant="contained"
+            size="large"
+            startIcon={<AdminPanelSettingsIcon />}
+            onClick={() => handleCTA('/login')}
+            sx={{ px: { xs: 3, sm: 5 }, py: 2, fontSize: '1rem', width: { xs: '100%', sm: 'auto' }, minWidth: { sm: 260 }, bgcolor: brand.azulPrincipal, '&:hover': { bgcolor: brand.azulApoio } }}
+          >
+            Portal Administrativo
+          </Button>
+          <Button
+            variant="outlined"
+            size="large"
+            startIcon={<SchoolIcon />}
+            onClick={() => handleCTA('/login/aluno')}
+            sx={{
+              px: { xs: 3, sm: 5 },
+              py: 2,
+              fontSize: '1rem',
+              width: { xs: '100%', sm: 'auto' },
+              minWidth: { sm: 260 },
+              borderColor: brand.verde,
+              color: brand.verde,
+              '&:hover': { borderColor: brand.verde, bgcolor: alpha(brand.verde, 0.06) },
+            }}
+          >
+            Portal Aluno/Responsável
+          </Button>
+        </Stack>
+      </Container>
+    </Box>
+  );
+
+  /* ═══════════════════════════
+     FOOTER
+     ═══════════════════════════ */
+  const renderFooter = () => (
+    <Box component="footer" sx={{ py: { xs: 4, md: 5 }, bgcolor: brand.grafite, color: brand.branco }}>
+      <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 } }}>
+        <Grid container spacing={{ xs: 3, md: 4 }}>
+          <Grid size={{ xs: 12, md: 5 }}>
+            <Box sx={{ mb: 2 }}>
+              <img
+                src="/colaboraedu-logo.png"
+                alt="colaboraEDU"
+                style={{ height: 36, width: 'auto', objectFit: 'contain', filter: 'brightness(0) invert(1)' }}
+              />
+            </Box>
+            <Typography variant="body2" sx={{ color: alpha(brand.branco, 0.6), maxWidth: 320, lineHeight: 1.6, fontSize: '0.85rem' }}>
+              Plataforma completa para gestão acadêmica, comunicação escolar e acompanhamento pedagógico. Transformando dados em decisões para a educação.
+            </Typography>
+          </Grid>
+
+          <Grid size={{ xs: 6, md: 3 }}>
+            <Typography variant="h6" sx={{ color: brand.branco, fontWeight: 600, mb: 2, fontSize: '0.9rem' }}>
+              Plataforma
+            </Typography>
+            <Stack spacing={1}>
+              {['Dashboard', 'Alunos', 'Turmas', 'Relatórios'].map((item) => (
+                <Typography
+                  key={item}
+                  component="a"
+                  href="#"
+                  sx={{ color: alpha(brand.branco, 0.5), textDecoration: 'none', fontSize: '0.85rem', '&:hover': { color: brand.branco }, transition: 'color 0.2s' }}
+                >
+                  {item}
+                </Typography>
+              ))}
+            </Stack>
+          </Grid>
+
+          <Grid size={{ xs: 6, md: 3 }}>
+            <Typography variant="h6" sx={{ color: brand.branco, fontWeight: 600, mb: 2, fontSize: '0.9rem' }}>
+              Institucional
+            </Typography>
+            <Stack spacing={1}>
+              {['Sobre nós', 'Contato', 'Política de privacidade', 'Termos de uso'].map((item) => (
+                <Typography
+                  key={item}
+                  component="a"
+                  href="#"
+                  sx={{ color: alpha(brand.branco, 0.5), textDecoration: 'none', fontSize: '0.85rem', '&:hover': { color: brand.branco }, transition: 'color 0.2s' }}
+                >
+                  {item}
+                </Typography>
+              ))}
+            </Stack>
+          </Grid>
+        </Grid>
+
+        <Divider sx={{ borderColor: alpha(brand.branco, 0.1), my: 3 }} />
+
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          justifyContent="space-between"
+          alignItems={{ xs: 'center', sm: 'flex-start' }}
+          spacing={1}
+        >
+          <Typography variant="body2" sx={{ color: alpha(brand.branco, 0.4), fontSize: '0.8rem', textAlign: { xs: 'center', sm: 'left' } }}>
+            © {new Date().getFullYear()} colaboraEDU. Todos os direitos reservados.
+          </Typography>
+          <Typography variant="body2" sx={{ color: alpha(brand.branco, 0.3), fontSize: '0.75rem' }}>
+            Plataforma educacional
+          </Typography>
+        </Stack>
+      </Container>
+    </Box>
+  );
+
+  return (
+    <ThemeProvider theme={landingTheme}>
+      <Box
+        component="main"
+        sx={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          bgcolor: brand.fundoClaroQuente,
+          overflowX: 'hidden',
+          color: brand.grafite,
+        }}
+      >
+        {renderHeader()}
+        <Box sx={{ flex: 1 }}>
+          {renderHero()}
+          {renderStats()}
+          {renderHowItHelps()}
+          {renderProfiles()}
+          {renderModules()}
+          {renderSecurity()}
+          {renderFinalCTA()}
+        </Box>
+        {renderFooter()}
+      </Box>
+    </ThemeProvider>
   );
 };
