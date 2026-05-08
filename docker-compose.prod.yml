@@ -29,8 +29,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+      APP_DB_USER: ${APP_DB_USER}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_app_user.sh:/docker-entrypoint-initdb.d/10_init_app_user.sh:ro
     networks:
       - app_network
     healthcheck:
@@ -70,6 +73,7 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      APP_DATABASE_URL: postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
       PGHOST: postgres
       POSTGRES_USER: ${POSTGRES_USER}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0

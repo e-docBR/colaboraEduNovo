@@ -33,13 +33,16 @@ class TenantQuery(Query):
 # A simpler approach is to modify the get_all/filter methods in Repositories or use a Session event.
 # However, 'do_orm_execute' in SQLAlchemy 1.4+ is the modern way.
 
+# APP_DATABASE_URL uses a limited app_user (DML only); falls back to DATABASE_URL.
+# Alembic migrations still use DATABASE_URL (superuser with DDL privileges).
+_engine_url = settings.app_database_url or settings.database_url
 engine = create_engine(
-    settings.database_url,
+    _engine_url,
     pool_size=20,
     max_overflow=10,
     pool_recycle=3600,
     pool_pre_ping=True,
-    connect_args={"connect_timeout": 5} if not settings.database_url.startswith("sqlite") else {},
+    connect_args={"connect_timeout": 5} if not _engine_url.startswith("sqlite") else {},
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
