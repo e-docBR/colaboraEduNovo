@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, ConfigDict
 
@@ -49,6 +50,8 @@ class AlunoListSchema(AlunoBase):
     media_faltas: Optional[float] = None
     status: Optional[str] = None
     senha_inicial: Optional[str] = None
+    is_archived: bool = False
+    deleted_at: Optional[datetime] = None
 
 
 class AlunoDetailSchema(AlunoBase):

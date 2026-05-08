@@ -23,15 +23,17 @@ class AlunoService:
         per_page: int,
         turno: Optional[str] = None,
         turma: Optional[str] = None,
-        query_text: Optional[str] = None
+        query_text: Optional[str] = None,
+        include_archived: bool = False,
     ) -> AlunoPaginatedResponse:
-        
+
         results, total = self.repository.get_paginated_with_average(
             page=page,
             per_page=per_page,
             turno=turno,
             turma=turma,
-            query_text=query_text
+            query_text=query_text,
+            include_archived=include_archived,
         )
 
         items = []
@@ -47,6 +49,8 @@ class AlunoService:
                     media=float(media) if media is not None else None,
                     faltas=int(faltas) if faltas is not None else 0,
                     media_faltas=round(float(media_faltas), 1) if media_faltas is not None else None,
+                    is_archived=aluno.is_archived,
+                    deleted_at=aluno.deleted_at,
                 )
             )
 
@@ -142,10 +146,39 @@ class AlunoService:
         )
 
     def delete_aluno(self, aluno_id: int) -> bool:
-        success = self.repository.delete_scoped(aluno_id)
+        """Soft-delete: archives the aluno rather than permanently removing the record."""
+        success = self.repository.soft_delete_scoped(aluno_id)
         if success:
-            log_action(self.repository.session, self.user_id, "DELETE", "Aluno", aluno_id)
+            log_action(self.repository.session, self.user_id, "ARCHIVE", "Aluno", aluno_id)
         return success
+
+    def restore_aluno(self, aluno_id: int) -> Optional[AlunoListSchema]:
+        """Restore a previously archived aluno to active status."""
+        aluno = self.repository.restore_scoped(aluno_id)
+        if not aluno:
+            return None
+        log_action(self.repository.session, self.user_id, "RESTORE", "Aluno", aluno_id)
+        return AlunoListSchema(
+            id=aluno.id,
+            matricula=aluno.matricula,
+            nome=aluno.nome,
+            turma=aluno.turma,
+            turno=aluno.turno,
+            status=aluno.status,
+        )
+
+    def list_archived(
+        self,
+        page: int,
+        per_page: int,
+        query_text: Optional[str] = None,
+    ) -> AlunoPaginatedResponse:
+        return self.list_alunos(
+            page=page,
+            per_page=per_page,
+            query_text=query_text,
+            include_archived=True,
+        )
 
     def get_bulletin_data(self, aluno_id: int) -> Optional[dict]:
         aluno, media, notas = self.repository.get_with_notes(aluno_id)

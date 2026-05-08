@@ -19,6 +19,7 @@ const TeacherDashboard = lazy(() => import("../features/dashboard/TeacherDashboa
 const BulkInterventionPage = lazy(() => import("../features/dashboard/BulkInterventionPage").then(m => ({ default: m.BulkInterventionPage })));
 const AlunosPage = lazy(() => import("../features/alunos/AlunosPage").then(m => ({ default: m.AlunosPage })));
 const AlunoDetailPage = lazy(() => import("../features/alunos/AlunoDetailPage").then(m => ({ default: m.AlunoDetailPage })));
+const ArchivedAlunosPage = lazy(() => import("../features/alunos/ArchivedAlunosPage").then(m => ({ default: m.ArchivedAlunosPage })));
 const MeuBoletimPage = lazy(() => import("../features/alunos/MeuBoletimPage").then(m => ({ default: m.MeuBoletimPage })));
 const TurmasPage = lazy(() => import("../features/turmas/TurmasPage").then(m => ({ default: m.TurmasPage })));
 const TurmaDetailPage = lazy(() => import("../features/turmas/TurmaDetailPage").then(m => ({ default: m.TurmaDetailPage })));
@@ -120,6 +121,7 @@ export const appRouter = createBrowserRouter([
       { index: true, element: wrap(<DashboardPage />) },
       { path: "professor", element: wrap(<TeacherDashboard />) },
       { path: "alunos", element: wrap(<AlunosPage />) },
+      { path: "alunos/arquivo", element: wrap(<ArchivedAlunosPage />) },
       { path: "alunos/:alunoId", element: wrap(<AlunoDetailPage />) },
       { path: "turmas", element: wrap(<TurmasPage />) },
       { path: "turmas/:turmaId", element: wrap(<TurmaDetailPage />) },

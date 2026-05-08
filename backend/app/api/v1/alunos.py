@@ -131,7 +131,6 @@ def register(parent: Blueprint) -> None:
     @jwt_required()
     @require_roles("admin", "super_admin")
     def delete_aluno(aluno_id: int):
-            
         user_id = int(get_jwt_identity())
         with session_scope() as session:
             service = AlunoService(session, user_id=user_id)
@@ -140,6 +139,36 @@ def register(parent: Blueprint) -> None:
                 invalidate_tenant_cache()
                 return "", 204
             return jsonify({"error": "Aluno não encontrado"}), 404
+
+    @bp.get("/alunos/archived")
+    @jwt_required()
+    @require_roles("admin", "super_admin", "coordenador", "diretor")
+    def list_archived_alunos():
+        try:
+            page = max(1, int(request.args.get("page", 1)))
+            per_page = min(100, int(request.args.get("per_page", 20)))
+        except (ValueError, TypeError):
+            page, per_page = 1, 20
+        query_text = request.args.get("q")
+        user_id = int(get_jwt_identity())
+        with session_scope() as session:
+            service = AlunoService(session, user_id=user_id)
+            result = service.list_archived(page=page, per_page=per_page, query_text=query_text)
+            return jsonify(result.model_dump())
+
+    @bp.post("/alunos/<int:aluno_id>/restore")
+    @jwt_required()
+    @require_roles("admin", "super_admin")
+    def restore_aluno(aluno_id: int):
+        user_id = int(get_jwt_identity())
+        with session_scope() as session:
+            service = AlunoService(session, user_id=user_id)
+            aluno = service.restore_aluno(aluno_id)
+            if not aluno:
+                return jsonify({"error": "Aluno arquivado não encontrado"}), 404
+            from ...core.cache import invalidate_tenant_cache
+            invalidate_tenant_cache()
+            return jsonify(aluno.model_dump())
 
     @bp.get("/alunos/<int:aluno_id>/ocorrencias/summary")
     @jwt_required()

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from typing import Optional
-from sqlalchemy import String, UniqueConstraint, Index, DateTime
+from sqlalchemy import String, UniqueConstraint, Index, DateTime, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..core.database import Base
@@ -22,6 +22,10 @@ class Aluno(Base, TenantYearMixin):
     turma: Mapped[str] = mapped_column(String(100), nullable=False)
     turno: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+
+    # F3: soft delete — records are archived rather than permanently destroyed
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Personal Data from Matrícula Inicial
     sexo: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)

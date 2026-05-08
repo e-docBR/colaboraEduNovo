@@ -161,6 +161,8 @@ export type AlunoSummary = {
   email_responsavel?: string | null;
   telefone_responsavel?: string | null;
   senha_inicial?: string | null;
+  is_archived?: boolean;
+  deleted_at?: string | null;
 };
 
 
@@ -243,6 +245,13 @@ type UploadBoletimResponse = {
   job_id: string;
   turno: string;
   turma: string;
+};
+
+export type CsvImportResponse = {
+  status: string;
+  job_id: string;
+  rows_queued: number;
+  parse_errors: { row: number; field: string; message: string }[];
 };
 
 type RelatorioSummaryItem = {
@@ -581,6 +590,14 @@ export const api = createApi({
       },
       invalidatesTags: ["Uploads", "Turmas", "Alunos", "Dashboard", "Notas"]
     }),
+    uploadAlunosCsv: builder.mutation<CsvImportResponse, File>({
+      query: (file) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        return { url: "/uploads/csv/alunos", method: "POST", body: formData };
+      },
+      invalidatesTags: ["Alunos", "Dashboard", "Turmas"]
+    }),
     getRelatorio: builder.query<RelatorioResponse, RelatorioQueryArgs>({
       query: ({ slug, ...params }) => ({
         url: `/relatorios/${slug}`,
@@ -802,6 +819,20 @@ export const api = createApi({
       }),
       invalidatesTags: ["Alunos", "Dashboard", "Turmas"]
     }),
+    listArchivedAlunos: builder.query<ListAlunosResponse, { page?: number; per_page?: number; q?: string } | void>({
+      query: (params) => ({
+        url: "/alunos/archived",
+        params: params ?? undefined
+      }),
+      providesTags: ["Alunos"]
+    }),
+    restoreAluno: builder.mutation<AlunoSummary, number>({
+      query: (id) => ({
+        url: `/alunos/${id}/restore`,
+        method: "POST"
+      }),
+      invalidatesTags: ["Alunos", "Dashboard", "Turmas"]
+    }),
     listAcademicYears: builder.query<{ id: number; label: string; is_current: boolean }[], void>({
       query: () => "/academic-years",
       providesTags: ["Dashboard"]
@@ -904,6 +935,9 @@ export const {
   useCreateAlunoMutation,
   useUpdateAlunoMutation,
   useDeleteAlunoMutation,
+  useListArchivedAlunosQuery,
+  useRestoreAlunoMutation,
+  useUploadAlunosCsvMutation,
   useListAcademicYearsQuery,
   useListTenantsQuery,
   useCreateTenantMutation,

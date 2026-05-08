@@ -99,6 +99,63 @@ def register(parent: Blueprint) -> None:
             202,
         )
 
+    @bp.post("/uploads/csv/alunos")
+    @jwt_required()
+    @limiter.limit("10 per hour")
+    @require_roles("admin", "super_admin")
+    def upload_alunos_csv():
+        """Accept a CSV file and enqueue bulk student import as an RQ job."""
+        from flask import g
+        from ...services.csv_import import parse_csv_bytes, run_csv_import
+        from ...core.queue import queue
+
+        if "file" not in request.files:
+            return jsonify({"error": "arquivo não enviado"}), 400
+
+        file = request.files["file"]
+        filename = secure_filename(file.filename or "")
+        if not filename.lower().endswith(".csv"):
+            return jsonify({"error": "apenas arquivos CSV são permitidos"}), 400
+
+        raw = file.read(2 * 1024 * 1024)  # cap at 2 MB
+        if len(raw) >= 2 * 1024 * 1024:
+            return jsonify({"error": "arquivo muito grande (máximo 2 MB)"}), 413
+
+        rows, parse_errors = parse_csv_bytes(raw)
+
+        if parse_errors and not rows:
+            # Fatal parsing error (missing columns etc.)
+            return jsonify({
+                "error": parse_errors[0].message,
+                "details": [{"row": e.row, "field": e.field, "message": e.message} for e in parse_errors]
+            }), 422
+
+        if not rows:
+            return jsonify({"error": "Nenhuma linha válida encontrada no CSV"}), 422
+
+        tenant_id = g.tenant_id
+        academic_year_id = getattr(g, "academic_year_id", None)
+        user_id = int(request.environ.get("JWT_IDENTITY") or 0)
+        from flask_jwt_extended import get_jwt_identity
+        user_id = int(get_jwt_identity())
+
+        job = queue.enqueue(
+            run_csv_import,
+            rows,
+            tenant_id,
+            academic_year_id,
+            user_id,
+            job_timeout=300,
+            meta={"tenant_id": tenant_id, "filename": filename, "row_count": len(rows)},
+        )
+
+        return jsonify({
+            "status": "queued",
+            "job_id": job.id,
+            "rows_queued": len(rows),
+            "parse_errors": [{"row": e.row, "field": e.field, "message": e.message} for e in parse_errors],
+        }), 202
+
     @bp.get("/uploads/jobs/<job_id>")
     @jwt_required()
     def get_job_status(job_id):

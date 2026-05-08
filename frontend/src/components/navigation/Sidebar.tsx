@@ -10,6 +10,7 @@ import ManageAccountsIcon from "@mui/icons-material/ManageAccounts";
 import NotificationsIcon from "@mui/icons-material/Notifications";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
+import ArchiveIcon from "@mui/icons-material/Archive";
 import { NavLink } from "react-router-dom";
 import { memo, useMemo } from "react";
 import { useAppSelector } from "../../app/hooks";
@@ -55,6 +56,7 @@ const SidebarInner = ({ mobile }: { mobile?: boolean }) => {
 
     if (isAdmin) {
       base.push({ label: "Uploads", icon: <UploadFileIcon />, path: `${appBasePath}/uploads` });
+      base.push({ label: "Arquivo de Alunos", icon: <ArchiveIcon />, path: `${appBasePath}/alunos/arquivo` });
       base.push({ label: "Audit Logs", icon: <ArticleIcon />, path: `${appBasePath}/audit-logs` });
     }
 
