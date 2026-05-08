@@ -1,137 +1,162 @@
 import { useMemo, useState, useEffect, createContext, useContext } from "react";
-import { ThemeProvider as MuiThemeProvider, createTheme, Theme } from "@mui/material";
+import { ThemeProvider as MuiThemeProvider, createTheme, Theme, alpha } from "@mui/material";
 
-import { tokens } from "./tokens";
+import { brand } from "./brandTokens";
 
 const buildTheme = (mode: "light" | "dark") =>
   createTheme({
     palette: {
       mode,
       primary: {
-        main: tokens.primary,
-        dark: tokens.primaryDark,
-        light: tokens.primaryLight
+        main: brand.azulPrincipal,
+        dark: brand.azulEscuro,
+        light: brand.azulApoio,
+        contrastText: brand.branco,
       },
       secondary: {
-        main: tokens.secondary,
-        dark: tokens.secondaryDark
-      },
-      success: {
-        main: tokens.success
-      },
-      warning: {
-        main: tokens.warning
-      },
-      error: {
-        main: tokens.danger
-      },
-      info: {
-        main: tokens.info
+        main: brand.verde,
+        dark: '#0F5C4D',
+        light: '#1A9B80',
+        contrastText: brand.branco,
       },
       background: {
-        default: mode === "light" ? tokens.slate50 : tokens.slate900,
-        paper: mode === "light" ? "#ffffff" : tokens.slate800
+        default: mode === "light" ? brand.fundoClaroQuente : '#0f172a',
+        paper: mode === "light" ? brand.branco : '#1e293b',
       },
       text: {
-        primary: mode === "light" ? tokens.slate900 : tokens.slate50,
-        secondary: mode === "light" ? tokens.slate600 : tokens.slate400
+        primary: mode === "light" ? brand.grafite : '#f8fafc',
+        secondary: mode === "light" ? brand.cinza500 : '#94a3b8',
       },
-      divider: mode === "light" ? tokens.slate200 : tokens.slate700
+      divider: mode === "light" ? brand.cinza100 : '#334155',
     },
     typography: {
-      fontFamily: "'Inter', 'DM Sans', 'Segoe UI', system-ui, sans-serif",
-      // Dramatic Scale (1.5 ratio) for hierarchy
+      fontFamily: '"Inter", "DM Sans", "Segoe UI", system-ui, sans-serif',
       h1: {
         fontWeight: 800,
-        fontSize: "3rem", // 48px
-        letterSpacing: "-0.03em",
-        lineHeight: 1.2
+        fontSize: "2.5rem",
+        letterSpacing: "-0.02em",
+        lineHeight: 1.15,
       },
       h2: {
         fontWeight: 700,
-        fontSize: "2rem", // 32px
-        letterSpacing: "-0.02em",
-        lineHeight: 1.3
+        fontSize: "2rem",
+        letterSpacing: "-0.01em",
+        lineHeight: 1.2,
       },
       h3: {
         fontWeight: 700,
-        fontSize: "1.5rem", // 24px
-        letterSpacing: "-0.01em",
-        lineHeight: 1.4
+        fontSize: "1.5rem",
+        lineHeight: 1.3,
       },
       h4: {
         fontWeight: 600,
-        fontSize: "1.25rem", // 20px
-        lineHeight: 1.4
+        fontSize: "1.25rem",
+        lineHeight: 1.4,
       },
       h5: {
         fontWeight: 600,
-        fontSize: "1.125rem", // 18px
-        lineHeight: 1.5
+        fontSize: "1.1rem",
+        lineHeight: 1.4,
       },
       h6: {
         fontWeight: 600,
-        fontSize: "1rem", // 16px
-        lineHeight: 1.5
+        fontSize: "1rem",
+        lineHeight: 1.5,
+      },
+      subtitle1: {
+        fontSize: "1.1rem",
+        fontWeight: 400,
+        lineHeight: 1.6,
       },
       body1: {
-        fontSize: "0.9375rem", // 15px
-        lineHeight: 1.6
+        fontSize: "0.9375rem",
+        lineHeight: 1.7,
       },
       body2: {
-        fontSize: "0.875rem", // 14px
-        lineHeight: 1.6
+        fontSize: "0.875rem",
+        lineHeight: 1.6,
       },
       button: {
         textTransform: "none",
         fontWeight: 600,
-        letterSpacing: "0.01em"
+        letterSpacing: "0.01em",
       },
       caption: {
-        fontSize: "0.75rem", // 12px
-        lineHeight: 1.5
-      }
+        fontSize: "0.75rem",
+        lineHeight: 1.5,
+      },
     },
     shape: {
-      borderRadius: 2 // Sharp geometry (was 16 - too rounded!)
+      borderRadius: 6,
     },
     components: {
       MuiButton: {
         styleOverrides: {
           root: {
-            borderRadius: 4, // Slightly softer for buttons
-            padding: "10px 20px",
-            fontWeight: 600
+            minHeight: 48,
+            borderRadius: 6,
+            paddingInline: 24,
+            fontSize: "0.95rem",
+            fontWeight: 600,
+            boxShadow: "none",
+            "&:hover": {
+              boxShadow: "0 2px 8px rgba(10,60,160,0.18)",
+            },
           },
-          sizeLarge: {
-            padding: "12px 24px",
-            fontSize: "1rem"
-          }
-        }
+          containedPrimary: {
+            backgroundColor: brand.azulPrincipal,
+            "&:hover": {
+              backgroundColor: brand.azulEscuro,
+            },
+          },
+          containedSecondary: {
+            backgroundColor: brand.verde,
+            "&:hover": {
+              backgroundColor: '#0F5C4D',
+            },
+          },
+          outlined: {
+            borderWidth: 2,
+            "&:hover": {
+              borderWidth: 2,
+            },
+          },
+        },
       },
       MuiCard: {
         styleOverrides: {
           root: {
-            borderRadius: 6, // Sharp but not harsh
-            boxShadow: mode === "light"
-              ? "0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1)"
-              : "0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 1px 2px -1px rgba(0, 0, 0, 0.3)"
-          }
-        }
+            borderRadius: 8,
+            boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+            border: `1px solid ${brand.cinza100}`,
+          },
+        },
+      },
+      MuiChip: {
+        styleOverrides: {
+          root: {
+            borderRadius: 6,
+            fontWeight: 500,
+          },
+        },
       },
       MuiTextField: {
         styleOverrides: {
           root: {
             "& .MuiOutlinedInput-root": {
-              borderRadius: 4
-            }
-          }
-        }
-      }
-    }
+              borderRadius: 6,
+            },
+          },
+        },
+      },
+      MuiContainer: {
+        defaultProps: {
+          maxWidth: "lg",
+        },
+      },
+    },
   });
 
-// Context for theme management
 interface ThemeContextType {
   mode: "light" | "dark";
   toggleTheme: () => void;
@@ -140,44 +165,32 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-// Local storage key for theme preference
-const THEME_STORAGE_KEY = "colaborafrei-theme-mode";
+const THEME_STORAGE_KEY = "colaboraedu-theme-mode";
 
 export const useAppTheme = () => {
-  // Initialize from localStorage or default to light
   const [mode, setMode] = useState<"light" | "dark">(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem(THEME_STORAGE_KEY);
-      if (stored === "light" || stored === "dark") {
-        return stored;
-      }
-      // Check system preference
-      if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-        return "dark";
-      }
+      if (stored === "light" || stored === "dark") return stored;
+      if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) return "dark";
     }
     return "light";
   });
 
   const theme = useMemo(() => buildTheme(mode), [mode]);
 
-  // Persist theme preference
   useEffect(() => {
     localStorage.setItem(THEME_STORAGE_KEY, mode);
   }, [mode]);
 
-  const toggleTheme = () => {
-    setMode((prevMode) => (prevMode === "light" ? "dark" : "light"));
-  };
+  const toggleTheme = () => setMode((prev) => (prev === "light" ? "dark" : "light"));
 
   return { theme, mode, toggleTheme };
 };
 
 export const useColorMode = () => {
   const context = useContext(ThemeContext);
-  if (!context) {
-    throw new Error("useColorMode must be used within an AppThemeProvider");
-  }
+  if (!context) throw new Error("useColorMode must be used within an AppThemeProvider");
   return context;
 };
 
@@ -193,3 +206,4 @@ export const AppThemeProvider = ({ children }: { children: React.ReactNode }) =>
   );
 };
 
+export { alpha };
