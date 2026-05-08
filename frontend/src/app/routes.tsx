@@ -146,6 +146,10 @@ export const appRouter = createBrowserRouter([
     element: <LoginPage />
   },
   {
+    path: "/login/aluno",
+    element: <LoginPage />
+  },
+  {
     path: "/alterar-senha",
     element: <ChangePasswordPage />
   },
