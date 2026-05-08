@@ -154,8 +154,10 @@ def register(parent: Blueprint) -> None:
         model = body.get("model_name", "gpt-4o-mini")
 
         if not api_key or api_key.startswith("***"):
-            # Tenta usar a key salva
-            tenant_id = g.tenant_id
+            # Tenta usar a key salva no banco
+            tenant_id = getattr(g, "tenant_id", None)
+            if not tenant_id:
+                return jsonify({"ok": False, "message": "Nenhuma API key fornecida."}), 200
             with session_scope() as session:
                 cfg = session.execute(
                     select(AIConfiguration).where(AIConfiguration.tenant_id == tenant_id)
@@ -165,11 +167,12 @@ def register(parent: Blueprint) -> None:
                     provider = cfg.provider
                     model = cfg.model_name
                 else:
-                    return jsonify({"ok": False, "message": "Nenhuma API key configurada."}), 400
+                    return jsonify({"ok": False, "message": "Nenhuma API key configurada."}), 200
 
         result = test_llm_connection(provider, api_key, model)
-        status = 200 if result["ok"] else 400
-        return jsonify(result), status
+        # Sempre retorna 200 — o campo 'ok' indica sucesso/falha
+        # (evita que RTK Query trate como exceção e perca a mensagem)
+        return jsonify(result), 200
 
     @bp.delete("/ai-settings/key")
     @jwt_required()

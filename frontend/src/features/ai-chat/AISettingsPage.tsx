@@ -117,7 +117,7 @@ export default function AISettingsPage() {
     setTestResult(null);
     try {
       const keyToTest = apiKey.startsWith("***") ? "***" : apiKey;
-      // unwrap() lança exceção se status != 2xx; o backend retorna 400 com {ok,message}
+      // Backend sempre retorna HTTP 200; ok=false indica falha no body
       const result = await testConnection({
         provider,
         api_key: keyToTest,
@@ -125,13 +125,11 @@ export default function AISettingsPage() {
       }).unwrap();
       setTestResult(result);
     } catch (e: any) {
-      // RTK Query encapsula 4xx em e.data; fallback para string genérica
-      const msg =
-        e?.data?.message ??
-        e?.error ??
-        (typeof e?.data === "string" ? e.data : null) ??
-        "Não foi possível conectar. Verifique a API key e o nome do modelo.";
-      setTestResult({ ok: false, message: msg });
+      // Só cai aqui em erro de rede ou autenticação JWT
+      setTestResult({
+        ok: false,
+        message: `❌ Erro de comunicação: ${e?.error ?? e?.status ?? "verifique se o servidor está rodando"}`,
+      });
     }
   };
 
