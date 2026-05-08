@@ -130,8 +130,10 @@ def register(parent: Blueprint) -> None:
         if not getattr(g, "academic_year_id", None):
             return jsonify({"error": "Nenhum ano letivo ativo configurado para esta escola"}), 400
 
+        notificar_responsaveis = bool(data.get("notificar_responsaveis", False))
         user_id = int(get_jwt_identity())
 
+        comunicado_id = None
         with session_scope() as session:
             # Validar existência do aluno para comunicados direcionados
             if target_type == "ALUNO":
@@ -152,8 +154,20 @@ def register(parent: Blueprint) -> None:
                 academic_year_id=g.academic_year_id
             )
             session.add(novo)
+            session.flush()
+            comunicado_id = novo.id
 
-        return jsonify({"message": "Comunicado enviado!"}), 201
+        if notificar_responsaveis and comunicado_id:
+            from ...core.queue import queue
+            from ...core.tasks_comunicados import notify_comunicado_task
+            queue.enqueue(
+                notify_comunicado_task,
+                comunicado_id,
+                job_timeout=300,
+                meta={"tenant_id": g.tenant_id, "comunicado_id": comunicado_id},
+            )
+
+        return jsonify({"message": "Comunicado enviado!", "id": comunicado_id}), 201
 
     @bp.patch("/comunicados/<int:comunicado_id>")
     @jwt_required()

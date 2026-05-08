@@ -12,12 +12,14 @@ import {
     DialogTitle,
     Divider,
     FormControl,
+    FormControlLabel,
     Grid2 as Grid,
     InputLabel,
     MenuItem,
     Select,
     Snackbar,
     Stack,
+    Switch,
     TextField,
     Typography,
     IconButton,
@@ -82,6 +84,7 @@ export const ComunicadosPage = () => {
     const [conteudo, setConteudo] = useState("");
     const [targetType, setTargetType] = useState("TODOS");
     const [targetValue, setTargetValue] = useState("");
+    const [notificarResponsaveis, setNotificarResponsaveis] = useState(false);
 
     // For filtering turmas
     const { data: alunosData } = useListAlunosQuery({ per_page: 1000 });
@@ -123,7 +126,13 @@ export const ComunicadosPage = () => {
             if (editingId) {
                 await updateComunicado({ id: editingId, titulo, conteudo }).unwrap();
             } else {
-                await createComunicado({ titulo, conteudo, target_type: targetType, target_value: targetValue }).unwrap();
+                await createComunicado({
+                    titulo,
+                    conteudo,
+                    target_type: targetType,
+                    target_value: targetValue,
+                    notificar_responsaveis: notificarResponsaveis,
+                }).unwrap();
             }
             setOpen(false);
             resetForm();
@@ -140,6 +149,7 @@ export const ComunicadosPage = () => {
         setEditingId(null);
         setTargetType("TODOS");
         setTargetValue("");
+        setNotificarResponsaveis(false);
     };
 
     const handleEdit = () => {
@@ -483,6 +493,17 @@ export const ComunicadosPage = () => {
                             onChange={(e) => setConteudo(e.target.value)}
                             placeholder="Escreva sua mensagem aqui..."
                         />
+                        {!editingId && (
+                            <FormControlLabel
+                                control={
+                                    <Switch
+                                        checked={notificarResponsaveis}
+                                        onChange={(_, checked) => setNotificarResponsaveis(checked)}
+                                    />
+                                }
+                                label="Notificar responsáveis por e-mail"
+                            />
+                        )}
                     </Stack>
                 </DialogContent>
                 <DialogActions sx={{ p: 3, gap: 1 }}>

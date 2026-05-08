@@ -735,7 +735,7 @@ export const api = createApi({
       }),
       invalidatesTags: ["Comunicados"]
     }),
-    createComunicado: builder.mutation<void, { titulo: string; conteudo: string; target_type: string; target_value?: string }>({
+    createComunicado: builder.mutation<{ message: string; id?: number }, { titulo: string; conteudo: string; target_type: string; target_value?: string; notificar_responsaveis?: boolean }>({
       query: (body) => ({
         url: "/comunicados",
         method: "POST",
