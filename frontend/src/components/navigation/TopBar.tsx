@@ -18,7 +18,7 @@ import {
   TextField,
   Typography
 } from "@mui/material";
-import { MouseEvent, useState, useEffect } from "react";
+import { MouseEvent, useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
@@ -141,21 +141,32 @@ export const TopBar = ({ onMenuClick }: { onMenuClick?: () => void }) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const searchVal = searchParams.get("q") || "";
+  const [localSearch, setLocalSearch] = useState(searchVal);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sincroniza estado local quando searchParams muda externamente (ex: navegação)
+  useEffect(() => {
+    setLocalSearch(searchParams.get("q") || "");
+  }, [searchParams]);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    const isSearchPage = ["/app/alunos", "/app/turmas"].includes(location.pathname);
+    setLocalSearch(value);
 
-    if (isSearchPage) {
-      if (value) {
-        searchParams.set("q", value);
-      } else {
-        searchParams.delete("q");
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => {
+      const isSearchPage = ["/app/alunos", "/app/turmas"].includes(location.pathname);
+      if (isSearchPage) {
+        if (value) {
+          searchParams.set("q", value);
+        } else {
+          searchParams.delete("q");
+        }
+        setSearchParams(searchParams, { replace: true });
+      } else if (value) {
+        navigate(`/app/alunos?q=${encodeURIComponent(value)}`);
       }
-      setSearchParams(searchParams, { replace: true });
-    } else if (value) {
-      navigate(`/app/alunos?q=${encodeURIComponent(value)}`);
-    }
+    }, 300);
   };
 
   const menuOpen = Boolean(anchorEl);
@@ -230,7 +241,7 @@ export const TopBar = ({ onMenuClick }: { onMenuClick?: () => void }) => {
             placeholder="Buscar alunos, turmas…"
             size="small"
             sx={{ maxWidth: { xs: 200, sm: 320 }, display: { xs: "none", sm: "flex" } }}
-            value={searchVal}
+            value={localSearch}
             onChange={handleSearchChange}
             InputProps={{
               startAdornment: (

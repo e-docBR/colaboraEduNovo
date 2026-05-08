@@ -10,6 +10,8 @@ import { ForgotPasswordPage } from "../features/auth/ForgotPasswordPage";
 import { ResetPasswordPage } from "../features/auth/ResetPasswordPage";
 import { LandingPage } from "../features/landing/LandingPage";
 import { store } from "./store";
+import { setCredentials, logout } from "../features/auth/authSlice";
+import { setTenantId } from "../features/app/appSlice";
 
 // Lazily loaded authenticated routes — split per route for smaller initial bundle
 const DashboardPage = lazy(() => import("../features/dashboard/DashboardPage").then(m => ({ default: m.DashboardPage })));
@@ -45,9 +47,32 @@ const wrap = (element: React.ReactNode) => (
 
 const requireAuth = async () => {
   const state = store.getState();
+
   if (!state.auth.accessToken) {
+    // Tenta silent refresh com o refreshToken persistido no sessionStorage
+    const refreshToken = state.auth.refreshToken;
+    if (refreshToken) {
+      try {
+        const base = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api/v1";
+        const res = await fetch(`${base}/auth/refresh`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${refreshToken}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          store.dispatch(setCredentials(data));
+          if (data.user?.tenant_id) store.dispatch(setTenantId(data.user.tenant_id));
+          if (data.user?.must_change_password) throw redirect("/alterar-senha");
+          return null;
+        }
+      } catch {
+        // refresh falhou — continua para redirect de login
+      }
+      store.dispatch(logout());
+    }
     throw redirect("/login");
   }
+
   // Block access to the app until the user changes their temporary password
   if (state.auth.user?.must_change_password) {
     throw redirect("/alterar-senha");

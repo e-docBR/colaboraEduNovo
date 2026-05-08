@@ -234,7 +234,7 @@ export const LoginPage = () => {
           >
             {/* Logo */}
             <Stack direction="row" spacing={2} alignItems="center">
-              <Box component="img" src="/colaboraedu4.png" alt="Colabora EDU" sx={{ height: 40 }} />
+              <Box component="img" src="/colaboraedu4.webp" alt="Colabora EDU" sx={{ height: 40 }} />
               <Typography variant="subtitle2" color={alpha("#ffffff", 0.7)} fontWeight={500}>
                 Plataforma colaboraEDU
               </Typography>
@@ -330,7 +330,7 @@ export const LoginPage = () => {
                 mb={3}
                 sx={{ display: { xs: "flex", md: "none" } }}
               >
-                <Box component="img" src="/colaboraedu4.png" alt="Colabora EDU" sx={{ height: 32 }} />
+                <Box component="img" src="/colaboraedu4.webp" alt="Colabora EDU" sx={{ height: 32 }} />
                 <Typography variant="subtitle2" color="text.secondary">Plataforma colaboraEDU</Typography>
               </Stack>
 

@@ -156,7 +156,7 @@ export const LandingPage = () => {
       >
         <Container sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <Stack direction="row" spacing={2} alignItems="center">
-            <Box component="img" src="/colaboraedu4.png" alt="Colabora EDU" sx={{ height: 36 }} />
+            <Box component="img" src="/colaboraedu4.webp" alt="Colabora EDU" sx={{ height: 36 }} />
             <Divider orientation="vertical" flexItem sx={{ display: { xs: "none", sm: "block" } }} />
             <Typography
               variant="body2"
@@ -361,7 +361,7 @@ export const LandingPage = () => {
               >
                 <Stack spacing={2}>
                   <Stack direction="row" alignItems="center" spacing={2}>
-                    <Avatar src="/colaboraedu3.png" alt="Marca Colabora" sx={{ width: 56, height: 56 }} />
+                    <Avatar src="/colaboraedu3.webp" alt="Marca Colabora" sx={{ width: 56, height: 56 }} />
                     <Box>
                       <Typography color="white" fontWeight={700} fontSize="1rem">
                         Painel Consolidado 360º
@@ -798,7 +798,7 @@ export const LandingPage = () => {
             {/* Brand */}
             <Grid item xs={12} md={4}>
               <Stack spacing={1.5}>
-                <Box component="img" src="/colaboraedu3.png" alt="Colabora EDU" sx={{ height: 40, width: "fit-content" }} />
+                <Box component="img" src="/colaboraedu3.webp" alt="Colabora EDU" sx={{ height: 40, width: "fit-content" }} />
                 <Typography variant="body2" color="text.secondary" maxWidth={260} lineHeight={1.7}>
                   Plataforma de inteligência acadêmica para secretarias, coordenações e direções escolares.
                 </Typography>

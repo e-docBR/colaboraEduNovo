@@ -80,6 +80,8 @@ class Settings(BaseSettings):
                 raise ValueError("FRONTEND_URL deve ser uma URL HTTPS pública em produção")
             if not self.smtp_server or not self.smtp_from:
                 raise ValueError("SMTP_SERVER e SMTP_FROM são obrigatórios em produção")
+            if not self.smtp_user or not self.smtp_password:
+                raise ValueError("SMTP_USER e SMTP_PASSWORD são obrigatórios em produção")
         return self
 
 

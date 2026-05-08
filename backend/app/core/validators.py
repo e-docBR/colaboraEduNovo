@@ -6,6 +6,7 @@ _PASSWORD_MIN_LEN = 8
 _PASSWORD_RULES = [
     (r"[A-Z]", "pelo menos uma letra maiúscula"),
     (r"[0-9]", "pelo menos um número"),
+    (r"[!@#$%^&*()\-_=+\[\]{};:'\",.<>?/\\|`~]", "pelo menos um caractere especial (!@#$%...)"),
 ]
 
 

@@ -20,6 +20,16 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("[ErrorBoundary]", error, info.componentStack);
+    // Integração com ferramentas de monitoramento (ex: Sentry).
+    // Para ativar: window.__reportError = Sentry.captureException
+    const reporter = (window as unknown as Record<string, unknown>).__reportError;
+    if (typeof reporter === "function") {
+      try {
+        (reporter as (e: Error, ctx?: unknown) => void)(error, { componentStack: info.componentStack });
+      } catch {
+        // nunca silencia o erro original por falha no reporter
+      }
+    }
   }
 
   handleReset = () => {
