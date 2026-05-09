@@ -89,18 +89,24 @@ export default function AISettingsPage() {
   const [temperature, setTemperature] = useState(0.4);
   const [systemPrompt, setSystemPrompt] = useState("");
   const [isActive, setIsActive] = useState(false);
+  const [customModel, setCustomModel] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
     if (settings) {
-      setProvider(settings.provider || "openai");
-      setModelName(settings.model_name || "gpt-4o-mini");
+      const p = settings.provider || "openai";
+      const m = settings.model_name || "gpt-4o-mini";
+      setProvider(p);
+      setModelName(m);
       setApiKey(settings.api_key_set ? "***configured***" : "");
       setAiName(settings.ai_name || "");
       setTemperature(settings.temperature ?? 0.4);
       setSystemPrompt(settings.system_prompt || "");
       setIsActive(settings.is_active || false);
+      // Detecta se o modelo salvo não está na lista → modo personalizado
+      const knownModels = settings.provider_models?.[p] ?? [];
+      setCustomModel(m !== "" && !knownModels.find((km: any) => km.id === m));
     }
   }, [settings]);
 
@@ -108,9 +114,9 @@ export default function AISettingsPage() {
 
   const handleProviderChange = (newProvider: string) => {
     setProvider(newProvider);
-    // Reset model to first available
     const models = settings?.provider_models?.[newProvider] ?? [];
     if (models.length > 0) setModelName(models[0].id);
+    setCustomModel(false);
     setTestResult(null);
   };
 
@@ -297,21 +303,75 @@ export default function AISettingsPage() {
 
           <Grid container spacing={2}>
             <Grid size={{ xs: 12, sm: 6 }}>
-              <FormControl fullWidth>
-                <InputLabel>Modelo</InputLabel>
-                <Select
+              {customModel ? (
+                <TextField
+                  fullWidth
+                  label="Modelo personalizado"
                   value={modelName}
                   onChange={(e) => setModelName(e.target.value)}
-                  label="Modelo"
-                >
-                  {availableModels.map((m: any) => (
-                    <MenuItem key={m.id} value={m.id}>
-                      {m.label}
+                  placeholder={
+                    provider === "openrouter"
+                      ? "ex: google/gemma-3-27b-it:free"
+                      : provider === "openai"
+                      ? "ex: gpt-4o-mini"
+                      : provider === "anthropic"
+                      ? "ex: claude-3-5-haiku-20241022"
+                      : "ex: gemini-1.5-flash"
+                  }
+                  helperText={
+                    <Box component="span" sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                      Digite o ID exato do modelo.{" "}
+                      <Box
+                        component="span"
+                        onClick={() => { setCustomModel(false); const first = availableModels[0]; if (first) setModelName(first.id); }}
+                        sx={{ color: "primary.main", cursor: "pointer", textDecoration: "underline" }}
+                      >
+                        Escolher da lista
+                      </Box>
+                    </Box>
+                  }
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <Tooltip title="Ver modelos disponíveis">
+                          <IconButton
+                            size="small"
+                            onClick={() => { setCustomModel(false); const first = availableModels[0]; if (first) setModelName(first.id); }}
+                          >
+                            <HelpOutlineIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              ) : (
+                <FormControl fullWidth>
+                  <InputLabel>Modelo</InputLabel>
+                  <Select
+                    value={availableModels.find((m: any) => m.id === modelName) ? modelName : "__custom__"}
+                    onChange={(e) => {
+                      if (e.target.value === "__custom__") {
+                        setCustomModel(true);
+                        setModelName("");
+                      } else {
+                        setModelName(e.target.value);
+                      }
+                    }}
+                    label="Modelo"
+                  >
+                    {availableModels.map((m: any) => (
+                      <MenuItem key={m.id} value={m.id}>
+                        {m.label}
+                      </MenuItem>
+                    ))}
+                    <MenuItem value="__custom__">
+                      <em>✏️ Digitar modelo personalizado...</em>
                     </MenuItem>
-                  ))}
-                </Select>
-                <FormHelperText>Modelo a ser usado nas análises</FormHelperText>
-              </FormControl>
+                  </Select>
+                  <FormHelperText>Modelo a ser usado nas análises</FormHelperText>
+                </FormControl>
+              )}
             </Grid>
 
             <Grid size={{ xs: 12, sm: 6 }}>
