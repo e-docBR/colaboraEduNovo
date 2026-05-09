@@ -31,8 +31,14 @@ class CommunicationService:
     @staticmethod
     def send_email(to_email: str, subject: str, body: str) -> bool:
         """Envia e-mail via smtplib — funciona sem Flask app context."""
-        if not to_email or not settings.smtp_server:
-            logger.warning("Destinatário ou servidor SMTP não configurado.")
+        if not to_email:
+            logger.warning("Email ignorado: endereço de destino não fornecido.")
+            return False
+        if not settings.smtp_server:
+            logger.warning("Email ignorado: SMTP_SERVER não configurado.")
+            return False
+        if not settings.smtp_user or not settings.smtp_password:
+            logger.warning("Email ignorado: SMTP_USER ou SMTP_PASSWORD não configurados.")
             return False
 
         try:
@@ -66,8 +72,17 @@ class CommunicationService:
     @staticmethod
     def send_whatsapp(phone: str, message: str) -> bool:
         """Envia mensagem WhatsApp via Evolution API."""
-        if not phone or not settings.whatsapp_api_url or not settings.whatsapp_instance:
-            logger.warning("Phone number, WhatsApp API URL or instance missing — skipping WhatsApp.")
+        if not phone:
+            logger.warning("WhatsApp ignorado: número de telefone não fornecido.")
+            return False
+        if not settings.whatsapp_api_url:
+            logger.warning("WhatsApp ignorado: WHATSAPP_API_URL não configurado.")
+            return False
+        if not settings.whatsapp_api_token:
+            logger.warning("WhatsApp ignorado: WHATSAPP_API_TOKEN não configurado.")
+            return False
+        if not settings.whatsapp_instance:
+            logger.warning("WhatsApp ignorado: WHATSAPP_INSTANCE não configurado.")
             return False
 
         clean_phone = CommunicationService._extract_first_phone(phone)
