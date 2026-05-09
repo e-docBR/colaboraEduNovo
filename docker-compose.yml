@@ -1,0 +1,140 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-colabora_edu}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5440:5432"
+    networks:
+      - app_network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: [ "sh", "-c", "flask --app app create-admin && gunicorn --bind 0.0.0.0:5000 --workers 4 --timeout 120 'app:create_app()'" ]
+    volumes:
+      - ./backend:/app
+      - ./data:/data
+    environment:
+      FLASK_APP: app
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-colabora_edu}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      ALLOWED_ORIGINS: '["http://localhost:5173", "http://127.0.0.1:5173"]'
+      UPLOAD_FOLDER: /data/uploads
+      SECRET_KEY: ${SECRET_KEY:-dev-key}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-jwt}
+      SMTP_SERVER: ${SMTP_SERVER:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      SMTP_USE_SSL: ${SMTP_USE_SSL:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-suporte@colaboraedu.com}
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-}
+      WHATSAPP_API_TOKEN: ${WHATSAPP_API_TOKEN:-}
+      WHATSAPP_INSTANCE: ${WHATSAPP_INSTANCE:-}
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app_network
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: [ "sh", "-c", "python worker.py" ]
+    volumes:
+      - ./backend:/app
+      - ./data:/data
+    environment:
+      FLASK_APP: app
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-colabora_edu}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      UPLOAD_FOLDER: /data/uploads
+      SECRET_KEY: ${SECRET_KEY:-dev-key}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-jwt}
+      SMTP_SERVER: ${SMTP_SERVER:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      SMTP_USE_SSL: ${SMTP_USE_SSL:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-suporte@colaboraedu.com}
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-}
+      WHATSAPP_API_TOKEN: ${WHATSAPP_API_TOKEN:-}
+      WHATSAPP_INSTANCE: ${WHATSAPP_INSTANCE:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app_network
+
+  redis:
+    image: redis:7-alpine
+    command: >
+      sh -c "if [ -n \"$$REDIS_PASSWORD\" ]; then
+        redis-server --requirepass $$REDIS_PASSWORD;
+      else
+        redis-server;
+      fi"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    ports:
+      - "6389:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - app_network
+    healthcheck:
+      test: >
+        sh -c "if [ -n \"$$REDIS_PASSWORD\" ]; then
+          redis-cli -a $$REDIS_PASSWORD ping;
+        else
+          redis-cli ping;
+        fi"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      # Aponta o proxy Vite para o serviço backend dentro da rede Docker
+      VITE_BACKEND_URL: http://backend:5000
+    depends_on:
+      - backend
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:

@@ -1,1 +1,53 @@
-colaboraEdu-produc/
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Python / Flask
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.sqlite3
+instance/
+.venv/
+.env
+.env.*
+evo_.env
+# Templates de ambiente (sem segredos reais) devem ser commitados
+!.env.example
+!.env.development.example
+.mypy_cache/
+pytest.cache/
+htmlcov/
+
+tests/__pycache__/
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.turbo/
+
+# Logs and coverage
+*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.coverage
+coverage/
+
+# Generated data/uploads
+/data/uploads/
+/BOLETINS FREI/
+*.db
+*.pkl
+
+venv/
+
+# Local Data & Debug
+data/
+letsencrypt/acme.json
+Mat_Inicial/
+debug_*.py
+landingPage/
