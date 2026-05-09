@@ -18,6 +18,23 @@ if TYPE_CHECKING:
 TIMEOUT = 30  # segundos
 
 
+def _parse_api_error(exc: requests.HTTPError) -> str:
+    """Extrai a mensagem de erro legível da resposta HTTP."""
+    try:
+        body = exc.response.json()
+        # OpenAI / OpenRouter: {"error": {"message": "..."}}
+        if "error" in body:
+            err = body["error"]
+            if isinstance(err, dict):
+                return err.get("message", str(exc))
+            return str(err)
+        # Anthropic: {"type": "error", "error": {"message": "..."}}
+        # Gemini: {"error": {"message": "..."}}
+        return str(body)
+    except Exception:
+        return f"HTTP {exc.response.status_code}: {exc.response.text[:300]}"
+
+
 def _openai_complete(api_key: str, model: str, messages: list[dict], temperature: float, base_url: str = "https://api.openai.com/v1") -> str:
     """Compatível com OpenAI e OpenRouter (mesma API)."""
     resp = requests.post(
@@ -36,7 +53,10 @@ def _openai_complete(api_key: str, model: str, messages: list[dict], temperature
         },
         timeout=TIMEOUT,
     )
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError as exc:
+        raise requests.HTTPError(_parse_api_error(exc), response=exc.response) from exc
     return resp.json()["choices"][0]["message"]["content"]
 
 
@@ -60,7 +80,10 @@ def _anthropic_complete(api_key: str, model: str, messages: list[dict], temperat
         },
         timeout=TIMEOUT,
     )
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError as exc:
+        raise requests.HTTPError(_parse_api_error(exc), response=exc.response) from exc
     return resp.json()["content"][0]["text"]
 
 
@@ -87,7 +110,10 @@ def _gemini_complete(api_key: str, model: str, messages: list[dict], temperature
         json=payload,
         timeout=TIMEOUT,
     )
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError as exc:
+        raise requests.HTTPError(_parse_api_error(exc), response=exc.response) from exc
     return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
 
 
@@ -135,16 +161,40 @@ def test_llm_connection(provider: str, api_key: str, model: str) -> dict:
         "temperature": 0.1,
     })()
 
+    provider = provider.lower()
+
     try:
-        result = call_llm(
-            config_mock,  # type: ignore
-            [
-                {"role": "system", "content": "Você é um assistente educacional."},
-                {"role": "user", "content": "Responda apenas: OK"},
-            ]
-        )
+        messages = [
+            {"role": "system", "content": "Você é um assistente educacional."},
+            {"role": "user", "content": "Responda apenas com a palavra: OK"},
+        ]
+
+        if provider in ("openai", "openrouter"):
+            base = "https://openrouter.ai/api/v1" if provider == "openrouter" else "https://api.openai.com/v1"
+            result = _openai_complete(api_key, model, messages, 0.1, base_url=base)
+        elif provider == "anthropic":
+            result = _anthropic_complete(api_key, model, messages, 0.1)
+        elif provider == "gemini":
+            result = _gemini_complete(api_key, model, messages, 0.1)
+        else:
+            return {"ok": False, "message": f"Provider desconhecido: {provider}"}
+
         if result:
-            return {"ok": True, "message": f"Conexão OK. Resposta: {result[:80]}"}
+            preview = result.strip()[:120]
+            return {"ok": True, "message": f"✅ Conexão OK! Resposta do modelo: \"{preview}\""}
         return {"ok": False, "message": "Resposta vazia do modelo."}
+
+    except requests.HTTPError as exc:
+        msg = str(exc)
+        logger.error(f"Teste LLM falhou ({provider}/{model}): {msg}")
+        return {"ok": False, "message": f"❌ Erro da API: {msg}"}
+
+    except requests.ConnectionError:
+        return {"ok": False, "message": "❌ Sem conexão com a internet ou API indisponível."}
+
+    except requests.Timeout:
+        return {"ok": False, "message": f"❌ Timeout ({TIMEOUT}s) — modelo pode estar sobrecarregado."}
+
     except Exception as exc:
-        return {"ok": False, "message": str(exc)}
+        logger.error(f"Teste LLM erro inesperado ({provider}/{model}): {exc}")
+        return {"ok": False, "message": f"❌ Erro inesperado: {str(exc)[:200]}"}

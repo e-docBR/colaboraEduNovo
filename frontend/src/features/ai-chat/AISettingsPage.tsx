@@ -117,6 +117,7 @@ export default function AISettingsPage() {
     setTestResult(null);
     try {
       const keyToTest = apiKey.startsWith("***") ? "***" : apiKey;
+      // unwrap() lança exceção se status != 2xx; o backend retorna 400 com {ok,message}
       const result = await testConnection({
         provider,
         api_key: keyToTest,
@@ -124,7 +125,13 @@ export default function AISettingsPage() {
       }).unwrap();
       setTestResult(result);
     } catch (e: any) {
-      setTestResult({ ok: false, message: e?.data?.message ?? "Erro ao testar conexão." });
+      // RTK Query encapsula 4xx em e.data; fallback para string genérica
+      const msg =
+        e?.data?.message ??
+        e?.error ??
+        (typeof e?.data === "string" ? e.data : null) ??
+        "Não foi possível conectar. Verifique a API key e o nome do modelo.";
+      setTestResult({ ok: false, message: msg });
     }
   };
 
