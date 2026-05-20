@@ -2,7 +2,8 @@ import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
 interface AuthState {
   accessToken?: string;
-  refreshToken?: string;
+  // refreshToken removido — agora armazenado como HttpOnly cookie pelo backend,
+  // inacessível ao JS mesmo em caso de XSS.
   user?: {
     id: number;
     username: string;
@@ -16,40 +17,24 @@ interface AuthState {
   };
 };
 
-const REFRESH_TOKEN_KEY = "colabora.auth.rt";
-
-const initialState: AuthState = {
-  accessToken: undefined,
-  // Recupera refreshToken do sessionStorage para suportar silent refresh após F5
-  refreshToken: typeof sessionStorage !== "undefined"
-    ? (sessionStorage.getItem(REFRESH_TOKEN_KEY) ?? undefined)
-    : undefined,
-  user: undefined
-};
-
 const authSlice = createSlice({
   name: "auth",
-  initialState,
+  initialState: {
+    accessToken: undefined,
+    user: undefined,
+  } as AuthState,
   reducers: {
     setCredentials: (
       state,
-      action: PayloadAction<{ access_token: string; refresh_token: string; user: AuthState["user"] }>
+      action: PayloadAction<{ access_token: string; user: AuthState["user"] }>
     ) => {
       state.accessToken = action.payload.access_token;
-      state.refreshToken = action.payload.refresh_token;
       state.user = action.payload.user;
-      // Persiste refreshToken em sessionStorage para silent refresh após reload
-      if (typeof sessionStorage !== "undefined" && action.payload.refresh_token) {
-        sessionStorage.setItem(REFRESH_TOKEN_KEY, action.payload.refresh_token);
-      }
     },
     logout: (state) => {
       state.accessToken = undefined;
-      state.refreshToken = undefined;
       state.user = undefined;
-      if (typeof sessionStorage !== "undefined") {
-        sessionStorage.removeItem(REFRESH_TOKEN_KEY);
-      }
+      // O cookie HttpOnly "rt" é limpo pelo backend no endpoint /auth/logout
     },
     updateUser: (state, action: PayloadAction<AuthState["user"] | undefined>) => {
       state.user = action.payload;

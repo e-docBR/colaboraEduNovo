@@ -2,6 +2,11 @@ services:
   traefik:
     image: traefik:v2.10
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+          cpus: "0.50"
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
@@ -25,6 +30,11 @@ services:
   postgres:
     image: postgres:15-alpine
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "1.00"
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -45,6 +55,11 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.50"
     command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes
     volumes:
       - redis_data:/data
@@ -61,6 +76,11 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "1.00"
     logging:
       driver: "json-file"
       options:
@@ -124,7 +144,6 @@ services:
       - "traefik.http.middlewares.security-headers.headers.stsIncludeSubdomains=true"
       - "traefik.http.middlewares.security-headers.headers.stsPreload=true"
       - "traefik.http.middlewares.security-headers.headers.contentTypeNosniff=true"
-      - "traefik.http.middlewares.security-headers.headers.frameDeny=true"
       - "traefik.http.middlewares.security-headers.headers.referrerPolicy=strict-origin-when-cross-origin"
       # HTTP → HTTPS redirect
       - "traefik.http.routers.backend-http.rule=Host(`${DOMAIN}`) && (PathPrefix(`/api`) || Path(`/health`))"
@@ -151,6 +170,10 @@ services:
         max-file: "3"
     deploy:
       replicas: 3
+      resources:
+        limits:
+          memory: 512m
+          cpus: "1.00"
     command: [
       "rq", "worker", "default",
       "--url", "redis://:${REDIS_PASSWORD}@redis:6379/0",
@@ -163,7 +186,9 @@ services:
       FLASK_ENV: production
       SECRET_KEY: ${SECRET_KEY}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # Worker usa APP_DB_USER (privilégios mínimos: DML apenas, sem DDL)
+      DATABASE_URL: postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      APP_DATABASE_URL: postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       UPLOAD_FOLDER: /data/uploads
       BRAND_NAME: ${BRAND_NAME:-ColaboraEdu}
@@ -192,6 +217,11 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.prod
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+          cpus: "0.25"
     logging:
       driver: "json-file"
       options:
@@ -226,6 +256,11 @@ services:
   uptime-kuma:
     image: louislam/uptime-kuma:1
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.50"
     volumes:
       - uptime_kuma_data:/app/data
     networks:
@@ -249,6 +284,11 @@ services:
   pgbackup:
     image: postgres:15-alpine
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.50"
     entrypoint: >
       sh -c "
         echo '[pgbackup] Installing rclone for optional S3 upload...';

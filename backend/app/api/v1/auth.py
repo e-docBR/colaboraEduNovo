@@ -10,6 +10,21 @@ from ...core.security import generate_tokens, add_token_to_blocklist, hash_passw
 from ...services.usuario_service import UsuarioService
 from ...schemas.usuario import LoginRequest, ChangePasswordRequest
 from ...core.extensions import limiter
+from loguru import logger
+
+def _get_client_ip() -> str:
+    """Retorna o IP real do cliente.
+
+    Prefere X-Real-IP (setado pelo Traefik com o IP da conexão de entrada) sobre
+    X-Forwarded-For, que pode ser forjado pelo cliente antes de chegar ao proxy.
+    """
+    return (
+        request.headers.get("X-Real-IP")
+        or request.headers.get("X-Forwarded-For", "").split(",")[-1].strip()
+        or request.remote_addr
+        or ""
+    )
+
 
 def register(parent: Blueprint) -> None:
     bp = Blueprint("auth", __name__)
@@ -26,36 +41,79 @@ def register(parent: Blueprint) -> None:
     @bp.post("/auth/login")
     @limiter.limit("10 per minute")
     def login():
+        from flask import make_response
+        from ...core.config import settings
+
         try:
             payload = LoginRequest(**(request.get_json() or {}))
         except ValidationError as e:
             return jsonify({"error": "Dados inválidos", "details": e.errors(include_context=False)}), 422
 
-        ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+        ip = _get_client_ip()
         with session_scope() as session:
             from ...services.audit import log_action
             service = UsuarioService(session)
             try:
-                response = service.authenticate(
+                auth_response = service.authenticate(
                     payload.username,
                     payload.password,
                     tenant_slug=payload.tenant_slug
                 )
-                log_action(session, response.user.id, "LOGIN_SUCCESS", "Usuario", response.user.id, {"ip": ip})
-                return jsonify(response.model_dump())
+                log_action(session, auth_response.user.id, "LOGIN_SUCCESS", "Usuario", auth_response.user.id, {"ip": ip})
+
+                # Remove refresh_token do body — enviado apenas via cookie HttpOnly
+                auth_data = auth_response.model_dump()
+                refresh_token = auth_data.pop("refresh_token", None)
+
+                resp = make_response(jsonify(auth_data))
+                if refresh_token:
+                    resp.set_cookie(
+                        "rt",
+                        refresh_token,
+                        httponly=True,
+                        secure=settings.environment == "production",
+                        samesite="Strict",
+                        max_age=7 * 24 * 3600,
+                        path="/api/v1/auth",
+                    )
+                return resp
             except Exception:
                 # Garante que o log de falha não mascara a exceção original
                 try:
                     log_action(session, None, "LOGIN_FAILED", "Usuario", None, {"username": payload.username, "ip": ip})
-                except Exception:
-                    pass
+                except Exception as audit_exc:
+                    logger.error("Audit log failed during login for user '{}': {}", payload.username, audit_exc)
                 raise
 
     @bp.post("/auth/refresh")
-    @jwt_required(refresh=True)
     def refresh():
-        identity = get_jwt_identity()
-        jwt_data = get_jwt()
+        """Emite um novo access token usando o refresh token armazenado no cookie HttpOnly.
+
+        Não usa @jwt_required para evitar que o decorator leia do header Authorization —
+        o refresh token deve vir exclusivamente do cookie, nunca de um header exposto ao JS.
+        """
+        from flask_jwt_extended import decode_token
+        from flask_jwt_extended.exceptions import JWTExtendedException
+        from ...core.security import is_token_revoked
+        from ...core.config import settings
+
+        token = request.cookies.get("rt")
+        if not token:
+            return jsonify({"error": "Sessão expirada. Faça login novamente."}), 401
+
+        try:
+            jwt_data = decode_token(token, allow_expired=False)
+        except (JWTExtendedException, Exception):
+            return jsonify({"error": "Sessão inválida. Faça login novamente."}), 401
+
+        if jwt_data.get("type") != "refresh":
+            return jsonify({"error": "Token inválido"}), 401
+
+        jti = jwt_data.get("jti", "")
+        if jti and is_token_revoked(jti):
+            return jsonify({"error": "Sessão revogada. Faça login novamente."}), 401
+
+        identity = str(jwt_data.get("sub", ""))
         roles = jwt_data.get("roles", [])
         extra_claims = {
             "aluno_id": jwt_data.get("aluno_id"),
@@ -64,25 +122,85 @@ def register(parent: Blueprint) -> None:
             "academic_year_id": jwt_data.get("academic_year_id"),
         }
         tokens = generate_tokens(identity=identity, roles=roles, extra_claims=extra_claims)
-        return jsonify(tokens)
+
+        # Recupera dados do usuário para o frontend restaurar o estado após F5
+        user_data = None
+        try:
+            from ...models import Usuario
+            with session_scope() as session:
+                user = session.get(Usuario, int(identity))
+                if user:
+                    user_data = {
+                        "id": user.id,
+                        "username": user.username,
+                        "role": user.role,
+                        "is_admin": user.is_admin,
+                        "aluno_id": user.aluno_id,
+                        "photo_url": user.photo_url,
+                        "must_change_password": user.must_change_password,
+                        "tenant_id": user.tenant_id,
+                        "tenant_name": user.tenant_name,
+                    }
+        except Exception as exc:
+            logger.warning("Could not fetch user data during token refresh (id={}): {}", identity, exc)
+
+        resp = jsonify({"access_token": tokens["access_token"], "user": user_data})
+        resp.set_cookie(
+            "rt",
+            tokens["refresh_token"],
+            httponly=True,
+            secure=settings.environment == "production",
+            samesite="Strict",
+            max_age=7 * 24 * 3600,
+            path="/api/v1/auth",
+        )
+        return resp
 
     @bp.post("/auth/logout")
     @jwt_required(verify_type=False)
     def logout():
-        """Revoga o token atual (access ou refresh) adicionando-o ao blocklist."""
+        """Revoga o access token e o refresh token (cookie), e limpa o cookie."""
         from ...core.security import add_token_to_blocklist
         from ...services.audit import log_action
+        from ...core.config import settings
+        from flask import make_response
         import time as _time
+
         jwt_data = get_jwt()
         jti = jwt_data["jti"]
         exp = jwt_data.get("exp", 0)
         ttl = max(int(exp - _time.time()), 1)
         add_token_to_blocklist(jti, ttl)
+
+        # Revoga o refresh token do cookie, se presente
+        rt_cookie = request.cookies.get("rt")
+        if rt_cookie:
+            try:
+                from flask_jwt_extended import decode_token
+                rt_data = decode_token(rt_cookie, allow_expired=True)
+                rt_jti = rt_data.get("jti")
+                if rt_jti:
+                    rt_exp = rt_data.get("exp", 0)
+                    rt_ttl = max(int(rt_exp - _time.time()), 1)
+                    add_token_to_blocklist(rt_jti, rt_ttl)
+            except Exception as exc:
+                logger.warning("Could not revoke refresh token cookie on logout: {}", exc)
+
         user_id = get_jwt_identity()
-        ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+        ip = _get_client_ip()
         with session_scope() as session:
             log_action(session, int(user_id) if user_id else None, "LOGOUT", "Usuario", user_id, {"ip": ip})
-        return ("", 204)
+
+        resp = make_response("", 204)
+        resp.set_cookie(
+            "rt", "",
+            httponly=True,
+            secure=settings.environment == "production",
+            samesite="Strict",
+            max_age=0,
+            path="/api/v1/auth",
+        )
+        return resp
 
     @bp.post("/auth/change-password")
     @jwt_required()

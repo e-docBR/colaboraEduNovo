@@ -52,27 +52,25 @@ const requireAuth = async () => {
   const state = store.getState();
 
   if (!state.auth.accessToken) {
-    // Tenta silent refresh com o refreshToken persistido no sessionStorage
-    const refreshToken = state.auth.refreshToken;
-    if (refreshToken) {
-      try {
-        const base = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api/v1";
-        const res = await fetch(`${base}/auth/refresh`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${refreshToken}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          store.dispatch(setCredentials(data));
-          if (data.user?.tenant_id) store.dispatch(setTenantId(data.user.tenant_id));
-          if (data.user?.must_change_password) throw redirect("/alterar-senha");
-          return null;
-        }
-      } catch {
-        // refresh falhou — continua para redirect de login
+    // Tenta silent refresh usando o cookie HttpOnly "rt" — enviado automaticamente pelo browser.
+    // Não há mais refreshToken no estado Redux (inacessível ao JS por design).
+    try {
+      const base = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api/v1";
+      const res = await fetch(`${base}/auth/refresh`, {
+        method: "POST",
+        credentials: "include", // envia o cookie rt automaticamente
+      });
+      if (res.ok) {
+        const data = await res.json() as { access_token: string; user?: { tenant_id?: number | null; must_change_password?: boolean } };
+        store.dispatch(setCredentials({ access_token: data.access_token, user: data.user }));
+        if (data.user?.tenant_id) store.dispatch(setTenantId(data.user.tenant_id));
+        if (data.user?.must_change_password) throw redirect("/alterar-senha");
+        return null;
       }
-      store.dispatch(logout());
+    } catch {
+      // refresh falhou — continua para redirect de login
     }
+    store.dispatch(logout());
     throw redirect("/login");
   }
 

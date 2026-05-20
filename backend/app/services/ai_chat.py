@@ -12,17 +12,68 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Optional, TypedDict
+import time
+from dataclasses import dataclass
+from typing import Any, Iterator, Optional, TypedDict
 
 from loguru import logger
-from sqlalchemy import select, func, desc, and_
+from sqlalchemy import distinct, select, func, desc, and_
 from sqlalchemy.orm import Session
 
 from ..core.database import session_scope
 from ..models import Aluno, Nota, Comunicado, Ocorrencia, Tenant
 from ..models.ai_configuration import AIConfiguration
 from .intervention_service import intervention_service
-from .llm_provider import call_llm
+from .llm_provider import call_llm, stream_llm
+
+
+# Cache de disciplinas por tenant — evita DB round-trip em cada mensagem (C.3)
+_discipline_cache: dict[int, tuple[list[str], float]] = {}
+_DISC_CACHE_TTL = 1800       # 30 min
+_DISC_CACHE_MAX_SIZE = 200   # máx de tenants simultâneos no cache em memória
+
+
+def _cleanup_discipline_cache() -> None:
+    """Remove entradas expiradas; se ainda grande demais, descarta as mais antigas."""
+    now = time.time()
+    expired = [k for k, (_, ts) in list(_discipline_cache.items()) if now - ts > _DISC_CACHE_TTL]
+    for k in expired:
+        _discipline_cache.pop(k, None)
+    if len(_discipline_cache) > _DISC_CACHE_MAX_SIZE:
+        oldest = sorted(_discipline_cache.keys(), key=lambda k: _discipline_cache[k][1])
+        for k in oldest[: len(_discipline_cache) - _DISC_CACHE_MAX_SIZE]:
+            _discipline_cache.pop(k, None)
+
+
+# ─── Sanitização de prompts customizados ────────────────────────────────────
+
+_INJECTION_PATTERN = re.compile(
+    r"\b(ignore|disregard|forget|override|bypass|pretend|act as|you are now|"
+    r"new instruction|system:|assistente:|role:|<\|system\|>)\b",
+    re.IGNORECASE,
+)
+_MAX_SYSTEM_PROMPT_LEN = 500
+
+
+def _sanitize_system_prompt(text: str) -> str:
+    """Limita tamanho e remove padrões de injeção de prompt em prompts customizados do tenant."""
+    cleaned = text[:_MAX_SYSTEM_PROMPT_LEN]
+    cleaned = _INJECTION_PATTERN.sub("[removido]", cleaned)
+    cleaned = cleaned.replace("\n", " ").replace("\r", " ")
+    return cleaned.strip()
+
+
+# ─── Snapshot imutável de AIConfiguration ───────────────────────────────────
+
+@dataclass(frozen=True)
+class _AIConfigSnapshot:
+    """Cópia em primitivos de AIConfiguration — segura para usar fora da sessão SQLAlchemy."""
+    is_active: bool
+    api_key: str | None
+    provider: str
+    model_name: str
+    temperature: float
+    system_prompt: str | None
 
 
 # ─── Tipos ──────────────────────────────────────────────────────────────────
@@ -200,55 +251,144 @@ class AIAnalystEngine:
 
     # ── LLM Enrichment ────────────────────────────────────────────────────────
 
-    def _enrich_with_llm(
+    def _build_enrichment_messages(
         self,
-        session: Session,
-        tenant_id: int,
-        base_text: str,
+        school: str,
+        system_prompt_extra: str,
         data_context: dict,
         question: str,
         ai_name: str,
-    ) -> str:
-        """Chama o LLM para enriquecer a resposta com análise contextual."""
-        ai_config = session.execute(
-            select(AIConfiguration).where(AIConfiguration.tenant_id == tenant_id)
-        ).scalar_one_or_none()
-
-        if not ai_config or not ai_config.is_active:
-            return base_text
-
-        tenant = session.get(Tenant, tenant_id)
-        school = tenant.name if tenant else "ColaboraEdu"
-
-        extra_instructions = ""
-        if ai_config.system_prompt:
-            extra_instructions = f"\n\nInstruções adicionais: {ai_config.system_prompt}"
-
+        history: list[dict] | None = None,
+    ) -> list[dict]:
+        """Constrói a lista de mensagens para o LLM de enriquecimento (sync e streaming)."""
+        sanitized_extra = _sanitize_system_prompt(system_prompt_extra) if system_prompt_extra else ""
+        extra = f"\n\nPersonalização da escola: {sanitized_extra}" if sanitized_extra else ""
         system_msg = (
-            f"Você é {ai_name}, assistente de análise educacional da {school}. "
-            "Responda sempre em português brasileiro. Seja direto, profissional e pedagógico. "
-            "Use emojis moderadamente para destacar pontos importantes. "
-            "Ao analisar dados, sempre forneça insights práticos e recomendações acionáveis. "
-            "Nunca invente dados — analise apenas o que for fornecido."
-            + extra_instructions
+            f"Você é {ai_name}, analista educacional especialista da escola {school}.\n\n"
+            "REGRAS ABSOLUTAS:\n"
+            "- Responda SEMPRE em português brasileiro, nunca em inglês\n"
+            "- NUNCA invente dados — analise exclusivamente o que for fornecido no contexto\n"
+            "- Se os dados forem insuficientes para uma conclusão, diga explicitamente\n\n"
+            "FORMATO:\n"
+            "- Seja direto e objetivo (máx. 3 parágrafos)\n"
+            "- Use markdown: **negrito** para destaques, listas com `-` para enumerar alunos/disciplinas\n"
+            "- Emojis para status: ⚠️ crítico, 🔴 grave, 🟡 atenção, 🟢 bom, 📊 estatística\n"
+            "- Quando apresentar alunos em risco, liste nome + turma + motivo específico\n\n"
+            "CRITÉRIOS EDUCACIONAIS (escola brasileira):\n"
+            "- Aprovação: média ≥ 60 pontos\n"
+            "- Risco de reprovação: média 40–59\n"
+            "- Situação crítica: média < 40 ou faltas > 20% da carga horária\n"
+            "- Priorize sempre intervenções preventivas antes que o aluno reprove\n\n"
+            "AÇÃO:\n"
+            "- Toda análise deve terminar com ao menos UMA recomendação concreta e acionável\n"
+            "- Para situações críticas, sugira contato com responsável ou intervenção imediata"
+            + extra
         )
-
         context_json = json.dumps(data_context, ensure_ascii=False, indent=2)
         user_msg = (
             f"Pergunta do usuário: {question}\n\n"
             f"Dados extraídos do banco de dados:\n{context_json}\n\n"
-            f"Com base nesses dados reais, forneça uma análise pedagógica útil e insights acionáveis. "
-            f"Seja conciso (máximo 4 parágrafos)."
+            "Forneça uma análise pedagógica concisa e insights acionáveis baseados exclusivamente nesses dados."
         )
+        msgs: list[dict] = [{"role": "system", "content": system_msg}]
+        if history:
+            for turn in history[-6:]:
+                role = turn.get("role", "")
+                content = turn.get("content", "")
+                if role in ("user", "assistant") and content:
+                    msgs.append({"role": role, "content": content})
+        msgs.append({"role": "user", "content": user_msg})
+        return msgs
 
-        enriched = call_llm(
-            ai_config,
-            [
-                {"role": "system", "content": system_msg},
-                {"role": "user", "content": user_msg},
-            ],
+    def _enrich_with_llm(
+        self,
+        ai_cfg: _AIConfigSnapshot,
+        school: str,
+        base_text: str,
+        data_context: dict,
+        question: str,
+        ai_name: str,
+        history: list[dict] | None = None,
+    ) -> str:
+        """Chama o LLM para enriquecer a resposta. Chamado FORA da sessão SQLAlchemy."""
+        if not ai_cfg or not ai_cfg.is_active or not ai_cfg.api_key:
+            return base_text
+        msgs = self._build_enrichment_messages(
+            school, ai_cfg.system_prompt or "", data_context, question, ai_name, history
         )
+        enriched = call_llm(ai_cfg, msgs)
         return enriched if enriched else base_text
+
+    def _stream_llm_enrichment(
+        self,
+        school: str,
+        system_prompt_extra: str,
+        data_context: dict,
+        question: str,
+        ai_name: str,
+        ai_cfg: _AIConfigSnapshot,
+        history: list[dict] | None = None,
+    ) -> Iterator[str]:
+        """Versão streaming de _enrich_with_llm — yields text chunks. Chamado FORA da sessão."""
+        msgs = self._build_enrichment_messages(
+            school, system_prompt_extra, data_context, question, ai_name, history
+        )
+        yield from stream_llm(ai_cfg, msgs)
+
+    def _get_tenant_disciplines(self, session: Session, tenant_id: int) -> list[str]:
+        """Retorna disciplinas distintas do tenant, com cache de 30 min (C.3)."""
+        cached = _discipline_cache.get(tenant_id)
+        if cached and time.time() - cached[1] < _DISC_CACHE_TTL:
+            return cached[0]
+        rows = session.execute(
+            select(distinct(Nota.disciplina)).where(
+                Nota.aluno_id.in_(select(Aluno.id).where(Aluno.tenant_id == tenant_id))
+            )
+        ).scalars().all()
+        disciplines = [d for d in rows if d]
+        _cleanup_discipline_cache()  # evita crescimento ilimitado
+        _discipline_cache[tenant_id] = (disciplines, time.time())
+        return disciplines
+
+    def _match_tenant_discipline(self, session: Session, tenant_id: int, message: str) -> str | None:
+        """Encontra a disciplina do tenant que melhor corresponde à mensagem (C.3)."""
+        disciplines = self._get_tenant_disciplines(session, tenant_id)
+        msg_upper = message.upper()
+        for disc in disciplines:
+            if disc.upper() in msg_upper:
+                return disc
+            significant = [w for w in disc.upper().split() if len(w) >= 4]
+            if significant and significant[0] in msg_upper:
+                return disc
+        return None
+
+    def _route_via_llm(self, message: str, ai_cfg: _AIConfigSnapshot) -> str | None:
+        """Tenta identificar a intenção via LLM quando o regex não detectou nada.
+
+        Retorna o nome do intent correspondente ou None se não for possível determinar.
+        """
+        valid_intents = " | ".join(self.INTENT_HANDLERS.keys())
+        routing_messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Você é um classificador de intenções educacionais. "
+                    "Analise a pergunta e responda APENAS com uma das palavras abaixo, sem pontuação ou explicação:\n"
+                    f"{valid_intents}"
+                ),
+            },
+            {"role": "user", "content": message},
+        ]
+        try:
+            result = call_llm(ai_cfg, routing_messages)
+            if result:
+                candidate = result.strip().lower().split()[0]
+                if candidate in self.INTENT_HANDLERS:
+                    logger.info("LLM routing: '{}' → intent '{}'", message[:60], candidate)
+                    return candidate
+        except Exception as exc:
+            logger.debug("LLM routing failed: {}", exc)
+        return None
 
     # ── Helpers de query ──────────────────────────────────────────────────────
 
@@ -860,61 +1000,185 @@ class AIAnalystEngine:
         "help": "_help",
     }
 
-    def process_query(self, message: str, tenant_id: int) -> AIResponse:
+    # ── Lógica compartilhada (Fase 1: DB) ────────────────────────────────────
+
+    def _prepare_query(
+        self,
+        message: str,
+        tenant_id: int,
+        history: list[dict] | None,
+        page_context: dict | None,
+    ) -> tuple[dict, dict, str, str, str, _AIConfigSnapshot | None]:
+        """Fase 1: todo acesso ao banco de dados.
+
+        Retorna (result, ctx, ai_name, school, sys_prompt_extra, ai_cfg_snapshot).
+        A sessão é fechada ao final deste método — o LLM é chamado FORA dela.
+        """
         intent = self._detect_intent(message)
         filters = self._extract_filters(message)
 
         with session_scope() as session:
-            # Resolve AI name for this tenant
-            ai_cfg = session.execute(
+            ai_cfg_row = session.execute(
                 select(AIConfiguration).where(AIConfiguration.tenant_id == tenant_id)
             ).scalar_one_or_none()
             tenant = session.get(Tenant, tenant_id)
             tenant_name = tenant.name if tenant else "ColaboraEdu"
 
-            if ai_cfg:
-                ai_name = ai_cfg.display_name(tenant_name)
-            else:
-                first_word = tenant_name.split()[0]
-                ai_name = f"AI {first_word}"
+            ai_name = (
+                ai_cfg_row.display_name(tenant_name) if ai_cfg_row
+                else f"AI {tenant_name.split()[0]}"
+            )
 
-            # Help intent (no DB needed)
+            # Snapshot de primitivos — seguro para usar após fechar a sessão
+            ai_cfg: _AIConfigSnapshot | None = None
+            if ai_cfg_row:
+                ai_cfg = _AIConfigSnapshot(
+                    is_active=ai_cfg_row.is_active,
+                    api_key=ai_cfg_row.api_key,
+                    provider=ai_cfg_row.provider or "openai",
+                    model_name=ai_cfg_row.model_name or "gpt-4o-mini",
+                    temperature=getattr(ai_cfg_row, "temperature", 0.4) or 0.4,
+                    system_prompt=ai_cfg_row.system_prompt,
+                )
+
+            # LLM routing fallback quando regex não detectou intenção (C.1)
+            if (intent == "help" or not intent) and ai_cfg and ai_cfg.is_active and ai_cfg.api_key:
+                routed = self._route_via_llm(message, ai_cfg)
+                if routed and routed != "help":
+                    intent = routed
+
             if intent == "help" or not intent:
                 result = self._help(ai_name=ai_name)
                 result["ai_name"] = ai_name
-                return result  # type: ignore
+                return result, {}, ai_name, tenant_name, "", ai_cfg
 
-            # Dispatch to handler
+            # Injeta contexto da página nos filtros (B.2)
+            if page_context and isinstance(page_context, dict):
+                ctx_type = page_context.get("type")
+                ctx_id = page_context.get("id")
+                if ctx_type == "aluno" and ctx_id and not filters.get("aluno_nome"):
+                    try:
+                        aluno = session.get(Aluno, int(ctx_id))
+                        if aluno and aluno.tenant_id == tenant_id:
+                            filters["aluno_nome"] = aluno.nome
+                            filters["aluno_id"] = aluno.id
+                    except (ValueError, TypeError):
+                        pass
+                elif ctx_type == "turma" and ctx_id and not filters.get("turmas"):
+                    filters["turmas"] = [ctx_id]
+
+            # Complementa disciplina com dados reais do banco (C.3)
+            if not filters.get("disciplina"):
+                disc = self._match_tenant_discipline(session, tenant_id, message)
+                if disc:
+                    filters["disciplina"] = disc
+
             handler_name = self.INTENT_HANDLERS.get(intent)
             if not handler_name:
                 result = self._help(ai_name=ai_name)
                 result["ai_name"] = ai_name
-                return result  # type: ignore
+                return result, {}, ai_name, tenant_name, "", ai_cfg
 
             handler = getattr(self, handler_name)
             try:
                 result = handler(s=session, f=filters, tenant_id=tenant_id, ai_name=ai_name)
             except Exception as exc:
                 logger.error(f"AI handler '{handler_name}' failed: {exc}")
-                return {
+                error_result = {
                     "text": "Erro ao processar a consulta. Verifique os dados e tente novamente.",
                     "type": "text", "data": None, "chart_config": None, "ai_name": ai_name,
                 }
+                return error_result, {}, ai_name, tenant_name, "", None
 
-            # LLM enrichment (only for text/table responses with meaningful context)
             ctx = result.pop("_ctx", {})
-            if ctx and result.get("type") in ("text", "table") and result.get("text"):
-                enriched = self._enrich_with_llm(
-                    session, tenant_id,
+            sys_prompt_extra = (ai_cfg.system_prompt or "") if ai_cfg else ""
+            result["ai_name"] = ai_name
+            # Sessão fecha aqui — result/ctx contêm apenas primitivos serializáveis
+            return result, ctx, ai_name, tenant_name, sys_prompt_extra, ai_cfg
+
+    # ── Métodos públicos (Fase 2: LLM fora da sessão DB) ─────────────────────
+
+    def process_query(
+        self,
+        message: str,
+        tenant_id: int,
+        history: list[dict] | None = None,
+        page_context: dict | None = None,
+    ) -> AIResponse:
+        # Fase 1 — DB (sessão fechada ao retornar)
+        result, ctx, ai_name, school, sys_prompt_extra, ai_cfg = self._prepare_query(
+            message, tenant_id, history, page_context
+        )
+
+        # Fase 2 — LLM (fora da sessão, sem prender conexões do pool)
+        llm_active = bool(ai_cfg and ai_cfg.is_active and ai_cfg.api_key and ctx)
+        if llm_active:
+            if result.get("type") in ("text", "table") and result.get("text"):
+                result["text"] = self._enrich_with_llm(
+                    ai_cfg, school,  # type: ignore[arg-type]
                     base_text=result["text"],
                     data_context=ctx,
                     question=message,
                     ai_name=ai_name,
+                    history=history,
                 )
-                result["text"] = enriched
+            elif result.get("type") == "chart":
+                analysis = self._enrich_with_llm(
+                    ai_cfg, school,  # type: ignore[arg-type]
+                    base_text="",
+                    data_context=ctx,
+                    question=message,
+                    ai_name=ai_name,
+                    history=history,
+                )
+                if analysis:
+                    result["analysis_text"] = analysis
 
-            result["ai_name"] = ai_name
-            return result  # type: ignore
+        return result  # type: ignore
+
+    def stream_process_query(
+        self,
+        message: str,
+        tenant_id: int,
+        history: list[dict] | None = None,
+        page_context: dict | None = None,
+    ) -> Iterator[dict]:
+        """Generator — yields SSE event dicts para o endpoint de streaming (C.2)."""
+        # Fase 1 — DB (sessão fechada ao retornar)
+        result, ctx, ai_name, school, sys_prompt_extra, ai_cfg = self._prepare_query(
+            message, tenant_id, history, page_context
+        )
+
+        response_type = result.get("type", "text")
+        llm_active = bool(ai_cfg and ai_cfg.is_active and ai_cfg.api_key and ctx)
+
+        yield {
+            "type": "meta",
+            "response_type": response_type,
+            "data": result.get("data"),
+            "chart_config": result.get("chart_config"),
+            "ai_name": ai_name,
+        }
+
+        # Fase 2 — LLM streaming (fora da sessão DB)
+        if response_type == "chart":
+            if llm_active:
+                for chunk in self._stream_llm_enrichment(
+                    school, sys_prompt_extra, ctx, message, ai_name,
+                    ai_cfg, history,  # type: ignore[arg-type]
+                ):
+                    yield {"type": "analysis_chunk", "text": chunk}
+        else:
+            if llm_active:
+                for chunk in self._stream_llm_enrichment(
+                    school, sys_prompt_extra, ctx, message, ai_name,
+                    ai_cfg, history,  # type: ignore[arg-type]
+                ):
+                    yield {"type": "chunk", "text": chunk}
+            elif result.get("text"):
+                yield {"type": "chunk", "text": result["text"]}
+
+        yield {"type": "done"}
 
 
 # ─── Singleton ───────────────────────────────────────────────────────────────
@@ -922,5 +1186,9 @@ class AIAnalystEngine:
 _engine = AIAnalystEngine()
 
 
-def process_chat_message(message: str, tenant_id: int) -> dict:
-    return _engine.process_query(message, tenant_id)
+def process_chat_message(message: str, tenant_id: int, history: list[dict] | None = None, page_context: dict | None = None) -> dict:
+    return _engine.process_query(message, tenant_id, history=history, page_context=page_context)
+
+
+def stream_chat_message(message: str, tenant_id: int, history: list[dict] | None = None, page_context: dict | None = None) -> Iterator[dict]:
+    return _engine.stream_process_query(message, tenant_id, history=history, page_context=page_context)

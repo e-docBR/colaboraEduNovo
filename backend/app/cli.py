@@ -136,7 +136,10 @@ def register_cli(app):
     @click.option("--tenant-name", default="Escola ColaboraEdu", help="Tenant display name")
     def create_admin_command(username, password, tenant_slug, tenant_name):
         """Create an admin user and default tenant/year if they don't exist."""
-        Base.metadata.create_all(bind=engine)
+        try:
+            Base.metadata.create_all(bind=engine, checkfirst=True)
+        except Exception:
+            pass  # Tables already exist (handled by migrations)
         generated = False
         if not password:
             password = secrets.token_urlsafe(16)

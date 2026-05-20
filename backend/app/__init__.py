@@ -77,12 +77,15 @@ def create_app() -> Flask:
     @app.after_request
     def add_security_headers(response):
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["X-XSS-Protection"] = "0"  # CSP é preferido; valor "1" pode criar vulns em browsers antigos
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
-        # CSP para respostas da API (sem HTML — bloqueia execução de scripts se renderizado)
-        response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+        # CSP apenas para respostas não-JSON (ex: templates de e-mail renderizados pelo backend).
+        # Respostas JSON não precisam de CSP — o nginx frontend já cobre o HTML/JS com sua própria
+        # política, e ter dois headers CSP em respostas da API causa comportamento indefinido nos browsers.
+        if not response.content_type.startswith("application/json"):
+            response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
         response.headers["Cache-Control"] = "no-store, no-cache, private"
         if settings.environment == "production":
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"

@@ -1,6 +1,7 @@
 """Billing endpoints — Stripe Checkout and webhook receiver."""
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
+from loguru import logger
 
 
 def register(parent: Blueprint) -> None:
@@ -69,8 +70,11 @@ def register(parent: Blueprint) -> None:
                         return_url=f"{settings.frontend_url}/app/admin/escolas",
                     )
                     return jsonify({"url": portal.url, "type": "portal"})
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning(
+                        "Stripe portal session failed for tenant {}: {}", tenant_id, exc
+                    )
+                    return jsonify({"error": "Erro ao acessar portal de faturamento. Tente novamente."}), 502
 
             # Admin email for pre-filling checkout
             user_id = int(get_jwt_identity())

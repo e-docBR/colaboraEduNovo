@@ -28,7 +28,7 @@ services:
     environment:
       FLASK_APP: app
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-colabora_edu}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      REDIS_URL: redis://redis:6379/0
       ALLOWED_ORIGINS: '["http://localhost:5173", "http://127.0.0.1:5173"]'
       UPLOAD_FOLDER: /data/uploads
       SECRET_KEY: ${SECRET_KEY:-dev-key}
@@ -64,7 +64,7 @@ services:
     environment:
       FLASK_APP: app
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-colabora_edu}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      REDIS_URL: redis://redis:6379/0
       UPLOAD_FOLDER: /data/uploads
       SECRET_KEY: ${SECRET_KEY:-dev-key}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-jwt}

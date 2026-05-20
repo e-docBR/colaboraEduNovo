@@ -2,6 +2,7 @@
 from sqlalchemy import String, Boolean, Float, ForeignKey, Text, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from ..core.crypto import EncryptedSecret
 from ..core.database import Base
 
 
@@ -20,8 +21,8 @@ class AIConfiguration(Base):
     # Nome do modelo (ex: gpt-4o-mini, claude-3-haiku, google/gemma-3-27b-it)
     model_name: Mapped[str] = mapped_column(String(100), default="gpt-4o-mini")
 
-    # Chave de API do provider
-    api_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Chave de API do provider — armazenada criptografada (Fernet/AES-128)
+    api_key: Mapped[str | None] = mapped_column(EncryptedSecret, nullable=True)
 
     # Temperatura (criatividade): 0.0 = determinístico, 1.0 = criativo
     temperature: Mapped[float] = mapped_column(Float, default=0.4)

@@ -1,7 +1,11 @@
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import TableRowsIcon from "@mui/icons-material/TableRows";
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Box,
   Button,
@@ -38,6 +42,7 @@ export const UploadsPage = () => {
   });
 
   const [queuedStartTime, setQueuedStartTime] = useState<number | null>(null);
+  const [processingLogs, setProcessingLogs] = useState<string[]>([]);
 
   useEffect(() => {
     if (jobStatus) {
@@ -45,8 +50,8 @@ export const UploadsPage = () => {
         const { count, logs, year } = jobStatus.result || { count: 0, logs: [], year: "?" };
         let msg = `Concluído! ${count} registros processados para o Ano Letivo: ${year}.`;
         if (logs && logs.length > 0) {
-          msg += ` (${logs.length} avisos encontrados)`;
-          console.warn("Logs de processamento:", logs);
+          msg += ` (${logs.length} aviso${logs.length !== 1 ? "s" : ""} encontrado${logs.length !== 1 ? "s" : ""})`;
+          setProcessingLogs(logs as string[]);
         }
         setFeedback({ type: "success", message: msg });
         setCurrentJobId(null);
@@ -84,6 +89,7 @@ export const UploadsPage = () => {
     setFile(null);
     setFeedback(null);
     setCurrentJobId(null);
+    setProcessingLogs([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -127,9 +133,27 @@ export const UploadsPage = () => {
         {(isUploading || !!currentJobId) && <LinearProgress />}
         <CardContent>
           {feedback && (
-            <Alert severity={feedback.type} sx={{ mb: 2 }}>
+            <Alert severity={feedback.type} sx={{ mb: processingLogs.length > 0 ? 1 : 2 }}>
               {feedback.message}
             </Alert>
+          )}
+          {processingLogs.length > 0 && (
+            <Accordion disableGutters sx={{ mb: 2, border: "1px solid", borderColor: "warning.light", borderRadius: 1 }}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="body2" color="warning.dark">
+                  Ver avisos de importação ({processingLogs.length})
+                </Typography>
+              </AccordionSummary>
+              <AccordionDetails sx={{ p: 0 }}>
+                <List dense disablePadding>
+                  {processingLogs.map((log, i) => (
+                    <ListItem key={i} divider>
+                      <ListItemText primaryTypographyProps={{ variant: "body2" }} primary={log} />
+                    </ListItem>
+                  ))}
+                </List>
+              </AccordionDetails>
+            </Accordion>
           )}
           <Box component="form" onSubmit={handleSubmit} display="flex" flexDirection="column" gap={2}>
             <Stack direction={{ xs: "column", md: "row" }} gap={2}>

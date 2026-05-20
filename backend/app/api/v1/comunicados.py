@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request, g
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from sqlalchemy import desc, or_
+from sqlalchemy.orm import selectinload
 
 from ...core.database import session_scope
 from ...core.roles import STAFF_ROLES, MANAGER_ROLES, COMUNICADO_WRITE_ROLES
@@ -58,7 +59,7 @@ def register(parent: Blueprint) -> None:
                 )
 
             total = base_query.count()
-            results = base_query.offset(offset).limit(per_page).all()
+            results = base_query.options(selectinload(Comunicado.autor)).offset(offset).limit(per_page).all()
 
             # Get read IDs for this user in one query
             result_ids = [c.id for c in results]

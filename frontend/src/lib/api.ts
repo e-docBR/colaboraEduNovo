@@ -6,12 +6,29 @@ import { setCredentials, logout } from "../features/auth/authSlice";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
+export interface ConversationTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface PageContext {
+  type: "aluno" | "turma";
+  id: string;
+}
+
 export interface ChatResponse {
   text: string;
   type: "text" | "table" | "chart";
-  data?: any;
-  chart_config?: any;
+  data?: Record<string, unknown>[];
+  chart_config?: {
+    type: string;
+    xKey: string;
+    yKey: string;
+    color: string;
+    title: string;
+  };
   ai_name?: string;
+  analysis_text?: string;
 }
 
 export interface AIInfo {
@@ -60,7 +77,7 @@ type LoginRequest = {
 
 type LoginResponse = {
   access_token: string;
-  refresh_token: string;
+  // refresh_token removido do body — agora enviado como cookie HttpOnly pelo backend
   user: {
     id: number;
     username: string;
@@ -443,6 +460,7 @@ const sanitizeParams = (params?: Record<string, string | number | boolean | unde
 
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: API_BASE_URL,
+  credentials: "include", // envia o cookie HttpOnly "rt" automaticamente nas requisições
   prepareHeaders: (headers, { getState }) => {
     const state = getState() as RootState;
     const token = state.auth.accessToken;
@@ -492,50 +510,34 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
   }
 
   if (result.error?.status === 401) {
-    const state = api.getState() as RootState;
-    const refreshToken = state.auth.refreshToken;
+    // O cookie HttpOnly "rt" é enviado automaticamente pelo browser (credentials: "include").
+    // Não precisamos mais ler refreshToken do estado Redux.
+    if (!refreshPromise) {
+      refreshPromise = (async () => {
+        try {
+          const refreshResult = await rawBaseQuery(
+            { url: "/auth/refresh", method: "POST" },
+            api,
+            extraOptions
+          );
 
-    if (refreshToken) {
-      if (!refreshPromise) {
-        refreshPromise = (async () => {
-          try {
-            const refreshResult = await rawBaseQuery(
-              {
-                url: "/auth/refresh",
-                method: "POST",
-                headers: { Authorization: `Bearer ${refreshToken}` }
-              },
-              api,
-              extraOptions
-            );
-
-            if (refreshResult.data) {
-              const data = refreshResult.data as { access_token: string; refresh_token: string };
-              const currentState = api.getState() as RootState;
-              api.dispatch(
-                setCredentials({
-                  access_token: data.access_token,
-                  refresh_token: data.refresh_token,
-                  user: currentState.auth.user
-                })
-              );
-              return true;
-            } else {
-              api.dispatch(logout());
-              return false;
-            }
-          } finally {
-            refreshPromise = null;
+          if (refreshResult.data) {
+            const refreshData = refreshResult.data as { access_token: string; user?: Parameters<typeof setCredentials>[0]["user"] };
+            api.dispatch(setCredentials({ access_token: refreshData.access_token, user: refreshData.user }));
+            return true;
+          } else {
+            api.dispatch(logout());
+            return false;
           }
-        })();
-      }
+        } finally {
+          refreshPromise = null;
+        }
+      })();
+    }
 
-      const refreshed = await refreshPromise;
-      if (refreshed) {
-        result = await rawBaseQuery(args, api, extraOptions);
-      }
-    } else {
-      api.dispatch(logout());
+    const refreshed = await refreshPromise;
+    if (refreshed) {
+      result = await rawBaseQuery(args, api, extraOptions);
     }
   }
 
@@ -837,7 +839,7 @@ export const api = createApi({
       }),
       invalidatesTags: ["Ocorrencias"]
     }),
-    chat: builder.mutation<ChatResponse, { message: string }>({
+    chat: builder.mutation<ChatResponse, { message: string; history?: ConversationTurn[]; page_context?: PageContext }>({
       query: (body) => ({
         url: "/chat",
         method: "POST",

@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 from sqlalchemy import select, desc, func
+from sqlalchemy.orm import selectinload
 
 from ...core.database import session_scope
 from ...core.decorators import admin_required
@@ -44,7 +45,7 @@ def register(parent: Blueprint) -> None:
             count_stm = select(func.count()).select_from(stm.subquery())
             total = session.execute(count_stm).scalar() or 0
 
-            stm = stm.offset((page - 1) * per_page).limit(per_page)
+            stm = stm.options(selectinload(AuditLog.usuario)).offset((page - 1) * per_page).limit(per_page)
             results = session.execute(stm).scalars().all()
 
             return jsonify({

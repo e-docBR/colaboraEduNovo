@@ -6,7 +6,7 @@ Cada provider implementa `complete(messages) -> str`.
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterator
 
 import requests
 from loguru import logger
@@ -49,7 +49,7 @@ def _openai_complete(api_key: str, model: str, messages: list[dict], temperature
             "model": model,
             "messages": messages,
             "temperature": temperature,
-            "max_tokens": 1024,
+            "max_tokens": 1500,
         },
         timeout=TIMEOUT,
     )
@@ -76,7 +76,7 @@ def _anthropic_complete(api_key: str, model: str, messages: list[dict], temperat
             "system": system_msg,
             "messages": user_msgs,
             "temperature": temperature,
-            "max_tokens": 1024,
+            "max_tokens": 1500,
         },
         timeout=TIMEOUT,
     )
@@ -99,7 +99,7 @@ def _gemini_complete(api_key: str, model: str, messages: list[dict], temperature
 
     payload: dict = {
         "contents": contents,
-        "generationConfig": {"temperature": temperature, "maxOutputTokens": 1024},
+        "generationConfig": {"temperature": temperature, "maxOutputTokens": 1500},
     }
     if system_instruction:
         payload["system_instruction"] = {"parts": [{"text": system_instruction}]}
@@ -198,3 +198,135 @@ def test_llm_connection(provider: str, api_key: str, model: str) -> dict:
     except Exception as exc:
         logger.error(f"Teste LLM erro inesperado ({provider}/{model}): {exc}")
         return {"ok": False, "message": f"❌ Erro inesperado: {str(exc)[:200]}"}
+
+
+# ─── Streaming ───────────────────────────────────────────────────────────────
+
+def _openai_stream(api_key: str, model: str, messages: list[dict], temperature: float, base_url: str = "https://api.openai.com/v1") -> Iterator[str]:
+    resp = requests.post(
+        f"{base_url}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://colaboraedu.com.br",
+            "X-Title": "ColaboraEdu AI",
+        },
+        json={"model": model, "messages": messages, "temperature": temperature, "max_tokens": 1500, "stream": True},
+        stream=True,
+        timeout=TIMEOUT,
+    )
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError as exc:
+        raise requests.HTTPError(_parse_api_error(exc), response=exc.response) from exc
+
+    for line in resp.iter_lines():
+        if not line:
+            continue
+        decoded = line.decode("utf-8") if isinstance(line, bytes) else line
+        if not decoded.startswith("data: "):
+            continue
+        payload = decoded[6:]
+        if payload.strip() == "[DONE]":
+            break
+        try:
+            delta = json.loads(payload)["choices"][0]["delta"].get("content") or ""
+            if delta:
+                yield delta
+        except (json.JSONDecodeError, KeyError, IndexError):
+            pass
+
+
+def _anthropic_stream(api_key: str, model: str, messages: list[dict], temperature: float) -> Iterator[str]:
+    system_msg = next((m["content"] for m in messages if m["role"] == "system"), "")
+    user_msgs = [m for m in messages if m["role"] != "system"]
+    resp = requests.post(
+        "https://api.anthropic.com/v1/messages",
+        headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json"},
+        json={"model": model, "system": system_msg, "messages": user_msgs,
+              "temperature": temperature, "max_tokens": 1500, "stream": True},
+        stream=True,
+        timeout=TIMEOUT,
+    )
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError as exc:
+        raise requests.HTTPError(_parse_api_error(exc), response=exc.response) from exc
+
+    for line in resp.iter_lines():
+        if not line:
+            continue
+        decoded = line.decode("utf-8") if isinstance(line, bytes) else line
+        if not decoded.startswith("data: "):
+            continue
+        try:
+            event = json.loads(decoded[6:])
+            if event.get("type") == "content_block_delta":
+                text = event.get("delta", {}).get("text") or ""
+                if text:
+                    yield text
+        except (json.JSONDecodeError, KeyError):
+            pass
+
+
+def _gemini_stream(api_key: str, model: str, messages: list[dict], temperature: float) -> Iterator[str]:
+    contents = []
+    for m in messages:
+        if m["role"] == "system":
+            continue
+        role = "user" if m["role"] == "user" else "model"
+        contents.append({"role": role, "parts": [{"text": m["content"]}]})
+    system_instruction = next((m["content"] for m in messages if m["role"] == "system"), None)
+    payload: dict = {"contents": contents, "generationConfig": {"temperature": temperature, "maxOutputTokens": 1500}}
+    if system_instruction:
+        payload["system_instruction"] = {"parts": [{"text": system_instruction}]}
+
+    resp = requests.post(
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?key={api_key}&alt=sse",
+        headers={"Content-Type": "application/json"},
+        json=payload,
+        stream=True,
+        timeout=TIMEOUT,
+    )
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError as exc:
+        raise requests.HTTPError(_parse_api_error(exc), response=exc.response) from exc
+
+    for line in resp.iter_lines():
+        if not line:
+            continue
+        decoded = line.decode("utf-8") if isinstance(line, bytes) else line
+        if not decoded.startswith("data: "):
+            continue
+        try:
+            text = json.loads(decoded[6:])["candidates"][0]["content"]["parts"][0]["text"]
+            if text:
+                yield text
+        except (json.JSONDecodeError, KeyError, IndexError):
+            pass
+
+
+def stream_llm(config: "AIConfiguration", messages: list[dict]) -> Iterator[str]:
+    """Chama o LLM em modo streaming. Yields text chunks."""
+    if not config or not config.is_active or not config.api_key:
+        return
+
+    provider = (config.provider or "openai").lower()
+    model = config.model_name or "gpt-4o-mini"
+    temperature = getattr(config, "temperature", 0.4) or 0.4
+
+    try:
+        if provider == "openai":
+            yield from _openai_stream(config.api_key, model, messages, temperature)
+        elif provider == "openrouter":
+            yield from _openai_stream(config.api_key, model, messages, temperature,
+                                      base_url="https://openrouter.ai/api/v1")
+        elif provider == "anthropic":
+            yield from _anthropic_stream(config.api_key, model, messages, temperature)
+        elif provider == "gemini":
+            yield from _gemini_stream(config.api_key, model, messages, temperature)
+        else:
+            logger.warning(f"Stream LLM provider desconhecido: {provider}")
+    except Exception as exc:
+        logger.error(f"Erro ao fazer stream LLM ({provider}/{model}): {exc}")

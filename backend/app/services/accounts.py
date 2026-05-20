@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..core.security import hash_password
 from ..models import Aluno, Usuario
+from ..models.audit_log import AuditLog
 
 
 def _sanitize_first_name(full_name: str | None) -> str:
@@ -77,6 +78,14 @@ def ensure_aluno_user(session: Session, aluno: Aluno) -> tuple[Usuario, str | No
         )
         session.add(usuario)
         session.flush()
+        session.add(AuditLog(
+            user_id=None,
+            tenant_id=aluno.tenant_id,
+            action="create",
+            target_type="usuario",
+            target_id=str(usuario.id),
+            details={"username": username, "role": "aluno", "source": "ingestion", "matricula": aluno.matricula},
+        ))
         logger.info("Usuário aluno {} criado para o tenant {}", username, aluno.tenant_id)
         return usuario, initial_password
     except IntegrityError:
@@ -132,6 +141,14 @@ def ensure_responsavel_user(session: Session, aluno: Aluno) -> tuple[Usuario, st
         )
         session.add(usuario)
         session.flush()
+        session.add(AuditLog(
+            user_id=None,
+            tenant_id=aluno.tenant_id,
+            action="create",
+            target_type="usuario",
+            target_id=str(usuario.id),
+            details={"username": username, "role": "responsavel", "source": "ingestion", "matricula": aluno.matricula},
+        ))
         logger.info("Usuário responsável {} criado para o tenant {}", username, aluno.tenant_id)
         return usuario, initial_password
     except IntegrityError:

@@ -1,7 +1,7 @@
 """Usuario model."""
 from datetime import datetime, timezone
 from typing import Optional
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..core.database import Base
@@ -39,8 +39,20 @@ class Usuario(Base):
     tenant = relationship("Tenant", back_populates="usuarios")
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "username", name="uq_usuario_tenant_username"),
-        UniqueConstraint("tenant_id", "email", name="uq_usuario_tenant_email"),
+        # Partial unique indexes: apenas registros não deletados competem por unicidade.
+        # Permite reusar username/email após soft-delete sem bloquear novos cadastros.
+        Index(
+            "uq_usuario_tenant_username_active",
+            "tenant_id", "username",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+        Index(
+            "uq_usuario_tenant_email_active",
+            "tenant_id", "email",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
     )
 
     @property
@@ -48,9 +60,15 @@ class Usuario(Base):
         return self.role in ("admin", "super_admin")
 
     @is_admin.setter
-    def is_admin(self, value: bool) -> None:
-        # Legacy setter kept for API compatibility; role field is authoritative
-        pass
+    def is_admin(self, _value: bool) -> None:
+        # `role` is authoritative — use it directly. This setter exists only to avoid
+        # AttributeError on legacy code paths; assignments here have no effect.
+        import warnings
+        warnings.warn(
+            "usuario.is_admin setter is a no-op; set usuario.role directly",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     @property
     def tenant_name(self) -> str | None:

@@ -94,8 +94,8 @@ def register(parent: Blueprint) -> None:
             # Validate input using Pydantic
             payload = AlunoCreate(**data)
         except ValidationError as e:
-             return jsonify(e.errors()), 400
-             
+            return jsonify({"error": "Dados inválidos", "details": e.errors(include_context=False)}), 422
+
         user_id = int(get_jwt_identity())
         aluno_data = payload.model_dump()
         aluno_data["tenant_id"] = getattr(g, "tenant_id", None)
@@ -115,7 +115,7 @@ def register(parent: Blueprint) -> None:
         try:
             payload = AlunoUpdate(**data)
         except ValidationError as e:
-            return jsonify(e.errors()), 400
+            return jsonify({"error": "Dados inválidos", "details": e.errors(include_context=False)}), 422
 
         user_id = int(get_jwt_identity())
         with session_scope() as session:

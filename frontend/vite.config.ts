@@ -6,7 +6,7 @@ import react from "@vitejs/plugin-react";
 //   - Dev local sem Docker:     http://localhost:5000  (padrão)
 const backendUrl = process.env.VITE_BACKEND_URL ?? "http://localhost:5000";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
   server: {
     port: 5173,
@@ -19,6 +19,6 @@ export default defineConfig({
     },
   },
   build: {
-    sourcemap: process.env.NODE_ENV !== "production",
+    sourcemap: mode !== "production",
   },
-});
+}));

@@ -17,8 +17,14 @@ RUN apt-get update && apt-get install -y \
 COPY pyproject.toml README.md ./
 COPY app ./app
 
-# Install dependencies (requires app code to be present for setuptools build)
-RUN pip install --no-cache-dir . gunicorn flask-migrate flask-cors
+# Install dependencies from pyproject.toml.
+# --prefer-binary ensures pycairo (dep of xhtml2pdf) uses pre-built wheels,
+# avoiding meson source compilation that fails with WSL2 clock skew.
+# For reproducible builds, generate requirements.lock with scripts/generate-lock.sh,
+# then replace this line with: COPY requirements.lock ./ && pip install -r requirements.lock
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir --prefer-binary pycairo && \
+    pip install --no-cache-dir --prefer-binary . gunicorn flask-migrate flask-cors
 
 # Copy application code (overwriting if needed, effectively adding other files like migrations)
 COPY . .
@@ -30,4 +36,3 @@ EXPOSE 5000
 ENTRYPOINT ["./entrypoint.sh"]
 # Default command for production (can be overridden in compose for dev)
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:create_app()"]
-

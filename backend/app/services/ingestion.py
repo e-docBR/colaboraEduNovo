@@ -68,14 +68,16 @@ MI_YEAR_PATTERN = re.compile(r"Ano:\s*(?P<year>\d{4})")
 
 
 def enqueue_pdf(filepath: Path, *, turno: str | None = None, turma: str | None = None, tenant_id: int | None = None, academic_year_id: int | None = None) -> str:
+    from rq import Retry
     job = queue.enqueue(
-        process_pdf, 
-        filepath, 
-        turno=turno, 
-        turma=turma, 
-        tenant_id=tenant_id, 
+        process_pdf,
+        filepath,
+        turno=turno,
+        turma=turma,
+        tenant_id=tenant_id,
         academic_year_id=academic_year_id,
-        job_timeout=600
+        job_timeout=600,
+        retry=Retry(max=2, interval=[60, 300]),
     )
     job.meta["tenant_id"] = tenant_id
     job.meta["academic_year_id"] = academic_year_id
@@ -218,7 +220,7 @@ def parse_pdf(filepath: Path, errors: list[str], *, turno: str | None = None, tu
     return list(parsed.values()), extracted_year
 
 
-def _parse_matricula_inicial(pdf: pdfplumber.PDF, errors: list[str], *, turno: str | None = None, turma: str | None = None) -> tuple[list[ParsedAlunoRecord], int | None]:
+def _parse_matricula_inicial(pdf: pdfplumber.PDF, _errors: list[str], *, turno: str | None = None, turma: str | None = None) -> tuple[list[ParsedAlunoRecord], int | None]:
     parsed_alunos: dict[str, ParsedAlunoRecord] = {}
     extracted_year = None
     
