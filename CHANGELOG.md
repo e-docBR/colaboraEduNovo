@@ -8,6 +8,98 @@ ou restaurar qualquer release via `git checkout vX.Y.Z` ou pelo GitHub → *Rele
 
 ---
 
+## [1.8.0] - 2026-05-20
+
+### Segurança — Hardening Completo
+
+#### Criptografia de API Keys LLM (Fernet/AES-128)
+- Novo módulo `backend/app/core/crypto.py` com `EncryptedSecret` TypeDecorator:
+  criptografia/descriptografia transparente na camada ORM sem alteração nos callers.
+- Chave derivada via SHA-256 do `SECRET_KEY` → base64 URL-safe → Fernet.
+  Valores criptografados têm prefixo `enc:` para compatibilidade retroativa com
+  registros antigos em texto plano.
+- Migration `h2i3j4k5l6m7`: altera `ai_configurations.api_key` para `Text` e
+  criptografa registros existentes.
+- `cryptography>=42.0.0` adicionado às dependências do backend.
+
+#### Refresh Token em Cookie HttpOnly
+- Refresh token removido do corpo JSON do `/auth/login` — enviado exclusivamente
+  via cookie `HttpOnly; Secure; SameSite=Strict`, inacessível ao JavaScript.
+- `/auth/refresh` lê o token somente do cookie, nunca de um header Authorization.
+- `/auth/logout` revoga access token e refresh token (cookie) no Redis blocklist
+  e apaga o cookie com `max_age=0`.
+
+#### IP Real no Audit Log
+- `_get_client_ip()` em `auth.py` prefere `X-Real-IP` (header setado pelo Traefik
+  diretamente da conexão TCP) sobre `X-Forwarded-For`, que um cliente pode falsificar.
+- Afeta os logs de `LOGIN_SUCCESS`, `LOGIN_FAILED` e `LOGOUT`.
+
+#### Rate Limit por Tenant+Usuário no Chat IA
+- Função `_chat_rate_key()` retorna `chat:{tenant_id}:{user_id}` como chave de limite,
+  isolando a cota de cada usuário de cada escola.
+- Aplicada via `key_func` nos endpoints `/chat` e `/chat/stream` (30 req/hora).
+- Antes o limite era global — um único usuário podia esgotar a cota de todos.
+
+#### Índice Parcial para Soft Delete em Usuários
+- `UniqueConstraint` global de `(tenant_id, username)` e `(tenant_id, email)`
+  substituído por índices parciais PostgreSQL com `WHERE deleted_at IS NULL`.
+- Migration `i3j4k5l6m7n8`: recria os índices com cláusula parcial.
+- Usuários soft-deletados não bloqueiam mais o reuso de username/email.
+
+#### Worker com Usuário DB de Privilégios Mínimos
+- Serviço `worker` no `docker-compose.prod.yml` usa `APP_DB_USER`/`APP_DB_PASSWORD`
+  (DML apenas, sem DDL) em vez do superusuário `POSTGRES_USER`.
+- Reduz superfície de ataque — um worker comprometido não pode alterar schema.
+
+### Confiabilidade — AI Chat
+
+#### Sessão DB Fechada Antes de Chamar LLM Externo
+- `ai_chat.py` refatorado com método `_prepare_query()`: toda a lógica de banco de
+  dados (query de alunos, disciplines, AI config) é concluída e a sessão é fechada
+  antes de qualquer chamada HTTP ao provedor LLM.
+- `_AIConfigSnapshot` (dataclass frozen) transporta os primitivos necessários para
+  o LLM sem manter uma sessão SQLAlchemy aberta.
+- Elimina risco de timeout de conexão e pool exhaustion durante chamadas lentas ao LLM.
+
+#### Sanitização de System Prompt Customizado
+- `_sanitize_system_prompt()`: remove padrões de injeção de prompt (ex:
+  "ignore previous instructions") e limita a 500 caracteres.
+- Regex `_INJECTION_PATTERN` detecta tentativas de jailbreak em prompts customizados
+  configurados pelo tenant no painel admin.
+
+#### Deduplicação de process_query / stream_process_query
+- Ambos os métodos compartilham `_prepare_query()` para a fase de banco de dados,
+  eliminando ~80 linhas de código duplicado.
+
+#### Cleanup Periódico do Cache de Disciplinas
+- `_cleanup_discipline_cache()` chamada antes de cada inserção: remove entradas
+  expiradas e limita o dicionário a 200 entradas para evitar crescimento ilimitado
+  em instâncias de longa duração.
+
+### Rastreabilidade — Audit Log na Ingestão
+- `ensure_aluno_user` e `ensure_responsavel_user` em `accounts.py` registram um
+  `AuditLog` com `user_id=None`, `action="create"`, `source="ingestion"` e matrícula
+  ao criar novas contas via upload de PDF/CSV.
+- Permite distinguir contas criadas por ingestão automática de contas criadas
+  manualmente pelo administrador.
+
+### Frontend
+- **ChatWidget**: interface completa de streaming SSE com histórico de conversa,
+  `page_context` (aluno/turma), indicador de digitação e tratamento de erros.
+- **authSlice**: integração com cookie HttpOnly, restaura estado Redux após F5
+  via `/auth/refresh` sem expor o refresh token ao JavaScript.
+- **api.ts**: suporte a SSE, interceptor de 401 com silent refresh automático.
+- **UploadsPage**: indicador de progresso de ingestão e feedback de erros detalhado.
+- **nginx.conf** e **vite.config.ts**: headers de segurança CSP e configuração de proxy.
+
+### Infraestrutura
+- `dev.sh` e `start.sh`: scripts de inicialização para desenvolvimento local.
+- `scripts/generate-lock.sh`: regenera lock files de forma reproduzível.
+- Migration `5dfe9b7b19b1`: merge de heads divergentes do Alembic.
+- Migration `g1h2i3j4k5l6`: índice composto em notas para performance.
+
+---
+
 ## [1.7.0] - 2026-05-08
 
 ### Correções de Infraestrutura e Migrations
