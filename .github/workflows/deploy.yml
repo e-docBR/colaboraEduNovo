@@ -59,6 +59,12 @@ jobs:
                docker compose -f docker-compose.prod.yml ps && \
                docker image prune -f'"
 
+      - name: Smoke RQ worker
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+              "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+              "bash -lc 'cd ${{ secrets.SERVER_PATH }} && ./scripts/smoke-rq-worker.sh'"
+
       - name: Smoke test
         env:
           SMOKE_SUPERADMIN_USER: ${{ secrets.SMOKE_SUPERADMIN_USER }}

@@ -5,13 +5,27 @@
 O projeto está em estado de `staging forte / piloto controlado`.
 
 O baseline técnico está funcional:
-- backend validado com `ruff` limpo e `19` testes de `auth` + `health`;
+- backend validado com `ruff` limpo e `38` testes, incluindo regressões de hardening para alunos, notas e comunicados;
 - frontend com `eslint`, `tsc` e `vite build`;
 - mobile com `tsc --noEmit`;
 - compose de produção com Traefik, PostgreSQL, Redis, worker RQ e backup diário.
 
-Os principais gaps operacionais identificados na auditoria foram parcialmente fechados neste ciclo:
+Os principais gaps operacionais identificados na auditoria foram fechados neste ciclo:
 - o preflight de produção agora exige `APP_DB_USER`, `APP_DB_PASSWORD` e `FRONTEND_URL`;
+- o compose de produção injeta Stripe, Sentry, WhatsApp instance e flags SMTP no backend;
+- o setup Hetzner gera `.env` compatível com o preflight, valida antes de subir e usa `--scale worker=3`;
+- validações de notas, dados de aluno, leitura de comunicados e upload WebP foram endurecidas;
+- o bundle do frontend foi dividido por rota e por vendors pesados, removendo o warning de chunk grande;
+- o deploy agora executa smoke E2E do RQ, enfileirando uma task real e aguardando processamento pelo worker;
+- o restore script foi endurecido e o runbook de restore drill foi documentado em `docs/RESTORE_DRILL_RUNBOOK.md`;
+- ILIKE pattern injection eliminado em todo o backend (escape_like helper + escape="\\");
+- RBAC adicionado nas rotas admin do frontend (requireAdmin loader);
+- race condition em AcademicYear corrigida com upsert atômico + unique constraint;
+- validação de email/telefone adicionada antes do envio de notificações;
+- assertion anti-dev-mode impede localhost em ALLOWED_ORIGINS em produção;
+- Dockerfile convertido para multi-stage build (menor imagem runtime);
+- backups opcionalmente encriptados com GPG/AES256 via BACKUP_ENCRYPTION_KEY;
+- paginação centralizada em helper parse_pagination() (7 endpoints);
 - o CI usa `VITE_API_BASE_URL`, que é a variável realmente consumida pelo frontend;
 - o workflow de deploy usa `--scale worker=3`, compatível com `docker compose`;
 - o smoke test de deploy valida frontend, `/health` e descoberta de tenants.
@@ -38,12 +52,24 @@ Além do bloco básico de domínio, SMTP, PostgreSQL, Redis e segredos Flask/JWT
 - `APP_DB_USER`
 - `APP_DB_PASSWORD`
 - `FRONTEND_URL`
+- `MONITOR_BASICAUTH`
 
 Regras operacionais:
 - `APP_DB_USER` deve ser diferente de `POSTGRES_USER`;
 - `FRONTEND_URL` deve ser `https://<DOMAIN>`;
 - se `S3_BACKUP_BUCKET` for preenchido, `AWS_ACCESS_KEY_ID` e `AWS_SECRET_ACCESS_KEY` passam a ser obrigatórios;
 - se qualquer variável de Stripe for preenchida, o trio `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` e `STRIPE_PRICE_ID` deve existir por completo.
+
+## Validação local mais recente
+
+- `cd backend && .venv/bin/python -m pytest tests -q` passou com `38` testes e cobertura `40.38%`.
+- `cd backend && .venv/bin/python -m ruff check app tests` passou.
+- `bash -n scripts/smoke-rq-worker.sh` passou.
+- `bash -n scripts/restore-postgres-backup.sh` passou.
+- `frontend npm run build` passou sem aviso de chunk grande; o entrypoint `index` caiu para cerca de `25.77 kB`.
+- `frontend npm run lint` passou.
+- `mobile npm run typecheck` passou.
+- `docker compose -f docker-compose.prod.yml config --quiet` passou; sem `.env` real, o Docker Compose ainda exibe avisos de variáveis vazias, o que é esperado fora do servidor.
 
 ## GitHub Actions e segredos
 
@@ -72,11 +98,10 @@ Sem esses segredos opcionais, o deploy continua validando frontend, health e ten
   - `GET /`
   - `GET /health`
   - `GET /api/v1/auth/tenants`
+  - execução de job real no RQ
   - login real, se os segredos de smoke estiverem configurados
 
 ## Pendências restantes antes de produção ampla
 
-- adicionar smoke E2E do worker RQ com execução de job real ponta a ponta;
-- executar e registrar um restore drill real de backup em ambiente limpo;
-- resolver o warning de bundle grande do frontend;
+- executar e registrar um restore drill real de backup em ambiente limpo seguindo `docs/RESTORE_DRILL_RUNBOOK.md`;
 - revisar se a equipe vai manter `docker compose` ou migrar para um orquestrador que honre `deploy.resources`.
