@@ -501,7 +501,7 @@ export const GraficosPage = () => {
     if (chart.stacked) {
       return (
         <ResponsiveContainer width="100%" height={400}>
-          <BarChart data={rawData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }} barSize={28}>
+          <BarChart data={rawData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }} barGap={4} barCategoryGap="20%">
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.palette.divider} />
             <XAxis
               dataKey={chart.xKey ?? "turma"}
@@ -541,8 +541,8 @@ export const GraficosPage = () => {
               }}
             />
             <Legend />
-            <Bar dataKey="acima"  name="Acima do mínimo"  stackId="a" fill="#10b981" />
-            <Bar dataKey="abaixo" name="Abaixo do mínimo" stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="abaixo" name="Abaixo do mínimo" fill="#ef4444" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="acima"  name="Acima do mínimo"  fill="#10b981" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       );
