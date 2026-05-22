@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from ...core.database import session_scope
 from ...core.decorators import require_roles
+from ...core.helpers import parse_pagination
 from ...services.aluno_service import AlunoService
 from ...schemas.aluno import AlunoCreate, AlunoUpdate
 
@@ -17,11 +18,7 @@ def register(parent: Blueprint) -> None:
     @require_roles("admin", "super_admin", "coordenador", "diretor", "orientador", "professor")
     def list_alunos():
             
-        try:
-            page = max(1, int(request.args.get("page", 1)))
-            per_page = min(100, int(request.args.get("per_page", 20)))
-        except (ValueError, TypeError):
-            page, per_page = 1, 20
+        page, per_page = parse_pagination()
         turno = request.args.get("turno")
         turma = request.args.get("turma")
         query_text = request.args.get("q")
@@ -144,11 +141,7 @@ def register(parent: Blueprint) -> None:
     @jwt_required()
     @require_roles("admin", "super_admin", "coordenador", "diretor")
     def list_archived_alunos():
-        try:
-            page = max(1, int(request.args.get("page", 1)))
-            per_page = min(100, int(request.args.get("per_page", 20)))
-        except (ValueError, TypeError):
-            page, per_page = 1, 20
+        page, per_page = parse_pagination()
         query_text = request.args.get("q")
         user_id = int(get_jwt_identity())
         with session_scope() as session:

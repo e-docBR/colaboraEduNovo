@@ -3,6 +3,7 @@ from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from pydantic import ValidationError
 
 from ...core.database import session_scope
+from ...core.helpers import parse_pagination
 from ...core.roles import STAFF_ROLES, OCORRENCIA_WRITE_ROLES
 from ...services.ocorrencia_service import OcorrenciaService
 from ...schemas.ocorrencia import OcorrenciaCreate, OcorrenciaUpdate
@@ -30,11 +31,7 @@ def register(parent: Blueprint) -> None:
         user_aluno_id = claims.get("aluno_id")
         user_id = int(get_jwt_identity())
 
-        try:
-            page = max(1, int(request.args.get("page", 1)))
-            per_page = min(100, int(request.args.get("per_page", 50)))
-        except (ValueError, TypeError):
-            page, per_page = 1, 50
+        page, per_page = parse_pagination(default_per_page=50)
 
         with session_scope() as session:
             service = OcorrenciaService(session, user_id)

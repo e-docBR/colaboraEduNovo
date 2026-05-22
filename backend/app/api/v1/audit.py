@@ -5,6 +5,7 @@ from sqlalchemy.orm import selectinload
 
 from ...core.database import session_scope
 from ...core.decorators import admin_required
+from ...core.helpers import parse_pagination
 from ...models import AuditLog
 from ...models.usuario import Usuario
 
@@ -16,8 +17,7 @@ def register(parent: Blueprint) -> None:
     @jwt_required()
     @admin_required
     def list_logs():
-        page = max(1, int(request.args.get("page", 1)))
-        per_page = min(100, int(request.args.get("per_page", 20)))
+        page, per_page = parse_pagination()
         action_filter = request.args.get("action")
         target_type_filter = request.args.get("target_type")
         user_filter = request.args.get("user")

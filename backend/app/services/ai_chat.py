@@ -21,6 +21,7 @@ from sqlalchemy import distinct, select, func, desc, and_
 from sqlalchemy.orm import Session
 
 from ..core.database import session_scope
+from ..core.helpers import escape_like
 from ..models import Aluno, Nota, Comunicado, Ocorrencia, Tenant
 from ..models.ai_configuration import AIConfiguration
 from .intervention_service import intervention_service
@@ -468,7 +469,7 @@ class AIAnalystEngine:
             Nota.aluno_id.in_(select(Aluno.id).where(Aluno.tenant_id == tenant_id))
         ).group_by(Nota.disciplina).order_by("media")
         if f.get("disciplina"):
-            q = q.where(Nota.disciplina.ilike(f"%{f['disciplina']}%"))
+            q = q.where(Nota.disciplina.ilike(f"%{escape_like(f['disciplina'])}%", escape="\\"))
         q = q.limit(10)
         rows = s.execute(q).all()
         data = [{"name": r.disciplina, "value": round(float(r.media or 0), 1)} for r in rows]
@@ -482,7 +483,7 @@ class AIAnalystEngine:
         aluno_filter = select(Aluno.id).where(Aluno.tenant_id == tenant_id)
         aluno_nome = f.get("aluno_nome")
         if aluno_nome:
-            aluno_filter = aluno_filter.where(Aluno.nome.ilike(f"%{aluno_nome}%"))
+            aluno_filter = aluno_filter.where(Aluno.nome.ilike(f"%{escape_like(aluno_nome)}%", escape="\\"))
         if f.get("turmas"):
             aluno_filter = aluno_filter.where(Aluno.turma.in_(f["turmas"]))
 
@@ -698,7 +699,7 @@ class AIAnalystEngine:
         q = select(
             Ocorrencia.tipo, Ocorrencia.gravidade, Ocorrencia.descricao, Ocorrencia.data_registro
         ).join(Aluno).where(
-            Aluno.tenant_id == tenant_id, Aluno.nome.ilike(f"%{nome}%")
+            Aluno.tenant_id == tenant_id, Aluno.nome.ilike(f"%{escape_like(nome)}%", escape="\\")
         ).order_by(desc(Ocorrencia.data_registro))
         rows = s.execute(q).all()
         if not rows:
@@ -764,7 +765,7 @@ class AIAnalystEngine:
             return {"text": "Informe o nome. Ex: 'Perfil do aluno João Silva'",
                     "type": "text", "data": None, "chart_config": None, "_ctx": {}}
         aluno = s.execute(
-            select(Aluno).where(Aluno.tenant_id == tenant_id, Aluno.nome.ilike(f"%{nome}%"))
+            select(Aluno).where(Aluno.tenant_id == tenant_id, Aluno.nome.ilike(f"%{escape_like(nome)}%", escape="\\"))
         ).scalar_one_or_none()
         if not aluno:
             return {"text": f"Aluno '{nome}' não encontrado.", "type": "text",
@@ -798,7 +799,7 @@ class AIAnalystEngine:
             return {"text": "Informe o nome do aluno. Ex: 'Evolução trimestral do aluno Maria'",
                     "type": "text", "data": None, "chart_config": None, "_ctx": {}}
         aluno = s.execute(
-            select(Aluno).where(Aluno.tenant_id == tenant_id, Aluno.nome.ilike(f"%{nome}%"))
+            select(Aluno).where(Aluno.tenant_id == tenant_id, Aluno.nome.ilike(f"%{escape_like(nome)}%", escape="\\"))
         ).scalar_one_or_none()
         if not aluno:
             return {"text": f"Aluno '{nome}' não encontrado.", "type": "text",
@@ -873,7 +874,7 @@ class AIAnalystEngine:
             return {"text": "Informe o nome. Ex: 'Intervenção pedagógica para João'",
                     "type": "text", "data": None, "chart_config": None, "_ctx": {}}
         aluno = s.execute(
-            select(Aluno).where(Aluno.tenant_id == tenant_id, Aluno.nome.ilike(f"%{nome}%"))
+            select(Aluno).where(Aluno.tenant_id == tenant_id, Aluno.nome.ilike(f"%{escape_like(nome)}%", escape="\\"))
         ).scalar_one_or_none()
         if not aluno:
             return {"text": f"Aluno '{nome}' não encontrado.", "type": "text",

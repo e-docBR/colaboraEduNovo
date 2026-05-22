@@ -46,6 +46,16 @@ def create_app() -> Flask:
         resources={r"/api/*": {"origins": settings.allowed_origins}},
         supports_credentials=True,
     )
+
+    # Safety check: prevent dev-mode tenant fallback from leaking into production
+    if settings.environment == "production":
+        origins_str = str(settings.allowed_origins).lower()
+        if "localhost" in origins_str or "127.0.0.1" in origins_str:
+            raise RuntimeError(
+                "ALLOWED_ORIGINS contains localhost in production! "
+                "This would enable the dev-mode tenant fallback. Fix .env."
+            )
+
     jwt.init_app(app)
     init_db(app)
     register_blueprints(app)

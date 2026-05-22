@@ -60,12 +60,14 @@ class AlunoRepository(BaseRepository[Aluno]):
             if turma:
                 query = query.where(Aluno.turma == turma)
             if query_text:
-                like_term = f"%{query_text}%"
+                from ..core.helpers import escape_like
+                escaped = escape_like(query_text)
+                like_term = f"%{escaped}%"
                 query = query.where(
                     or_(
-                        Aluno.nome.ilike(like_term),
-                        Aluno.matricula.ilike(like_term),
-                        Aluno.turma.ilike(like_term),
+                        Aluno.nome.ilike(like_term, escape="\\"),
+                        Aluno.matricula.ilike(like_term, escape="\\"),
+                        Aluno.turma.ilike(like_term, escape="\\"),
                     )
                 )
             return query

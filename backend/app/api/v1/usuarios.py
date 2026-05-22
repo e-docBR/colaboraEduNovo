@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ...core.config import settings
 from ...core.database import session_scope
+from ...core.helpers import parse_pagination
 from ...core.roles import VALID_ROLES
 from ...core.security import hash_password
 from ...models import Aluno, Usuario
@@ -52,8 +53,7 @@ def register(parent: Blueprint) -> None:
         if not _is_admin():
             return jsonify({"error": "Acesso restrito"}), 403
 
-        page = max(1, int(request.args.get("page", 1)))
-        per_page = min(100, int(request.args.get("per_page", 20)))
+        page, per_page = parse_pagination()
         query_text = request.args.get("q")
         role_filter = request.args.get("role")
 
@@ -315,10 +315,13 @@ def register(parent: Blueprint) -> None:
         if ext not in ALLOWED_EXTENSIONS or file.mimetype not in ALLOWED_MIMES:
             return jsonify({"error": "Tipo de arquivo não permitido"}), 400
 
-        # Verificar magic bytes
+        # Verificar magic bytes. WebP precisa de RIFF + WEBP, não apenas RIFF.
         header = file.read(16)
         file.seek(0)
-        if not header.startswith((b'\xff\xd8', b'\x89PNG', b'RIFF')):
+        is_jpeg = header.startswith(b'\xff\xd8')
+        is_png = header.startswith(b'\x89PNG')
+        is_webp = header.startswith(b'RIFF') and header[8:12] == b'WEBP'
+        if not (is_jpeg or is_png or is_webp):
             return jsonify({"error": "Arquivo de imagem inválido"}), 400
 
         user_id = get_jwt_identity()

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from ...core.database import session_scope
 from ...core.cache import cache_response
 from ...core.decorators import require_roles
+from ...core.helpers import escape_like
 from ...models import Aluno, Nota
 
 DISCIPLINA_NORMALIZACAO = {
@@ -91,11 +92,13 @@ def _apply_common_filters(query, turno: str | None, serie: str | None, turma: st
     if turno:
         query = query.filter(Aluno.turno == turno)
     if serie:
-        query = query.filter(Aluno.turma.ilike(f"{serie}%"))
+        escaped = escape_like(serie)
+        query = query.filter(Aluno.turma.ilike(f"{escaped}%", escape="\\"))
     if turma:
         query = query.filter(Aluno.turma == turma)
     if disciplina:
-        query = query.filter(Nota.disciplina.ilike(f"%{disciplina}%"))
+        escaped = escape_like(disciplina)
+        query = query.filter(Nota.disciplina.ilike(f"%{escaped}%", escape="\\"))
     return query
 
 
@@ -138,7 +141,8 @@ def _situacao_distribuicao(
     if turno:
         query = query.filter(Aluno.turno == turno)
     if serie:
-        query = query.filter(Aluno.turma.ilike(f"{serie}%"))
+        escaped = escape_like(serie)
+        query = query.filter(Aluno.turma.ilike(f"{escaped}%", escape="\\"))
     if turma:
         query = query.filter(Aluno.turma == turma)
 
@@ -283,9 +287,11 @@ def _evolucao_turnos(
             if year_id:
                 q = q.filter(Aluno.academic_year_id == year_id)
             if serie:
-                q = q.filter(Aluno.turma.ilike(f"{serie}%"))
+                escaped_s = escape_like(serie)
+                q = q.filter(Aluno.turma.ilike(f"{escaped_s}%", escape="\\"))
             if disciplina:
-                q = q.filter(Nota.disciplina.ilike(f"%{disciplina}%"))
+                escaped_d = escape_like(disciplina)
+                q = q.filter(Nota.disciplina.ilike(f"%{escaped_d}%", escape="\\"))
             media = q.scalar()
             row[turno_nome] = round(float(media), 1) if media else 0.0
         results.append(row)
@@ -505,7 +511,8 @@ def _aprovacao_por_turma(
     if turno:
         subq = subq.filter(Aluno.turno == turno)
     if serie:
-        subq = subq.filter(Aluno.turma.ilike(f"{serie}%"))
+        escaped = escape_like(serie)
+        subq = subq.filter(Aluno.turma.ilike(f"{escaped}%", escape="\\"))
     if turma:
         subq = subq.filter(Aluno.turma == turma)
     subq = subq.group_by(Aluno.turma, Nota.aluno_id).subquery()
@@ -608,11 +615,13 @@ def _abaixo_por_turma(
     if turno:
         subq = subq.filter(Aluno.turno == turno)
     if serie:
-        subq = subq.filter(Aluno.turma.ilike(f"{serie}%"))
+        escaped = escape_like(serie)
+        subq = subq.filter(Aluno.turma.ilike(f"{escaped}%", escape="\\"))
     if turma:
         subq = subq.filter(Aluno.turma == turma)
     if disciplina:
-        subq = subq.filter(Nota.disciplina.ilike(f"%{disciplina}%"))
+        escaped = escape_like(disciplina)
+        subq = subq.filter(Nota.disciplina.ilike(f"%{escaped}%", escape="\\"))
     subq = subq.group_by(Aluno.turma, Nota.aluno_id).subquery()
 
     rows = (

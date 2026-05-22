@@ -3,17 +3,17 @@ import { lazy, Suspense } from "react";
 import { CircularProgress, Box } from "@mui/material";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 
-import { DashboardLayout } from "../layouts/DashboardLayout";
-import { LoginPage } from "../features/auth/LoginPage";
-import { ChangePasswordPage } from "../features/auth/ChangePasswordPage";
-import { ForgotPasswordPage } from "../features/auth/ForgotPasswordPage";
-import { ResetPasswordPage } from "../features/auth/ResetPasswordPage";
-import { LandingPage } from "../features/landing/LandingPage";
 import { store } from "./store";
 import { setCredentials, logout } from "../features/auth/authSlice";
 import { setTenantId } from "../features/app/appSlice";
 
-// Lazily loaded authenticated routes — split per route for smaller initial bundle
+// Split route surfaces so the entry bundle only keeps routing/auth glue.
+const DashboardLayout = lazy(() => import("../layouts/DashboardLayout").then(m => ({ default: m.DashboardLayout })));
+const LoginPage = lazy(() => import("../features/auth/LoginPage").then(m => ({ default: m.LoginPage })));
+const ChangePasswordPage = lazy(() => import("../features/auth/ChangePasswordPage").then(m => ({ default: m.ChangePasswordPage })));
+const ForgotPasswordPage = lazy(() => import("../features/auth/ForgotPasswordPage").then(m => ({ default: m.ForgotPasswordPage })));
+const ResetPasswordPage = lazy(() => import("../features/auth/ResetPasswordPage").then(m => ({ default: m.ResetPasswordPage })));
+const LandingPage = lazy(() => import("../features/landing/LandingPage").then(m => ({ default: m.LandingPage })));
 const DashboardPage = lazy(() => import("../features/dashboard/DashboardPage").then(m => ({ default: m.DashboardPage })));
 const TeacherDashboard = lazy(() => import("../features/dashboard/TeacherDashboard").then(m => ({ default: m.TeacherDashboard })));
 const BulkInterventionPage = lazy(() => import("../features/dashboard/BulkInterventionPage").then(m => ({ default: m.BulkInterventionPage })));
@@ -85,10 +85,20 @@ const requireAuth = async () => {
   return null;
 };
 
+const requireAdmin = async () => {
+  await requireAuth();
+  const state = store.getState();
+  const role = state.auth.user?.role;
+  if (!role || !["admin", "super_admin"].includes(role)) {
+    throw redirect("/app");
+  }
+  return null;
+};
+
 export const appRouter = createBrowserRouter([
   {
     path: "/",
-    element: <LandingPage />
+    element: wrap(<LandingPage />)
   },
   {
     path: "/relatorios/:slug?",
@@ -120,7 +130,7 @@ export const appRouter = createBrowserRouter([
   {
     path: "/app",
     loader: requireAuth,
-    element: <DashboardLayout />,
+    element: wrap(<DashboardLayout />),
     children: [
       { index: true, element: wrap(<DashboardPage />) },
       { path: "professor", element: wrap(<TeacherDashboard />) },
@@ -141,29 +151,29 @@ export const appRouter = createBrowserRouter([
       { path: "ia/intervencoes-em-lote", element: wrap(<BulkInterventionPage />) },
       { path: "meu-boletim", element: wrap(<MeuBoletimPage />) },
       { path: "portal-responsavel", element: wrap(<PortalResponsavelPage />) },
-      { path: "admin/escolas", element: wrap(<TenantsPage />) },
-      { path: "admin/ia", element: wrap(<AISettingsPage />) },
-      { path: "admin/anos-letivos", element: wrap(<AcademicYearsPage />) }
+      { path: "admin/escolas", loader: requireAdmin, element: wrap(<TenantsPage />) },
+      { path: "admin/ia", loader: requireAdmin, element: wrap(<AISettingsPage />) },
+      { path: "admin/anos-letivos", loader: requireAdmin, element: wrap(<AcademicYearsPage />) }
     ]
   },
   {
     path: "/login",
-    element: <LoginPage />
+    element: wrap(<LoginPage />)
   },
   {
     path: "/login/aluno",
-    element: <LoginPage />
+    element: wrap(<LoginPage />)
   },
   {
     path: "/alterar-senha",
-    element: <ChangePasswordPage />
+    element: wrap(<ChangePasswordPage />)
   },
   {
     path: "/esqueci-senha",
-    element: <ForgotPasswordPage />
+    element: wrap(<ForgotPasswordPage />)
   },
   {
     path: "/redefinir-senha",
-    element: <ResetPasswordPage />
+    element: wrap(<ResetPasswordPage />)
   }
 ]);

@@ -103,17 +103,24 @@ def process_pdf(filepath: Path, *, turno: str | None = None, turma: str | None =
                 final_year_label = year_obj.label
     elif extracted_year and tenant_id:
         with session_scope() as session:
-            year_obj = session.query(AcademicYear).filter(
-                AcademicYear.tenant_id == tenant_id,
-                AcademicYear.label == str(extracted_year)
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+            # Upsert atômico para evitar race condition em uploads simultâneos
+            stmt = (
+                pg_insert(AcademicYear)
+                .values(tenant_id=tenant_id, label=str(extracted_year), is_current=False)
+                .on_conflict_do_nothing(constraint="uq_academic_year_tenant_label")
+            )
+            session.execute(stmt)
+            session.flush()
+            year_obj = session.query(AcademicYear).filter_by(
+                tenant_id=tenant_id, label=str(extracted_year)
             ).first()
-            if not year_obj:
-                year_obj = AcademicYear(tenant_id=tenant_id, label=str(extracted_year), is_current=False)
-                session.add(year_obj)
-                session.flush()  # get ID without premature commit; session_scope commits on exit
-                logger.info("Created new AcademicYear {} for tenant {}", extracted_year, tenant_id)
-            academic_year_id = year_obj.id
-            final_year_label = year_obj.label
+            if year_obj:
+                academic_year_id = year_obj.id
+                final_year_label = year_obj.label
+                logger.info("Resolved AcademicYear {} for tenant {}", extracted_year, tenant_id)
+            else:
+                logger.error("Failed to resolve AcademicYear {} for tenant {}", extracted_year, tenant_id)
 
     count = 0
     if not records:

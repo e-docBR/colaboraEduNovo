@@ -36,7 +36,6 @@ def train_risk_model(tenant_id: int) -> None:
                 .join(Nota, Nota.aluno_id == Aluno.id)
                 .where(Aluno.tenant_id == tenant_id)
                 .group_by(Aluno.id)
-                .execution_options(include_all_tenants=True)
             ).all()
 
         if not rows:

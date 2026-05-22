@@ -7,6 +7,7 @@ from loguru import logger
 from ...core.database import session_scope
 from ...core.cache import cache_response
 from ...core.decorators import require_roles
+from ...core.helpers import escape_like
 from ...models import Aluno, Nota
 from ...services.analytics import get_grading_stage
 
@@ -34,7 +35,8 @@ def _apply_aluno_filters(
     if serie:
         serie_limpa = serie.strip()
         if serie_limpa:
-            query = query.filter(Aluno.turma.ilike(f"{serie_limpa}%"))
+            escaped = escape_like(serie_limpa)
+            query = query.filter(Aluno.turma.ilike(f"{escaped}%", escape="\\"))
     if disciplina:
         query = query.filter(func.upper(Nota.disciplina) == disciplina.strip().upper())
     return query

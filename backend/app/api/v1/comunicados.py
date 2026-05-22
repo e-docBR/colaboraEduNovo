@@ -4,8 +4,39 @@ from sqlalchemy import desc, or_
 from sqlalchemy.orm import selectinload
 
 from ...core.database import session_scope
+from ...core.helpers import parse_pagination
 from ...core.roles import STAFF_ROLES, MANAGER_ROLES, COMUNICADO_WRITE_ROLES
 from ...models import Comunicado, Aluno, ComunicadoLeitura
+
+
+def _can_user_read_comunicado(session, comunicado: Comunicado, roles: list[str], claims: dict) -> bool:
+    """Return True only when the comunicado is visible to the current user."""
+    if STAFF_ROLES.intersection(roles):
+        return True
+
+    aluno_id = claims.get("aluno_id")
+    if comunicado.target_type == "TODOS":
+        return True
+
+    if not aluno_id:
+        return False
+    try:
+        aluno_id_int = int(aluno_id)
+    except (TypeError, ValueError):
+        return False
+
+    if comunicado.target_type == "ALUNO":
+        return comunicado.target_value == str(aluno_id_int)
+
+    if comunicado.target_type == "TURMA":
+        aluno = (
+            session.query(Aluno)
+            .filter(Aluno.id == aluno_id_int, Aluno.tenant_id == g.tenant_id)
+            .first()
+        )
+        return bool(aluno and aluno.turma == comunicado.target_value)
+
+    return False
 
 def register(parent: Blueprint) -> None:
     bp = Blueprint("comunicados", __name__)
@@ -17,11 +48,7 @@ def register(parent: Blueprint) -> None:
         claims = get_jwt()
         roles = claims.get("roles", [])
 
-        try:
-            page = max(1, int(request.args.get("page", 1)))
-            per_page = min(100, int(request.args.get("per_page", 20)))
-        except (ValueError, TypeError):
-            page, per_page = 1, 20
+        page, per_page = parse_pagination()
         offset = (page - 1) * per_page
 
         with session_scope() as session:
@@ -242,6 +269,8 @@ def register(parent: Blueprint) -> None:
     @jwt_required()
     def mark_read(comunicado_id: int):
         user_id = int(get_jwt_identity())
+        claims = get_jwt()
+        roles = claims.get("roles", [])
         with session_scope() as session:
             # Verify comunicado belongs to the user's tenant before recording read status.
             # The ORM auto-filter only applies to SELECT queries, not MERGE/INSERT, so
@@ -252,6 +281,8 @@ def register(parent: Blueprint) -> None:
                 .first()
             )
             if not comunicado:
+                return jsonify({"error": "Comunicado não encontrado"}), 404
+            if not _can_user_read_comunicado(session, comunicado, roles, claims):
                 return jsonify({"error": "Comunicado não encontrado"}), 404
             leitura = ComunicadoLeitura(comunicado_id=comunicado_id, usuario_id=user_id)
             session.merge(leitura)

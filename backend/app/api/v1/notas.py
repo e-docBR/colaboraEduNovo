@@ -5,8 +5,23 @@ from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from sqlalchemy.orm import joinedload
 
 from ...core.database import session_scope
+from ...core.helpers import parse_pagination
 from ...models import Aluno, Nota
 from ...services import log_action
+
+_VALID_SITUACOES = frozenset({
+    "APR", "REP", "REC", "APCC", "AR",
+    "EMC", "EMR", "AFC", "DPC", "TRN", "ABA",
+})
+
+_GRADE_LIMITS = {
+    "trimestre1": (0.0, 30.0),
+    "trimestre2": (0.0, 30.0),
+    "trimestre3": (0.0, 40.0),
+    "total": (0.0, 100.0),
+    "recuperacao": (0.0, 100.0),
+    "conselho_de_classe": (0.0, 100.0),
+}
 
 
 def serialize_nota_row(nota: Nota, aluno: Aluno | None = None) -> dict:
@@ -85,8 +100,7 @@ def register(parent: Blueprint) -> None:
         turma = request.args.get("turma")
         turno = request.args.get("turno")
         disciplina = request.args.get("disciplina")
-        page = max(1, int(request.args.get("page", 1)))
-        per_page = min(100, int(request.args.get("per_page", 20)))
+        page, per_page = parse_pagination()
 
         from flask import g
         tenant_id = getattr(g, "tenant_id", None)
@@ -142,21 +156,35 @@ def register(parent: Blueprint) -> None:
             if k in _grade_fields:
                 if v is not None:
                     try:
-                        updates[k] = float(v)
+                        numeric_value = float(v)
                     except (ValueError, TypeError):
                         return jsonify({"error": f"'{k}' deve ser um número"}), 400
+                    min_value, max_value = _GRADE_LIMITS[k]
+                    if numeric_value < min_value or numeric_value > max_value:
+                        return jsonify({
+                            "error": f"'{k}' deve estar entre {min_value:g} e {max_value:g}"
+                        }), 400
+                    updates[k] = round(numeric_value, 2)
                 else:
                     updates[k] = None
             elif k == "faltas":
                 if v is not None:
                     try:
-                        updates[k] = int(v)
+                        faltas = int(v)
                     except (ValueError, TypeError):
                         return jsonify({"error": "'faltas' deve ser um inteiro"}), 400
+                    if faltas < 0 or faltas > 999:
+                        return jsonify({"error": "'faltas' deve estar entre 0 e 999"}), 400
+                    updates[k] = faltas
                 else:
                     updates[k] = 0
             else:
-                updates[k] = v
+                situacao = str(v or "").strip().upper()
+                if situacao and situacao not in _VALID_SITUACOES:
+                    return jsonify({
+                        "error": f"'situacao' inválida. Valores aceitos: {sorted(_VALID_SITUACOES)}"
+                    }), 400
+                updates[k] = situacao or None
         if not updates:
             return jsonify({"error": "Nenhum campo válido informado"}), 400
 

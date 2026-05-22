@@ -215,8 +215,10 @@ def build_teacher_dashboard(session: Session, query: str | None = None, turno: s
         if turma and turma != 'Todas':
             stm = stm.where(Aluno.turma == turma)
         if query:
-            term = f"%{query}%"
-            stm = stm.where(Aluno.nome.ilike(term) | Aluno.matricula.ilike(term))
+            from ..core.helpers import escape_like
+            escaped = escape_like(query)
+            term = f"%{escaped}%"
+            stm = stm.where(Aluno.nome.ilike(term, escape="\\") | Aluno.matricula.ilike(term, escape="\\"))
         # Exclude inactive students
         stm = stm.where(Aluno.status.is_(None))
         return stm

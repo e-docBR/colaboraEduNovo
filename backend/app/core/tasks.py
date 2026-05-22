@@ -1,7 +1,12 @@
+import re
+
 from loguru import logger
 from ..core.database import session_scope
 from ..models import Ocorrencia, Tenant
 from ..services.communication_service import CommunicationService
+
+_EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+_PHONE_RE = re.compile(r'^\+?\d[\d\s\-()]{7,}$')
 
 TIPO_LABELS = {
     "ADVERTENCIA": "Advertência",
@@ -80,24 +85,30 @@ def notify_occurrence_task(ocorrencia_id: int):
         email_destino = getattr(aluno, "email_responsavel", None) or aluno.email
         telefone_destino = getattr(aluno, "telefone_responsavel", None) or aluno.telefones
 
-        # Send Email
-        if email_destino:
+        # Send Email (validate format before attempting)
+        if email_destino and _EMAIL_RE.match(email_destino):
             status_email = CommunicationService.send_email(
                 to_email=email_destino,
                 subject=subject,
                 body=message_body
             )
         else:
-            logger.warning(f"Aluno {aluno.id} ({aluno.nome}) sem email cadastrado — email não enviado")
+            if email_destino:
+                logger.warning(f"Aluno {aluno.id} ({aluno.nome}) email inválido: {email_destino!r}")
+            else:
+                logger.warning(f"Aluno {aluno.id} ({aluno.nome}) sem email cadastrado — email não enviado")
 
-        # Send WhatsApp
-        if telefone_destino:
+        # Send WhatsApp (validate phone format before attempting)
+        if telefone_destino and _PHONE_RE.match(telefone_destino.strip()):
             status_whatsapp = CommunicationService.send_whatsapp(
                 phone=telefone_destino,
                 message=message_body
             )
         else:
-            logger.warning(f"Aluno {aluno.id} ({aluno.nome}) sem telefone cadastrado — WhatsApp não enviado")
+            if telefone_destino:
+                logger.warning(f"Aluno {aluno.id} ({aluno.nome}) telefone inválido: {telefone_destino!r}")
+            else:
+                logger.warning(f"Aluno {aluno.id} ({aluno.nome}) sem telefone cadastrado — WhatsApp não enviado")
 
         # Update status distinguindo "não tentado" de "falha"
         email_attempted = bool(email_destino)
