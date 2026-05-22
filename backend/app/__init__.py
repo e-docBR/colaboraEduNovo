@@ -1,8 +1,10 @@
 """Application factory for the Boletins Frei backend."""
 import time
 import uuid
+
 from flask import Flask, g, request
 from flask_cors import CORS
+from flask_jwt_extended import jwt_required
 from loguru import logger
 
 from .core.config import settings
@@ -10,7 +12,6 @@ from .core.database import init_db
 from .core.security import jwt
 from .api import register_blueprints
 from .cli import register_cli
-
 
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -40,7 +41,11 @@ def create_app() -> Flask:
         LOG_LEVEL=settings.log_level,
     )
 
-    CORS(app, resources={r"/api/*": {"origins": settings.allowed_origins}})
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": settings.allowed_origins}},
+        supports_credentials=True,
+    )
     jwt.init_app(app)
     init_db(app)
     register_blueprints(app)
@@ -56,7 +61,7 @@ def create_app() -> Flask:
     # garantindo que autenticação falhe de forma segura (fail-closed) em vez de
     # permitir brute-force ilimitado (fail-open).
     try:
-        settings_redis = getattr(settings, 'redis_url', None)
+        settings_redis = getattr(settings, "redis_url", None)
         if settings_redis:
             app.config["RATELIMIT_STORAGE_URI"] = settings_redis
             app.config["RATELIMIT_STORAGE_FALLBACK_STRATEGY"] = "raise"
@@ -70,7 +75,7 @@ def create_app() -> Flask:
                 "Check REDIS_URL and Redis availability."
             ) from e
         logger.warning("Rate limiter falling back to in-memory storage (dev only)")
-    
+
     from .core.handlers import register_error_handlers
     register_error_handlers(app)
 
@@ -113,7 +118,7 @@ def create_app() -> Flask:
             rid=g.request_id,
         )
         return response
-    
+
     from flask_migrate import Migrate
     from .core.database import Base
     Migrate(app, Base.metadata)
@@ -158,27 +163,20 @@ def create_app() -> Flask:
         return _jsonify({"status": overall, "checks": checks}), status_code
 
     @app.get("/health/detailed")
+    @jwt_required()
     def healthcheck_detailed():
         """Extended health check with migration and queue status.
 
         Requires a valid JWT with the super_admin role so that internal
         system details are not exposed to unauthenticated callers.
         """
-        from flask import jsonify as _jsonify, request as _request
-        from flask_jwt_extended import decode_token
+        from flask import jsonify as _jsonify
+        from flask_jwt_extended import get_jwt
         from sqlalchemy import text as _text
         from .core.database import SessionLocal, engine
         from .core.cache import redis_client
-        # Lightweight JWT guard (no decorator so we can return structured JSON)
-        auth_header = _request.headers.get("Authorization", "")
-        is_super_admin = False
-        if auth_header.startswith("Bearer "):
-            try:
-                data = decode_token(auth_header[7:])
-                is_super_admin = "super_admin" in (data.get("sub_claims", {}).get("roles") or data.get("roles") or [])
-            except Exception:
-                pass
-        if not is_super_admin:
+        roles = get_jwt().get("roles") or []
+        if "super_admin" not in roles:
             return _jsonify({"error": "Acesso restrito a Super Administradores"}), 403
 
         checks: dict[str, object] = {}
@@ -214,8 +212,9 @@ def create_app() -> Flask:
 
         # RQ worker queue depth (non-critical)
         try:
-            from .core.queue import redis_conn
             from rq import Queue as _RQ
+            from .core.queue import redis_conn
+
             q = _RQ(connection=redis_conn)
             checks["queue"] = {
                 "pending": q.count,

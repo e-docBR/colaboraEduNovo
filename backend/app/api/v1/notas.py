@@ -17,6 +17,8 @@ def serialize_nota_row(nota: Nota, aluno: Aluno | None = None) -> dict:
         "trimestre2": float(nota.trimestre2) if nota.trimestre2 is not None else None,
         "trimestre3": float(nota.trimestre3) if nota.trimestre3 is not None else None,
         "total": float(nota.total) if nota.total is not None else None,
+        "recuperacao": float(nota.recuperacao) if nota.recuperacao is not None else None,
+        "conselho_de_classe": float(nota.conselho_de_classe) if nota.conselho_de_classe is not None else None,
         "faltas": nota.faltas,
         "situacao": nota.situacao,
     }
@@ -131,8 +133,8 @@ def register(parent: Blueprint) -> None:
              return jsonify({"error": "Acesso negado. Apenas administradores podem editar notas."}), 403
 
         payload = request.get_json() or {}
-        allowed_fields = {"trimestre1", "trimestre2", "trimestre3", "total", "faltas", "situacao"}
-        _grade_fields = {"trimestre1", "trimestre2", "trimestre3", "total"}
+        allowed_fields = {"trimestre1", "trimestre2", "trimestre3", "total", "recuperacao", "conselho_de_classe", "faltas", "situacao"}
+        _grade_fields = {"trimestre1", "trimestre2", "trimestre3", "total", "recuperacao", "conselho_de_classe"}
         updates = {}
         for k, v in payload.items():
             if k not in allowed_fields:
@@ -182,15 +184,38 @@ def register(parent: Blueprint) -> None:
             for key, value in updates.items():
                 setattr(nota, key, value)
             
-            # Recalculate total whenever any trimester changes, unless caller sent total explicitly.
-            # Only non-None values count — a missing grade is not treated as zero.
+            # Recalcula total como SOMA dos trimestres disponíveis (T1+T2+T3 = 100 pts).
+            # Cada trimestre tem escala própria: T1 ∈ [0,30], T2 ∈ [0,30], T3 ∈ [0,40].
+            # Apenas trimestres não-nulos são somados — nota ausente não é tratada como zero.
             if "total" not in updates and any(k in updates for k in ["trimestre1", "trimestre2", "trimestre3"]):
                 values = [
                     float(v)
                     for v in [nota.trimestre1, nota.trimestre2, nota.trimestre3]
                     if v is not None
                 ]
-                nota.total = round(sum(values) / len(values), 2) if values else None
+                nota.total = round(sum(values), 2) if values else None
+
+            # Auto-situacao após recuperação ou conselho:
+            # Só recalcula se o usuário não mandou situacao explicitamente e
+            # todos os 3 trimestres já estão preenchidos (ano completo).
+            if "situacao" not in updates and all(
+                v is not None for v in [nota.trimestre1, nota.trimestre2, nota.trimestre3]
+            ):
+                total = float(nota.total) if nota.total is not None else 0.0
+                rec = float(nota.recuperacao) if nota.recuperacao is not None else None
+                cdc = float(nota.conselho_de_classe) if nota.conselho_de_classe is not None else None
+
+                if total >= 50.0:
+                    nota.situacao = "APR"
+                elif rec is not None:
+                    media_rec = round((total + rec) / 2, 2)
+                    if media_rec >= 50.0:
+                        nota.situacao = "APR"
+                    elif cdc is not None and cdc >= 50.0:
+                        nota.situacao = "APCC"
+                    else:
+                        nota.situacao = "REP"
+                # Se total < 50 mas não há nota de recuperação ainda: mantém situação atual
 
             session.add(nota)
             session.flush()

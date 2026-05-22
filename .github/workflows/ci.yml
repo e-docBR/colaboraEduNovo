@@ -175,7 +175,7 @@ jobs:
         working-directory: frontend
         run: npm run build
         env:
-          VITE_API_URL: /api
+          VITE_API_BASE_URL: /api/v1
 
   # ─── Mobile ─────────────────────────────────────────────────────────────────
   mobile-lint:
@@ -226,10 +226,13 @@ jobs:
           POSTGRES_USER=colabora
           POSTGRES_PASSWORD=ci-postgres-password
           POSTGRES_DB=colabora
+          APP_DB_USER=colabora_app
+          APP_DB_PASSWORD=ci-app-password
           REDIS_PASSWORD=ci-redis-password
           FLASK_ENV=production
           SECRET_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
           JWT_SECRET_KEY=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          FRONTEND_URL=https://example.com
           SMTP_SERVER=smtp.example.com
           SMTP_PORT=587
           SMTP_USER=no-reply@example.com

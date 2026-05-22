@@ -8,6 +8,7 @@ from ...core.database import session_scope
 from ...core.cache import cache_response
 from ...core.decorators import require_roles
 from ...models import Aluno, Nota
+from ...services.analytics import get_grading_stage
 
 
 def _apply_aluno_filters(
@@ -45,6 +46,7 @@ def build_turmas_mais_faltas(
     serie: str | None = None,
     turma: str | None = None,
     disciplina: str | None = None,
+    trimestre: str | None = None,
 ):
     query = session.query(Aluno.turma, func.sum(Nota.faltas).label("faltas")).join(Nota)
     query = _apply_aluno_filters(query, turno, serie, turma, disciplina)
@@ -72,6 +74,7 @@ def build_melhores_medias(
     serie: str | None = None,
     turma: str | None = None,
     disciplina: str | None = None,
+    trimestre: str | None = None,
 ):
     query = session.query(Aluno.turma, Aluno.turno, func.avg(Nota.total).label("media")).join(Nota)
     query = _apply_aluno_filters(query, turno, serie, turma, disciplina)
@@ -102,28 +105,33 @@ def build_alunos_em_risco(
     serie: str | None = None,
     turma: str | None = None,
     disciplina: str | None = None,
+    trimestre: str | None = None,
 ):
+    from flask import g
+    stage = get_grading_stage(session, getattr(g, "tenant_id", None), getattr(g, "academic_year_id", None))
+    threshold = stage["threshold"]
+
     query = session.query(
-        Aluno.nome, 
-        Aluno.turma, 
+        Aluno.nome,
+        Aluno.turma,
         func.avg(Nota.total).label("media"),
         func.sum(Nota.faltas).label("total_faltas")
     ).join(Nota)
-    
+
     query = _apply_aluno_filters(query, turno, serie, turma, disciplina)
     query = (
         query.group_by(Aluno.id, Aluno.nome, Aluno.turma)
-        .having(func.avg(Nota.total) < 50.0)
+        .having(func.avg(Nota.total) < float(threshold))
         .order_by(func.avg(Nota.total))
         .limit(20)
     )
-    
+
     results = query.all()
-    
+
     return {
         "summary": {
             "main": {"label": "Alunos em Risco", "value": len(results), "color": "error"},
-            "secondary": {"label": "Nota de Corte", "value": "< 50.0", "color": "info"}
+            "secondary": {"label": "Corte", "value": f"< {threshold} pts ({stage['trimester']})", "color": "info"}
         },
         "data": [
             {"nome": r.nome, "turma": r.turma, "media": round(float(r.media or 0), 1), "faltas": int(r.total_faltas or 0)}
@@ -138,6 +146,7 @@ def build_disciplinas_notas_baixas(
     serie: str | None = None,
     turma: str | None = None,
     disciplina: str | None = None,
+    trimestre: str | None = None,
 ):
     normalizacao = {
         "ARTES": "ARTE",
@@ -189,6 +198,7 @@ def build_melhores_alunos(
     serie: str | None = None,
     turma: str | None = None,
     disciplina: str | None = None,
+    trimestre: str | None = None,
 ):
     query = session.query(
         Aluno.nome,
@@ -230,6 +240,7 @@ def build_performance_heatmap(
     serie: str | None = None,
     turma: str | None = None,
     disciplina: str | None = None,
+    trimestre: str | None = None,
 ):
     query = session.query(
         Nota.disciplina,
@@ -262,6 +273,7 @@ def build_attendance_grade_correlation(
     serie: str | None = None,
     turma: str | None = None,
     disciplina: str | None = None,
+    trimestre: str | None = None,
 ):
     query = session.query(
         Aluno.nome,
@@ -300,6 +312,7 @@ def build_class_radar(
     serie: str | None = None,
     turma: str | None = None,
     disciplina: str | None = None,
+    trimestre: str | None = None,
 ):
     query = session.query(
         Aluno.turma,
@@ -334,23 +347,28 @@ def build_radar_abandono(
     serie: str | None = None,
     turma: str | None = None,
     disciplina: str | None = None,
+    trimestre: str | None = None,
 ):
+    from flask import g
+    stage = get_grading_stage(session, getattr(g, "tenant_id", None), getattr(g, "academic_year_id", None))
+    threshold = stage["threshold"]
+
     query = session.query(
         Aluno.nome,
         Aluno.turma,
         func.avg(Nota.total).label("media"),
         func.sum(Nota.faltas).label("total_faltas")
     ).join(Nota)
-    
+
     query = _apply_aluno_filters(query, turno, serie, turma, disciplina)
     query = (
         query.group_by(Aluno.id, Aluno.nome, Aluno.turma)
-        .having(func.avg(Nota.total) < 50.0)
+        .having(func.avg(Nota.total) < float(threshold))
         .having(func.sum(Nota.faltas) > 15)
         .order_by(func.sum(Nota.faltas).desc())
         .limit(20)
     )
-    
+
     results = query.all()
     data = [
         {
@@ -362,11 +380,11 @@ def build_radar_abandono(
         }
         for r in results
     ]
-    
+
     return {
         "summary": {
             "main": {"label": "Alunos Críticos", "value": len(data), "color": "error"},
-            "secondary": {"label": "Critério", "value": "Faltas > 15", "color": "warning"}
+            "secondary": {"label": "Critério", "value": f"< {threshold} pts e faltas > 15", "color": "warning"}
         },
         "data": data
     }
@@ -378,6 +396,7 @@ def build_comparativo_eficiencia(
     serie: str | None = None,
     turma: str | None = None,
     disciplina: str | None = None,
+    trimestre: str | None = None,
 ):
     q_global = session.query(func.avg(Nota.total)).join(Aluno)
     q_global = _apply_aluno_filters(q_global, turno, serie, None, disciplina)
@@ -413,6 +432,7 @@ def build_top_movers(
     serie: str | None = None,
     turma: str | None = None,
     disciplina: str | None = None,
+    trimestre: str | None = None,
 ):
     query = session.query(
         Aluno.nome,
@@ -443,18 +463,85 @@ def build_top_movers(
     }
 
 
+# Mapeamento trimestre → (coluna, máximo de pontos, threshold 50%)
+_TRIM_CONFIG = {
+    "1": (Nota.trimestre1, 30, 15),
+    "2": (Nota.trimestre2, 30, 15),
+    "3": (Nota.trimestre3, 40, 20),
+}
+
+
+def build_alunos_abaixo_trimestre(
+    session,
+    turno: str | None = None,
+    serie: str | None = None,
+    turma: str | None = None,
+    disciplina: str | None = None,
+    trimestre: str | None = None,
+):
+    """Lista alunos com nota inferior a 50% dos pontos distribuídos no trimestre selecionado.
+
+    Sem filtro de trimestre usa Nota.total com threshold de 50 pts.
+    Com filtro: T1 < 15, T2 < 15, T3 < 20.
+    """
+    if trimestre and trimestre in _TRIM_CONFIG:
+        col, max_pts, threshold = _TRIM_CONFIG[trimestre]
+        trim_label = f"{trimestre}º Trimestre (máx. {max_pts} pts)"
+    else:
+        col, max_pts, threshold = Nota.total, 100, 50
+        trim_label = "Total de Pontos"
+
+    query = session.query(
+        Aluno.nome,
+        Aluno.turma,
+        Aluno.turno,
+        Nota.disciplina,
+        col.label("nota"),
+    ).join(Nota, Nota.aluno_id == Aluno.id)
+
+    query = query.filter(col.isnot(None), col < threshold)
+    query = _apply_aluno_filters(query, turno, serie, turma, disciplina)
+    query = query.order_by(Aluno.turma, Aluno.nome, Nota.disciplina)
+
+    dados = [
+        {
+            "nome":       nome,
+            "turma":      t,
+            "turno":      tn,
+            "disciplina": disc,
+            "nota":       round(float(nota), 1),
+            "max_pts":    max_pts,
+            "threshold":  threshold,
+            "deficit":    round(threshold - float(nota), 1),
+        }
+        for nome, t, tn, disc, nota in query.all()
+    ]
+
+    alunos_unicos = len({r["nome"] for r in dados})
+
+    return {
+        "summary": {
+            "main":      {"label": "Registros abaixo da média", "value": len(dados),     "color": "error"},
+            "secondary": {"label": "Alunos distintos",          "value": alunos_unicos,  "color": "warning"},
+            "extra":     {"label": "Período analisado",         "value": trim_label,     "color": "info"},
+        },
+        "data": dados,
+    }
+
+
 REPORT_BUILDERS = {
-    "turmas-mais-faltas": build_turmas_mais_faltas,
-    "melhores-medias": build_melhores_medias,
-    "alunos-em-risco": build_alunos_em_risco,
-    "disciplinas-notas-baixas": build_disciplinas_notas_baixas,
-    "melhores-alunos": build_melhores_alunos,
-    "performance-heatmap": build_performance_heatmap,
-    "attendance-correlation": build_attendance_grade_correlation,
-    "class-radar": build_class_radar,
-    "radar-abandono": build_radar_abandono,
-    "comparativo-eficiencia": build_comparativo_eficiencia,
-    "top-movers": build_top_movers,
+    "turmas-mais-faltas":        build_turmas_mais_faltas,
+    "melhores-medias":           build_melhores_medias,
+    "alunos-em-risco":           build_alunos_em_risco,
+    "disciplinas-notas-baixas":  build_disciplinas_notas_baixas,
+    "melhores-alunos":           build_melhores_alunos,
+    "performance-heatmap":       build_performance_heatmap,
+    "attendance-correlation":    build_attendance_grade_correlation,
+    "class-radar":               build_class_radar,
+    "radar-abandono":            build_radar_abandono,
+    "comparativo-eficiencia":    build_comparativo_eficiencia,
+    "top-movers":                build_top_movers,
+    "alunos-abaixo-trimestre":   build_alunos_abaixo_trimestre,
 }
 
 
@@ -474,10 +561,11 @@ def register(parent: Blueprint) -> None:
             return (val or "")[:max_len] or None
 
         params = {
-            "turno": _cap(request.args.get("turno"), 20),
-            "serie": _cap(request.args.get("serie"), 5),
-            "turma": _cap(request.args.get("turma"), 30),
+            "turno":      _cap(request.args.get("turno"),      20),
+            "serie":      _cap(request.args.get("serie"),       5),
+            "turma":      _cap(request.args.get("turma"),      30),
             "disciplina": _cap(request.args.get("disciplina"), 50),
+            "trimestre":  _cap(request.args.get("trimestre"),   1),
         }
 
         with session_scope() as session:

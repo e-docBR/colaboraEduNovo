@@ -24,7 +24,7 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { logout } from "../../features/auth/authSlice";
 import { setAcademicYearId, setTenantId } from "../../features/app/appSlice";
-import { useUploadPhotoMutation, useListAcademicYearsQuery, useListPublicTenantsQuery, api } from "../../lib/api";
+import { useUploadPhotoMutation, useListAcademicYearsQuery, useListPublicTenantsQuery, useUpdateAcademicYearStatusMutation, api } from "../../lib/api";
 import { ThemeToggle } from "./ThemeToggle";
 
 const getInitials = (value?: string) =>
@@ -45,17 +45,20 @@ const ROLE_LABELS: Record<string, string> = {
   orientador: "Orientador"
 };
 
+const TRIM_LABELS: Record<number, string> = { 1: "1º Trim.", 2: "2º Trim.", 3: "3º Trim." };
+const TRIM_ADMIN_ROLES = new Set(["admin", "super_admin", "diretor", "coordenador"]);
+
 const AcademicYearSelector = () => {
   const { data: years, isLoading } = useListAcademicYearsQuery();
   const currentYearId = useAppSelector((state) => state.app.academicYearId);
+  const user = useAppSelector((state) => state.auth.user);
   const dispatch = useAppDispatch();
+  const [updateYear] = useUpdateAcademicYearStatusMutation();
 
   const defaultId = years
-    ? (years.find((y: { is_current: boolean; id: number }) => y.is_current)?.id || years[0]?.id)
+    ? (years.find((y) => y.is_current)?.id || years[0]?.id)
     : null;
 
-  // Inicializa o Redux com o ano padrão na primeira carga para garantir
-  // que o header X-Academic-Year-ID seja enviado desde a primeira requisição.
   useEffect(() => {
     if (!currentYearId && defaultId) {
       dispatch(setAcademicYearId(defaultId));
@@ -65,32 +68,75 @@ const AcademicYearSelector = () => {
   if (isLoading || !years || years.length === 0) return null;
 
   const selectedId = currentYearId || defaultId;
+  const selectedYear = years.find((y) => y.id === selectedId);
+  const trimestre = selectedYear?.trimestre_atual ?? 1;
+  const canChangeTrimestre = user?.role && TRIM_ADMIN_ROLES.has(user.role);
+
+  const handleYearChange = (newId: number) => {
+    dispatch(setAcademicYearId(newId));
+    dispatch(api.util.invalidateTags(["Dashboard", "Alunos", "Notas", "Turmas", "Comunicados", "Ocorrencias", "Uploads", "Graficos"]));
+  };
+
+  const handleTrimestreChange = async (newTrim: number) => {
+    if (!selectedId) return;
+    await updateYear({ yearId: selectedId, trimestre_atual: newTrim as 1 | 2 | 3 });
+    dispatch(api.util.invalidateTags(["Dashboard", "Graficos"]));
+  };
 
   return (
-    <TextField
-      select
-      size="small"
-      value={selectedId}
-      onChange={(e) => {
-        const newId = Number(e.target.value);
-        dispatch(setAcademicYearId(newId));
-        dispatch(api.util.invalidateTags(["Dashboard", "Alunos", "Notas", "Turmas", "Comunicados", "Ocorrencias", "Uploads", "Graficos"]));
-      }}
-      sx={{
-        minWidth: 100,
-        "& .MuiOutlinedInput-root": {
-          fontSize: "0.875rem",
-          fontWeight: 600
-        }
-      }}
-      SelectProps={{ native: true }}
-    >
-      {years.map((year: { id: number; label: string; is_current: boolean }) => (
-        <option key={year.id} value={year.id}>
-          {year.label} {year.is_current ? "(Atual)" : ""}
-        </option>
-      ))}
-    </TextField>
+    <Box display="flex" alignItems="center" gap={1}>
+      <TextField
+        select
+        size="small"
+        value={selectedId ?? ""}
+        onChange={(e) => handleYearChange(Number(e.target.value))}
+        sx={{ minWidth: 100, "& .MuiOutlinedInput-root": { fontSize: "0.875rem", fontWeight: 600 } }}
+        SelectProps={{ native: true }}
+      >
+        {years.map((year) => (
+          <option key={year.id} value={year.id}>
+            {year.label}{year.is_current ? " (Atual)" : year.status === "closed" ? " (Encerrado)" : ""}
+          </option>
+        ))}
+      </TextField>
+
+      {canChangeTrimestre ? (
+        <TextField
+          select
+          size="small"
+          value={trimestre}
+          onChange={(e) => handleTrimestreChange(Number(e.target.value))}
+          title="Trimestre em andamento"
+          sx={{
+            minWidth: 105,
+            "& .MuiOutlinedInput-root": {
+              fontSize: "0.875rem",
+              fontWeight: 700,
+              color: "primary.main",
+            },
+          }}
+          SelectProps={{ native: true }}
+        >
+          <option value={1}>1º Trimestre</option>
+          <option value={2}>2º Trimestre</option>
+          <option value={3}>3º Trimestre</option>
+        </TextField>
+      ) : (
+        <Box
+          sx={{
+            px: 1.5, py: 0.5,
+            borderRadius: 1,
+            bgcolor: "primary.main",
+            color: "primary.contrastText",
+            fontSize: "0.8rem",
+            fontWeight: 700,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {TRIM_LABELS[trimestre]}
+        </Box>
+      )}
+    </Box>
   );
 };
 
@@ -135,6 +181,7 @@ const TenantSelector = () => {
 
 const TopBarInner = ({ onMenuClick }: { onMenuClick?: () => void }) => {
   const user = useAppSelector((state) => state.auth.user);
+  const accessToken = useAppSelector((state) => state.auth.accessToken);
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const location = useLocation();
@@ -183,8 +230,18 @@ const TopBarInner = ({ onMenuClick }: { onMenuClick?: () => void }) => {
     handleMenuClose();
     navigate("/alterar-senha");
   };
-  const handleLogout = () => {
+  const handleLogout = async () => {
     handleMenuClose();
+    try {
+      const base = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api/v1";
+      await fetch(`${base}/auth/logout`, {
+        method: "POST",
+        credentials: "include",
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+      });
+    } catch {
+      // Best effort: local logout should continue even if the API is unavailable.
+    }
     dispatch(logout());
     // A7: use env var so staging/dev don't redirect to production
     window.location.href = import.meta.env.VITE_LOGOUT_REDIRECT_URL ?? "/";

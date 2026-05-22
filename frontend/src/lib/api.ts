@@ -61,6 +61,11 @@ type DashboardKpis = {
   alunos_em_risco: number;
   ocorrencias_abertas: number;
   comunicados_recentes: number;
+  grading_stage?: {
+    max_pts: number;
+    threshold: number;
+    trimester: "T1" | "T2" | "T3";
+  };
 };
 
 export type PublicTenant = {
@@ -150,6 +155,8 @@ export type NotaResumo = {
   trimestre2?: number | null;
   trimestre3?: number | null;
   total?: number | null;
+  recuperacao?: number | null;
+  conselho_de_classe?: number | null;
   faltas?: number | null;
   situacao?: string | null;
   aluno?: {
@@ -213,6 +220,8 @@ export type AlunoNota = {
   trimestre2?: number | null;
   trimestre3?: number | null;
   total?: number | null;
+  recuperacao?: number | null;
+  conselho_de_classe?: number | null;
   faltas?: number | null;
   situacao?: string | null;
 };
@@ -338,6 +347,7 @@ export type RelatorioQueryArgs = {
   serie?: string;
   turma?: string;
   disciplina?: string;
+  trimestre?: string;
 };
 
 export type JobStatusResponse = {
@@ -388,7 +398,7 @@ export type Tenant = {
   is_active: boolean;
   domain?: string;
   created_at?: string;
-  academic_years?: Array<{ id: number; label: string; is_current: boolean }>;
+  academic_years?: Array<{ id: number; label: string; is_current: boolean; status: string; closed_at: string | null }>;
   plano?: string;
   plano_ativo?: boolean;
   plano_expira_em?: string | null;
@@ -932,9 +942,17 @@ export const api = createApi({
       }),
       invalidatesTags: ["Alunos", "Dashboard", "Turmas"]
     }),
-    listAcademicYears: builder.query<{ id: number; label: string; is_current: boolean }[], void>({
+    listAcademicYears: builder.query<{ id: number; label: string; is_current: boolean; status: string; closed_at: string | null; trimestre_atual: number }[], void>({
       query: () => "/academic-years",
       providesTags: ["Dashboard"]
+    }),
+    updateAcademicYearStatus: builder.mutation<{ id: number; label: string; is_current: boolean; status: string; closed_at: string | null; trimestre_atual: number }, { yearId: number; status?: "open" | "closed"; trimestre_atual?: 1 | 2 | 3 }>({
+      query: ({ yearId, ...body }) => ({
+        url: `/academic-years/${yearId}`,
+        method: "PATCH",
+        body
+      }),
+      invalidatesTags: ["Dashboard"]
     }),
 
     // Super Admin Endpoints
@@ -969,9 +987,18 @@ export const api = createApi({
     deleteTenant: builder.mutation<void, number>({
       query: (id) => ({
         url: `/admin/tenants/${id}`,
-        method: "DELETE"
+        method: "DELETE",
+        body: { confirm_delete: true }
       }),
       invalidatesTags: ["Usuarios"]
+    }),
+    updateTenantYearStatus: builder.mutation<{ id: number; label: string; is_current: boolean; status: string; closed_at: string | null }, { tenantId: number; yearId: number; status: "open" | "closed" }>({
+      query: ({ tenantId, yearId, ...body }) => ({
+        url: `/admin/tenants/${tenantId}/years/${yearId}`,
+        method: "PATCH",
+        body
+      }),
+      invalidatesTags: ["Usuarios", "Dashboard"]
     }),
     getInterventions: builder.query<StudentInterventionAnalysis, number | string>({
       query: (alunoId) => `/ai/interventions/${alunoId}`
@@ -1054,11 +1081,13 @@ export const {
   useRestoreAlunoMutation,
   useUploadAlunosCsvMutation,
   useListAcademicYearsQuery,
+  useUpdateAcademicYearStatusMutation,
   useListTenantsQuery,
   useCreateTenantMutation,
   useAddAcademicYearToTenantMutation,
   useUpdateTenantMutation,
   useDeleteTenantMutation,
+  useUpdateTenantYearStatusMutation,
   useGetInterventionsQuery,
   useGetStudentRiskQuery,
   useGetBulkInterventionsMutation,

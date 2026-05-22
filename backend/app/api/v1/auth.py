@@ -12,6 +12,63 @@ from ...schemas.usuario import LoginRequest, ChangePasswordRequest
 from ...core.extensions import limiter
 from loguru import logger
 
+
+def _is_mobile_client() -> bool:
+    return request.headers.get("X-Client-Platform", "").strip().lower() in {"mobile", "native"}
+
+
+def _set_refresh_cookie(response, refresh_token: str) -> None:
+    from ...core.config import settings
+
+    response.set_cookie(
+        "rt",
+        refresh_token,
+        httponly=True,
+        secure=settings.environment == "production",
+        samesite="Strict",
+        max_age=7 * 24 * 3600,
+        path="/api/v1/auth",
+    )
+
+
+def _extract_refresh_token(*, allow_authorization: bool = False) -> tuple[str | None, str]:
+    token = request.cookies.get("rt")
+    if token:
+        return token, "cookie"
+
+    if _is_mobile_client():
+        payload = request.get_json(silent=True) or {}
+        body_token = (payload.get("refresh_token") or "").strip()
+        if body_token:
+            return body_token, "body"
+
+        if allow_authorization:
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.startswith("Bearer "):
+                return auth_header[7:].strip(), "authorization"
+
+    return None, "missing"
+
+
+def _revoke_refresh_token_if_present() -> None:
+    import time as _time
+    from flask_jwt_extended import decode_token
+
+    rt_token, _source = _extract_refresh_token(allow_authorization=False)
+    if not rt_token:
+        return
+
+    try:
+        rt_data = decode_token(rt_token, allow_expired=True)
+        rt_jti = rt_data.get("jti")
+        if rt_jti:
+            rt_exp = rt_data.get("exp", 0)
+            rt_ttl = max(int(rt_exp - _time.time()), 1)
+            add_token_to_blocklist(rt_jti, rt_ttl)
+    except Exception as exc:
+        logger.warning("Could not revoke refresh token on session termination: {}", exc)
+
+
 def _get_client_ip() -> str:
     """Retorna o IP real do cliente.
 
@@ -38,11 +95,14 @@ def register(parent: Blueprint) -> None:
             ).scalars().all()
             return jsonify([{"id": t.id, "name": t.name, "slug": t.slug} for t in tenants])
 
+    @bp.get("/auth/public-tenants")
+    def list_public_tenants_legacy():
+        return list_public_tenants()
+
     @bp.post("/auth/login")
     @limiter.limit("10 per minute")
     def login():
         from flask import make_response
-        from ...core.config import settings
 
         try:
             payload = LoginRequest(**(request.get_json() or {}))
@@ -61,21 +121,20 @@ def register(parent: Blueprint) -> None:
                 )
                 log_action(session, auth_response.user.id, "LOGIN_SUCCESS", "Usuario", auth_response.user.id, {"ip": ip})
 
-                # Remove refresh_token do body — enviado apenas via cookie HttpOnly
                 auth_data = auth_response.model_dump()
-                refresh_token = auth_data.pop("refresh_token", None)
+                refresh_token = auth_data.get("refresh_token")
+
+                # Web recebe refresh token apenas em cookie HttpOnly.
+                # Mobile recebe no body por não depender de cookie do browser.
+                if not _is_mobile_client():
+                    auth_data.pop("refresh_token", None)
 
                 resp = make_response(jsonify(auth_data))
                 if refresh_token:
-                    resp.set_cookie(
-                        "rt",
-                        refresh_token,
-                        httponly=True,
-                        secure=settings.environment == "production",
-                        samesite="Strict",
-                        max_age=7 * 24 * 3600,
-                        path="/api/v1/auth",
-                    )
+                    if _is_mobile_client():
+                        pass
+                    else:
+                        _set_refresh_cookie(resp, refresh_token)
                 return resp
             except Exception:
                 # Garante que o log de falha não mascara a exceção original
@@ -95,9 +154,8 @@ def register(parent: Blueprint) -> None:
         from flask_jwt_extended import decode_token
         from flask_jwt_extended.exceptions import JWTExtendedException
         from ...core.security import is_token_revoked
-        from ...core.config import settings
-
-        token = request.cookies.get("rt")
+        import time as _time
+        token, token_source = _extract_refresh_token(allow_authorization=True)
         if not token:
             return jsonify({"error": "Sessão expirada. Faça login novamente."}), 401
 
@@ -112,6 +170,12 @@ def register(parent: Blueprint) -> None:
         jti = jwt_data.get("jti", "")
         if jti and is_token_revoked(jti):
             return jsonify({"error": "Sessão revogada. Faça login novamente."}), 401
+
+        # Rotação real: o refresh token atual deixa de ser reutilizável
+        if jti:
+            exp = jwt_data.get("exp", 0)
+            ttl = max(int(exp - _time.time()), 1)
+            add_token_to_blocklist(jti, ttl)
 
         identity = str(jwt_data.get("sub", ""))
         roles = jwt_data.get("roles", [])
@@ -144,16 +208,13 @@ def register(parent: Blueprint) -> None:
         except Exception as exc:
             logger.warning("Could not fetch user data during token refresh (id={}): {}", identity, exc)
 
-        resp = jsonify({"access_token": tokens["access_token"], "user": user_data})
-        resp.set_cookie(
-            "rt",
-            tokens["refresh_token"],
-            httponly=True,
-            secure=settings.environment == "production",
-            samesite="Strict",
-            max_age=7 * 24 * 3600,
-            path="/api/v1/auth",
-        )
+        response_body = {"access_token": tokens["access_token"], "user": user_data}
+        if _is_mobile_client() or token_source in {"authorization", "body"}:
+            response_body["refresh_token"] = tokens["refresh_token"]
+
+        resp = jsonify(response_body)
+        if token_source == "cookie" and not _is_mobile_client():
+            _set_refresh_cookie(resp, tokens["refresh_token"])
         return resp
 
     @bp.post("/auth/logout")
@@ -173,18 +234,7 @@ def register(parent: Blueprint) -> None:
         add_token_to_blocklist(jti, ttl)
 
         # Revoga o refresh token do cookie, se presente
-        rt_cookie = request.cookies.get("rt")
-        if rt_cookie:
-            try:
-                from flask_jwt_extended import decode_token
-                rt_data = decode_token(rt_cookie, allow_expired=True)
-                rt_jti = rt_data.get("jti")
-                if rt_jti:
-                    rt_exp = rt_data.get("exp", 0)
-                    rt_ttl = max(int(rt_exp - _time.time()), 1)
-                    add_token_to_blocklist(rt_jti, rt_ttl)
-            except Exception as exc:
-                logger.warning("Could not revoke refresh token cookie on logout: {}", exc)
+        _revoke_refresh_token_if_present()
 
         user_id = get_jwt_identity()
         ip = _get_client_ip()
@@ -225,6 +275,7 @@ def register(parent: Blueprint) -> None:
         exp = jwt_data.get("exp", 0)
         ttl = max(int(exp - _time.time()), 1)
         add_token_to_blocklist(jti, ttl)
+        _revoke_refresh_token_if_present()
 
         return ("", 204)
 

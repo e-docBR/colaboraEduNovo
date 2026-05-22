@@ -8,6 +8,19 @@ ou restaurar qualquer release via `git checkout vX.Y.Z` ou pelo GitHub → *Rele
 
 ---
 
+## [1.8.1] - 2026-05-22
+
+### Auditoria / Operação
+- `audit-remediation-plan.md`: consolida o plano e as validações do ciclo.
+- `docs/PRODUCTION_READINESS.md`: registra gates e pendências para go-live.
+- `scripts/doctor.sh` e `scripts/validate-workspace.sh`: validação reprodutível com fallback seguro quando `node_modules` local estiver ausente/quebrado.
+- `Makefile`: adiciona `make doctor`, `make validate` e alvos por projeto (backend/frontend/mobile).
+
+### CI/CD e Deploy
+- CI alinha o frontend a `VITE_API_BASE_URL` (variável efetivamente consumida).
+- Deploy ajusta `docker compose` (`--scale worker=3`) e adiciona smoke test (frontend, `/health`, descoberta de tenants).
+- `scripts/prod-preflight.sh`: falha cedo quando variáveis mínimas de produção estão ausentes e valida integrações opcionais (S3/Stripe) de forma consistente.
+
 ## [1.8.0] - 2026-05-20
 
 ### Segurança — Hardening Completo

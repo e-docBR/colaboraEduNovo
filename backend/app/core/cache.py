@@ -6,7 +6,8 @@ import redis
 from .config import settings
 
 # Initialize redis client
-redis_client = redis.from_url(settings.redis_url)
+_redis_url = settings.redis_url or "redis://localhost:6379/0"
+redis_client = redis.from_url(_redis_url)
 
 # ─── Cache version key helpers ────────────────────────────────────────────────
 # Instead of SCAN+DELETE (O(N)), we use a version counter per tenant.

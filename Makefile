@@ -16,7 +16,7 @@
 # =============================================================================
 
 .DEFAULT_GOAL := help
-.PHONY: help setup infra backend worker frontend dev docker test lint audit prod-preflight restore-backup stop clean migrate
+.PHONY: help setup infra backend worker frontend mobile dev docker test lint doctor validate validate-backend validate-frontend validate-mobile audit prod-preflight restore-backup stop clean migrate
 
 VENV       := .venv
 PYTHON     := $(VENV)/bin/python
@@ -35,11 +35,14 @@ help:
 	@echo "  make backend    Inicia Flask dev server (localhost:5000)"
 	@echo "  make worker     Inicia RQ worker"
 	@echo "  make frontend   Inicia Vite dev server (localhost:5173)"
+	@echo "  make mobile     Inicia Expo dev server"
 	@echo "  make dev        Infra + backend + worker + frontend em paralelo"
 	@echo "  make docker     Stack completo via docker compose"
 	@echo "  make migrate    Roda flask db upgrade"
 	@echo "  make test       Executa pytest"
 	@echo "  make lint       Executa ruff check"
+	@echo "  make doctor     Verifica pré-requisitos locais de backend/frontend/mobile"
+	@echo "  make validate   Executa validações locais usando apenas toolchains do projeto"
 	@echo "  make audit      Audita dependências Python, frontend e mobile"
 	@echo "  make prod-preflight Valida .env e docker-compose de produção"
 	@echo "  make restore-backup BACKUP=arquivo.sql.gz  Restaura backup PostgreSQL"
@@ -99,7 +102,10 @@ worker:
 
 # ── Frontend Vite ────────────────────────────────────────────────────────────
 frontend:
-	cd frontend && npm install --silent && npm run dev
+	cd frontend && npm install --include=dev --silent && npm run dev
+
+mobile:
+	cd mobile && npm install --include=dev --silent && npm run start
 
 # ── Dev tudo em paralelo ──────────────────────────────────────────────────────
 dev: infra
@@ -127,6 +133,21 @@ test:
 # ── Lint ─────────────────────────────────────────────────────────────────────
 lint:
 	$(RUFF) check app
+
+doctor:
+	./scripts/doctor.sh
+
+validate:
+	./scripts/validate-workspace.sh
+
+validate-backend:
+	./scripts/validate-workspace.sh backend
+
+validate-frontend:
+	./scripts/validate-workspace.sh frontend
+
+validate-mobile:
+	./scripts/validate-workspace.sh mobile
 
 # ── Auditoria de dependências ────────────────────────────────────────────────
 audit:

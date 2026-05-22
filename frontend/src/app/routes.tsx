@@ -33,6 +33,7 @@ const AuditLogsPage = lazy(() => import("../features/usuarios/AuditLogsPage").th
 const ComunicadosPage = lazy(() => import("../features/comunicados/ComunicadosPage").then(m => ({ default: m.ComunicadosPage })));
 const OcorrenciasPage = lazy(() => import("../features/ocorrencias/OcorrenciasPage").then(m => ({ default: m.OcorrenciasPage })));
 const TenantsPage = lazy(() => import("../features/super-admin/TenantsPage").then(m => ({ default: m.TenantsPage })));
+const AcademicYearsPage = lazy(() => import("../features/admin/AcademicYearsPage").then(m => ({ default: m.AcademicYearsPage })));
 const PortalResponsavelPage = lazy(() => import("../features/responsavel/PortalResponsavelPage").then(m => ({ default: m.PortalResponsavelPage })));
 const AISettingsPage = lazy(() => import("../features/ai-chat/AISettingsPage"));
 
@@ -61,7 +62,10 @@ const requireAuth = async () => {
         credentials: "include", // envia o cookie rt automaticamente
       });
       if (res.ok) {
-        const data = await res.json() as { access_token: string; user?: { tenant_id?: number | null; must_change_password?: boolean } };
+        const data = await res.json() as {
+          access_token: string;
+          user?: typeof state.auth.user;
+        };
         store.dispatch(setCredentials({ access_token: data.access_token, user: data.user }));
         if (data.user?.tenant_id) store.dispatch(setTenantId(data.user.tenant_id));
         if (data.user?.must_change_password) throw redirect("/alterar-senha");
@@ -138,7 +142,8 @@ export const appRouter = createBrowserRouter([
       { path: "meu-boletim", element: wrap(<MeuBoletimPage />) },
       { path: "portal-responsavel", element: wrap(<PortalResponsavelPage />) },
       { path: "admin/escolas", element: wrap(<TenantsPage />) },
-      { path: "admin/ia", element: wrap(<AISettingsPage />) }
+      { path: "admin/ia", element: wrap(<AISettingsPage />) },
+      { path: "admin/anos-letivos", element: wrap(<AcademicYearsPage />) }
     ]
   },
   {

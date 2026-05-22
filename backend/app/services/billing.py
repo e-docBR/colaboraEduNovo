@@ -112,7 +112,6 @@ def _handle_checkout_completed(data: dict) -> None:
 
 def _handle_subscription_change(data: dict) -> None:
     from ..core.database import session_scope
-    from datetime import timezone
 
     customer_id = data.get("customer")
     status = data.get("status")

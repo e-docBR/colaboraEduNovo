@@ -7,7 +7,10 @@ export type ChartSlug =
   | "medias-por-trimestre"
   | "gauss-escola"
   | "correlacao-frequencia"
-  | "evolucao-turnos";
+  | "evolucao-turnos"
+  | "abaixo-por-disciplina"
+  | "abaixo-por-turma"
+  | "deficit-ranking";
 
 export type ChartDefinition = {
   slug: ChartSlug;
@@ -23,6 +26,8 @@ export type ChartDefinition = {
   supportsTrimestre?: boolean;
   supportsDisciplina?: boolean;
   maxItems?: number;
+  horizontal?: boolean;
+  stacked?: boolean;
 };
 
 export const CHARTS: ChartDefinition[] = [
@@ -112,7 +117,45 @@ export const CHARTS: ChartDefinition[] = [
     description: "Performance Matutino vs Vespertino/Noturno ao longo do tempo.",
     type: "line",
     supportsDisciplina: true
-  }
+  },
+  {
+    slug: "abaixo-por-disciplina",
+    title: "Reprovações por Disciplina",
+    description: "Quais matérias concentram mais alunos abaixo do mínimo por trimestre.",
+    type: "bar",
+    xKey: "disciplina",
+    yKey: "abaixo",
+    supportsTurno: true,
+    supportsTurma: true,
+    supportsTrimestre: true,
+    supportsDisciplina: true,
+  },
+  {
+    slug: "abaixo-por-turma",
+    title: "Alunos em Risco por Turma",
+    description: "Turmas com maior proporção de alunos abaixo do mínimo por trimestre.",
+    type: "bar",
+    xKey: "turma",
+    stacked: true,
+    supportsTurno: true,
+    supportsSerie: true,
+    supportsTrimestre: true,
+    supportsDisciplina: true,
+  },
+  {
+    slug: "deficit-ranking",
+    title: "Ranking de Déficit por Aluno",
+    description: "Top 20 alunos com maior soma de déficit de pontos em relação ao mínimo.",
+    type: "bar",
+    xKey: "nome",
+    yKey: "deficit_total",
+    horizontal: true,
+    supportsTurno: true,
+    supportsTurma: true,
+    supportsTrimestre: true,
+    supportsDisciplina: true,
+    maxItems: 20,
+  },
 ];
 
 export const CHARTS_BY_SLUG = Object.fromEntries(CHARTS.map((chart) => [chart.slug, chart])) as Record<

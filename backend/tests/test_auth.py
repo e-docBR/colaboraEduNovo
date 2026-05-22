@@ -23,7 +23,88 @@ def test_login_success(client, admin_user):
     assert response.status_code == 200
     data = response.json
     assert "access_token" in data
+    assert "refresh_token" not in data
     assert data["user"]["username"] == "admin_test"
+    assert "rt=" in response.headers.get("Set-Cookie", "")
+
+
+def test_mobile_login_returns_refresh_token_in_body(client, admin_user):
+    response = client.post(
+        "/api/v1/auth/login",
+        headers={"X-Client-Platform": "mobile"},
+        json={
+            "username": "admin_test",
+            "password": "admin123",
+            "tenant_slug": "default",
+        },
+    )
+    assert response.status_code == 200
+    assert "refresh_token" in response.json
+
+
+def test_mobile_refresh_rotates_refresh_token(client, admin_user):
+    login = client.post(
+        "/api/v1/auth/login",
+        headers={"X-Client-Platform": "mobile"},
+        json={
+            "username": "admin_test",
+            "password": "admin123",
+            "tenant_slug": "default",
+        },
+    )
+    old_refresh = login.json["refresh_token"]
+
+    refreshed = client.post(
+        "/api/v1/auth/refresh",
+        headers={
+            "X-Client-Platform": "mobile",
+            "Authorization": f"Bearer {old_refresh}",
+        },
+    )
+    assert refreshed.status_code == 200
+    assert refreshed.json["refresh_token"] != old_refresh
+
+    reused = client.post(
+        "/api/v1/auth/refresh",
+        headers={
+            "X-Client-Platform": "mobile",
+            "Authorization": f"Bearer {old_refresh}",
+        },
+    )
+    assert reused.status_code == 401
+
+
+def test_mobile_logout_revokes_refresh_token(client, admin_user):
+    login = client.post(
+        "/api/v1/auth/login",
+        headers={"X-Client-Platform": "mobile"},
+        json={
+            "username": "admin_test",
+            "password": "admin123",
+            "tenant_slug": "default",
+        },
+    )
+    access_token = login.json["access_token"]
+    refresh_token = login.json["refresh_token"]
+
+    logout = client.post(
+        "/api/v1/auth/logout",
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "X-Client-Platform": "mobile",
+        },
+        json={"refresh_token": refresh_token},
+    )
+    assert logout.status_code == 204
+
+    reused = client.post(
+        "/api/v1/auth/refresh",
+        headers={
+            "X-Client-Platform": "mobile",
+            "Authorization": f"Bearer {refresh_token}",
+        },
+    )
+    assert reused.status_code == 401
 
 def test_login_failure(client):
     response = client.post("/api/v1/auth/login", json={
@@ -55,6 +136,43 @@ def test_change_password(client, auth_headers):
         "tenant_slug": "default",
     })
     assert response.status_code == 200
+
+
+def test_mobile_change_password_revokes_refresh_token(client, admin_user):
+    login = client.post(
+        "/api/v1/auth/login",
+        headers={"X-Client-Platform": "mobile"},
+        json={
+            "username": "admin_test",
+            "password": "admin123",
+            "tenant_slug": "default",
+        },
+    )
+    access_token = login.json["access_token"]
+    refresh_token = login.json["refresh_token"]
+
+    response = client.post(
+        "/api/v1/auth/change-password",
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "X-Client-Platform": "mobile",
+        },
+        json={
+            "current_password": "admin123",
+            "new_password": "NewPass456!",
+            "refresh_token": refresh_token,
+        },
+    )
+    assert response.status_code == 204
+
+    reused = client.post(
+        "/api/v1/auth/refresh",
+        headers={
+            "X-Client-Platform": "mobile",
+            "Authorization": f"Bearer {refresh_token}",
+        },
+    )
+    assert reused.status_code == 401
 
 def test_upload_photo(client, auth_headers):
     # Build a minimal valid JPEG: starts with FF D8 magic bytes

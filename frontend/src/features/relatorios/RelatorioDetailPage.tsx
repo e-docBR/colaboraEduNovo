@@ -48,7 +48,7 @@ import {
   CartesianGrid
 } from "recharts";
 
-const DEFAULT_FILTERS = { turno: "", serie: "", turma: "", disciplina: "" };
+const DEFAULT_FILTERS = { turno: "", serie: "", turma: "", disciplina: "", trimestre: "" };
 
 const deriveSerieFromTurma = (turma?: string) => {
   if (!turma) return "";
@@ -133,7 +133,8 @@ export const RelatorioDetailPage = () => {
       turno: filters.turno || undefined,
       serie: filters.serie || undefined,
       turma: filters.turma || undefined,
-      disciplina: filters.disciplina || undefined
+      disciplina: filters.disciplina || undefined,
+      trimestre: filters.trimestre || undefined,
     }),
     [filters]
   );
@@ -182,6 +183,7 @@ export const RelatorioDetailPage = () => {
     if (sanitizedFilters.serie) params.set("serie", sanitizedFilters.serie);
     if (sanitizedFilters.turma) params.set("turma", sanitizedFilters.turma);
     if (sanitizedFilters.disciplina) params.set("disciplina", sanitizedFilters.disciplina);
+    if (sanitizedFilters.trimestre) params.set("trimestre", sanitizedFilters.trimestre);
 
     const url = `${API_BASE}/relatorios/${slug}?${params.toString()}`;
 
@@ -368,6 +370,20 @@ export const RelatorioDetailPage = () => {
                   ))}
                 </TextField>
               )}
+              {definition.filters?.trimestre && (
+                <TextField
+                  select
+                  label="Trimestre"
+                  value={filters.trimestre}
+                  onChange={handleFilterChange("trimestre")}
+                  fullWidth
+                >
+                  <MenuItem value="">Todos os trimestres</MenuItem>
+                  <MenuItem value="1">1º Trimestre (0–30 pts)</MenuItem>
+                  <MenuItem value="2">2º Trimestre (0–30 pts)</MenuItem>
+                  <MenuItem value="3">3º Trimestre (0–40 pts)</MenuItem>
+                </TextField>
+              )}
             </Stack>
             {combinationIssues.length > 0 && (
               <Box mt={2}>
@@ -438,7 +454,7 @@ export const RelatorioDetailPage = () => {
 };
 
 const ReportSummaryCards = ({ summary }: { summary: any }) => {
-  const items = [summary.main, summary.secondary].filter(Boolean);
+  const items = [summary.main, summary.secondary, summary.extra].filter(Boolean);
 
   return (
     <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>

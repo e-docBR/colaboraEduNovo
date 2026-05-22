@@ -137,17 +137,20 @@ export const AlunoDetailPage = () => {
   };
 
   const token = useAppSelector((state) => state.auth.accessToken);
+  const tenantId = useAppSelector((state) => state.app.tenantId);
+  const academicYearId = useAppSelector((state) => state.app.academicYearId);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const handleDownloadPdf = async () => {
     if (!alunoId || !token) return;
     const baseUrl = import.meta.env.VITE_API_BASE_URL || "/api/v1";
-
+    setPdfLoading(true);
     try {
-      const response = await fetch(`${baseUrl}/alunos/${alunoId}/boletim/pdf`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
+      const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+      if (tenantId) headers["X-Tenant-ID"] = String(tenantId);
+      if (academicYearId) headers["x-academic-year-id"] = String(academicYearId);
+
+      const response = await fetch(`${baseUrl}/alunos/${alunoId}/boletim/pdf`, { headers });
       if (!response.ok) throw new Error("Falha ao gerar PDF");
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -156,9 +159,12 @@ export const AlunoDetailPage = () => {
       a.download = `Boletim_${data?.nome.replace(/\s+/g, "_")}.pdf`;
       document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
     } catch {
       setSnackbar({ open: true, message: "Erro ao gerar o PDF. Tente novamente.", severity: "error" });
+    } finally {
+      setPdfLoading(false);
     }
   };
 
@@ -194,10 +200,11 @@ export const AlunoDetailPage = () => {
           <Button
             variant="contained"
             color="secondary"
-            startIcon={<DownloadIcon />}
+            startIcon={pdfLoading ? <CircularProgress size={16} color="inherit" /> : <DownloadIcon />}
             onClick={handleDownloadPdf}
+            disabled={pdfLoading}
           >
-            Baixar PDF
+            {pdfLoading ? "Gerando..." : "Baixar PDF"}
           </Button>
           {isAdmin && (
             <>
@@ -280,13 +287,15 @@ export const AlunoDetailPage = () => {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>Disciplina</TableCell>
-                <TableCell>1º Tri</TableCell>
-                <TableCell>2º Tri</TableCell>
-                <TableCell>3º Tri</TableCell>
-                <TableCell>Total</TableCell>
-                <TableCell>Faltas</TableCell>
-                <TableCell>Situação</TableCell>
+                <TableCell>Componentes Curriculares</TableCell>
+                <TableCell align="center">1º Trim.</TableCell>
+                <TableCell align="center">2º Trim.</TableCell>
+                <TableCell align="center">3º Trim.</TableCell>
+                <TableCell align="center">Total de Pontos</TableCell>
+                <TableCell align="center">Recuperação</TableCell>
+                <TableCell align="center">Conselho de Classe</TableCell>
+                <TableCell align="center">T. Faltas</TableCell>
+                <TableCell align="center">Situação</TableCell>
                 {isAdmin && <TableCell>Ações</TableCell>}
               </TableRow>
             </TableHead>
@@ -296,12 +305,18 @@ export const AlunoDetailPage = () => {
                 return (
                   <TableRow key={nota.id} hover>
                     <TableCell>{nota.disciplina}</TableCell>
-                    <TableCell>{formatNota(nota.trimestre1)}</TableCell>
-                    <TableCell>{formatNota(nota.trimestre2)}</TableCell>
-                    <TableCell>{formatNota(nota.trimestre3)}</TableCell>
-                    <TableCell>{formatNota(nota.total)}</TableCell>
-                    <TableCell>{nota.faltas ?? "-"}</TableCell>
-                    <TableCell>
+                    <TableCell align="center">{formatNota(nota.trimestre1)}</TableCell>
+                    <TableCell align="center">{formatNota(nota.trimestre2)}</TableCell>
+                    <TableCell align="center">{formatNota(nota.trimestre3)}</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 700 }}>{formatNota(nota.total)}</TableCell>
+                    <TableCell align="center" sx={{ color: "text.secondary" }}>
+                      {nota.recuperacao != null ? formatNota(nota.recuperacao) : "--"}
+                    </TableCell>
+                    <TableCell align="center" sx={{ color: "text.secondary" }}>
+                      {nota.conselho_de_classe != null ? formatNota(nota.conselho_de_classe) : "--"}
+                    </TableCell>
+                    <TableCell align="center">{nota.faltas ?? "-"}</TableCell>
+                    <TableCell align="center">
                       <Chip label={situacao.label} color={situacao.color} size="small" variant="outlined" />
                     </TableCell>
                     {isAdmin && (

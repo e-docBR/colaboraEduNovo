@@ -12,6 +12,7 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import ArchiveIcon from "@mui/icons-material/Archive";
+import EventNoteIcon from "@mui/icons-material/EventNote";
 import { NavLink } from "react-router-dom";
 import { memo, useMemo } from "react";
 import { useAppSelector } from "../../app/hooks";
@@ -59,6 +60,7 @@ const SidebarInner = ({ mobile }: { mobile?: boolean }) => {
     }
 
     if (isAdmin) {
+      base.push({ label: "Anos Letivos", icon: <EventNoteIcon />, path: `${appBasePath}/admin/anos-letivos` });
       base.push({ label: "Uploads", icon: <UploadFileIcon />, path: `${appBasePath}/uploads` });
       base.push({ label: "Arquivo de Alunos", icon: <ArchiveIcon />, path: `${appBasePath}/alunos/arquivo` });
       base.push({ label: "Audit Logs", icon: <ArticleIcon />, path: `${appBasePath}/audit-logs` });

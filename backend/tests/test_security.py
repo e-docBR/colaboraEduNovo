@@ -144,7 +144,7 @@ class TestOcorrenciasCRUD:
     def test_create_and_list_ocorrencia(self, client, auth_headers, flask_app):
         from app.core.security import generate_tokens
         from app.core.database import session_scope as _ss
-        from app.models import Usuario, Tenant
+        from app.models import Usuario
 
         with _ss() as session:
             user = session.query(Usuario).filter(Usuario.username == "admin_test").first()

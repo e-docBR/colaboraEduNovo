@@ -21,6 +21,7 @@ export const apiClient = axios.create({
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
+    'X-Client-Platform': 'mobile',
   },
 });
 
@@ -47,11 +48,16 @@ apiClient.interceptors.response.use(
         const refreshToken = await SecureStore.getItemAsync('refresh_token');
         if (refreshToken) {
           const res = await axios.post(`${BASE_URL}/auth/refresh`, {}, {
-            headers: { Authorization: `Bearer ${refreshToken}` }
+            headers: {
+              Authorization: `Bearer ${refreshToken}`,
+              'X-Client-Platform': 'mobile',
+            }
           });
           if (res.status === 200) {
             await SecureStore.setItemAsync('access_token', res.data.access_token);
-            await SecureStore.setItemAsync('refresh_token', res.data.refresh_token);
+            if (res.data.refresh_token) {
+              await SecureStore.setItemAsync('refresh_token', res.data.refresh_token);
+            }
             apiClient.defaults.headers.common['Authorization'] = `Bearer ${res.data.access_token}`;
             return apiClient(originalRequest);
           }
@@ -70,7 +76,7 @@ apiClient.interceptors.response.use(
 // --- Auth ---
 export interface LoginResponse {
   access_token: string;
-  refresh_token: string;
+  refresh_token?: string;
   user: {
     id: number;
     username: string; // Changed from nome to username
@@ -88,14 +94,30 @@ export interface PublicTenant {
 }
 
 export const authApi = {
-  listTenants: () => apiClient.get<PublicTenant[]>('/auth/public-tenants'),
+  listTenants: () => apiClient.get<PublicTenant[]>('/auth/tenants'),
   login: (email: string, password: string, tenantSlug?: string) =>
     apiClient.post<LoginResponse>('/auth/login', {
       username: email,
       password,
       tenant_slug: tenantSlug ?? DEFAULT_TENANT_SLUG,
+    }, {
+      headers: { 'X-Client-Platform': 'mobile' }
     }), // Backend expects username
   me: () => apiClient.get<LoginResponse['user']>('/usuarios/me'), // Fixed endpoint
+};
+
+export const logoutRequest = async (accessToken?: string | null, refreshToken?: string | null) => {
+  if (!accessToken) return;
+  await axios.post(
+    `${BASE_URL}/auth/logout`,
+    refreshToken ? { refresh_token: refreshToken } : {},
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'X-Client-Platform': 'mobile',
+      },
+    },
+  );
 };
 
 // --- Alunos ---

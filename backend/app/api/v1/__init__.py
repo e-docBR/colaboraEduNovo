@@ -12,6 +12,7 @@ def before_v1_request():
     PUBLIC_ENDPOINTS = {
         "api_v1.auth.login",
         "api_v1.auth.list_public_tenants",
+        "api_v1.auth.list_public_tenants_legacy",
         "api_v1.auth.forgot_password",
         "api_v1.auth.reset_password",
         "api_v1.usuarios.serve_photo",

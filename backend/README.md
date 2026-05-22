@@ -1,42 +1,46 @@
 # Backend — Plataforma Boletins Frei
 
 ## Visão Geral
-API Flask modular que expõe serviços acadêmicos (alunos, turmas, notas, relatórios, ingestão) mantendo compatibilidade com o pipeline atual de pdfplumber e SQLite. Esta pasta contém apenas a nova camada REST; a lógica de extração permanece em `importar_boletins.py`.
+API Flask multi-tenant para autenticação, gestão acadêmica, relatórios, ingestão e integrações operacionais.
 
-## Requisitos
-- Python 3.12+
-- pip / uv / Poetry (qualquer gerenciador que leia `pyproject.toml`)
-- SQLite 3.45+ (modo WAL habilitado)
+## Setup
+O workspace usa a virtualenv da raiz do repositório.
 
-## Setup Rápido
 ```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .[dev]
-cp .env.example .env
-# Inicializar banco de dados e migrações
-alembic upgrade head
-flask --app app run --debug
+cd /home/suporte/colaboraEduNovo
+python3 -m venv .venv
+./.venv/bin/pip install -e "backend[dev]"
 ```
 
-## Funcionalidades
-- **Autenticação**: Login JWT, refresh token, alteração de senha.
-- **Usuários**: Upload de foto de perfil, gestão de usuários.
-- **Acadêmico**: Alunos, Turmas, Notas, Relatórios.
-- **Ingestão**: Upload de boletins PDF.
+## Execução local
+```bash
+make backend
+make worker
+```
+
+## Autenticação
+- Web: `access_token` no body e `refresh_token` em cookie HttpOnly `rt`.
+- Mobile: `X-Client-Platform: mobile`, com `refresh_token` no body e refresh por `Authorization: Bearer <refresh_token>`.
+- `POST /api/v1/auth/logout` revoga access token e refresh token.
+
+## Validação
+```bash
+make doctor
+make validate-backend
+```
+
+Para testes focados de autenticação/health sem o gate global de cobertura:
+
+```bash
+./.venv/bin/python -m pytest --no-cov backend/tests/test_auth.py backend/tests/test_health.py
+```
 
 ## Estrutura
-```
+```text
 app/
   core/        # config, db, segurança
   api/         # blueprints organizados por domínio
-  services/    # regras de negócio (analytics, ingestão)
+  services/    # regras de negócio
   models/      # SQLAlchemy ORM
-  schemas/     # validação e serialização
+  schemas/     # contratos e serialização
 ```
-
-## Próximos Passos
-- Preencher os endpoints (ver `docs/api-contract.md`).
-- Acrescentar testes de integração com banco em memória.
-- Conectar ao pipeline real de ingestão assim que disponível.

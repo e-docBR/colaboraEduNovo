@@ -186,23 +186,29 @@ class AlunoService:
             return None
         
         from datetime import datetime
+        notas_list = [
+            {
+                "disciplina": n.disciplina,
+                "trimestre1": float(n.trimestre1) if n.trimestre1 is not None else None,
+                "trimestre2": float(n.trimestre2) if n.trimestre2 is not None else None,
+                "trimestre3": float(n.trimestre3) if n.trimestre3 is not None else None,
+                "total": float(n.total) if n.total is not None else None,
+                "recuperacao": float(n.recuperacao) if n.recuperacao is not None else None,
+                "conselho_de_classe": float(n.conselho_de_classe) if n.conselho_de_classe is not None else None,
+                "faltas": n.faltas or 0,
+                "situacao": n.situacao,
+            }
+            for n in notas
+        ]
+        total_faltas = sum(n["faltas"] for n in notas_list)
         return {
             "nome": aluno.nome,
             "matricula": aluno.matricula,
             "turma": aluno.turma,
             "turno": aluno.turno,
             "media": float(media) if media is not None else 0.0,
-            "notas": [
-                {
-                    "disciplina": n.disciplina,
-                    "trimestre1": float(n.trimestre1) if n.trimestre1 else None,
-                    "trimestre2": float(n.trimestre2) if n.trimestre2 else None,
-                    "trimestre3": float(n.trimestre3) if n.trimestre3 else None,
-                    "total": float(n.total) if n.total else None,
-                    "faltas": n.faltas,
-                    "situacao": n.situacao
-                } for n in notas
-            ],
-            "generated_at": datetime.now().strftime("%d/%m/%Y %H:%M")
+            "total_faltas": total_faltas,
+            "notas": notas_list,
+            "generated_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
         }
 

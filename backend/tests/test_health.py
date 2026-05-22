@@ -18,6 +18,12 @@ def test_health_endpoint(flask_app):
 def test_detailed_health_requires_super_admin(flask_app):
     client = flask_app.test_client()
     response = client.get("/health/detailed")
+    assert response.status_code == 401
+
+
+def test_detailed_health_rejects_non_super_admin(flask_app):
+    client = flask_app.test_client()
+    response = client.get("/health/detailed", headers=_headers_for(flask_app, "professor"))
     assert response.status_code == 403
     assert response.json["error"] == "Acesso restrito a Super Administradores"
 

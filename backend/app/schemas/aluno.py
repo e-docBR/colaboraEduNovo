@@ -8,6 +8,8 @@ class NotaBase(BaseModel):
     trimestre2: Optional[float] = None
     trimestre3: Optional[float] = None
     total: Optional[float] = None
+    recuperacao: Optional[float] = None
+    conselho_de_classe: Optional[float] = None
     faltas: Optional[int] = 0
     situacao: Optional[str] = None
 

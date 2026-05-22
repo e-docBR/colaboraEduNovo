@@ -2,9 +2,12 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Boletim Escolar — {{ aluno.nome }}</title>
+  <title>Boletim Escolar - {{ aluno.nome }}</title>
   <style>
-    /* === RESET & BASE === */
+    @page {
+      size: A4;
+      margin: 14mm 14mm 10mm 14mm;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: Arial, Helvetica, sans-serif;
@@ -13,89 +16,99 @@
       background: #ffffff;
     }
 
-    /* === PAGE LAYOUT === */
-    .page {
-      width: 210mm;
-      padding: 14mm 14mm 10mm;
-    }
-
-    /* === HEADER === */
-    .header {
-      display: flex;
-      align-items: center;
+    /* HEADER */
+    .header-wrap {
       border-bottom: 3px solid #1d4ed8;
       padding-bottom: 10px;
       margin-bottom: 14px;
     }
-    .header-logo {
-      width: 50px;
-      height: 50px;
-      background: #1d4ed8;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-size: 22px;
-      font-weight: bold;
-      flex-shrink: 0;
-      margin-right: 14px;
+    .header-tbl { width: 100%; border-collapse: collapse; }
+    .logo-cell {
+      width: 54px;
+      vertical-align: middle;
     }
-    .header-info h1 {
+    .logo-box {
+      width: 48px;
+      height: 48px;
+      background: #1d4ed8;
+      border-radius: 24px;
+      text-align: center;
+      padding-top: 12px;
+      color: #ffffff;
       font-size: 18px;
       font-weight: 800;
-      color: #1d4ed8;
-      letter-spacing: -0.3px;
     }
-    .header-info p {
-      font-size: 10px;
-      color: #64748b;
-      margin-top: 2px;
+    .title-cell { vertical-align: middle; padding-left: 10px; }
+    .title-cell h1 { font-size: 17px; font-weight: 800; color: #1d4ed8; }
+    .title-cell p  { font-size: 9px; color: #64748b; margin-top: 3px; }
+    .year-cell {
+      text-align: right;
+      vertical-align: middle;
+      white-space: nowrap;
     }
-    .header-year {
-      margin-left: auto;
-      font-size: 13px;
+    .year-badge {
+      display: inline-block;
+      font-size: 12px;
       font-weight: 700;
       color: #1d4ed8;
       border: 2px solid #1d4ed8;
-      padding: 6px 14px;
-      border-radius: 20px;
+      padding: 5px 14px;
+      border-radius: 16px;
     }
 
-    /* === STUDENT INFO === */
+    /* STUDENT CARD */
     .student-card {
       background: #f0f7ff;
       border: 1px solid #bfdbfe;
       border-left: 4px solid #1d4ed8;
       border-radius: 6px;
-      padding: 12px 16px;
-      margin-bottom: 16px;
-      display: flex;
-      gap: 24px;
+      padding: 10px 14px;
+      margin-bottom: 14px;
     }
-    .student-field {
-      display: flex;
-      flex-direction: column;
-    }
-    .student-field label {
-      font-size: 9px;
+    .student-tbl { width: 100%; border-collapse: collapse; }
+    .student-tbl td { vertical-align: top; padding-right: 12px; }
+    .field-lbl {
+      display: block;
+      font-size: 8px;
       font-weight: 700;
       color: #64748b;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      margin-bottom: 2px;
+      margin-bottom: 3px;
     }
-    .student-field span {
-      font-size: 12px;
+    .field-val { font-size: 12px; font-weight: 600; color: #0f172a; }
+    .field-val-name { font-size: 14px; font-weight: 800; }
+
+    /* SUMMARY BAR */
+    .summary-tbl {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 8px 0;
+      margin-bottom: 14px;
+    }
+    .summary-box {
+      border-radius: 8px;
+      padding: 10px 14px;
+      text-align: center;
+      border: 1px solid;
+    }
+    .s-gpa     { background: #eff6ff; border-color: #bfdbfe; }
+    .s-disc    { background: #f0fdf4; border-color: #bbf7d0; }
+    .s-faltas  { background: #fff7ed; border-color: #fed7aa; }
+    .s-val     { display: block; font-size: 20px; font-weight: 800; color: #1d4ed8; }
+    .s-val-disc   { color: #15803d; }
+    .s-val-faltas { color: #c2410c; }
+    .s-lbl {
+      display: block;
+      font-size: 9px;
       font-weight: 600;
-      color: #0f172a;
-    }
-    .student-name-field span {
-      font-size: 14px;
-      font-weight: 800;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-top: 3px;
     }
 
-    /* === SECTION TITLE === */
+    /* SECTION TITLE */
     .section-title {
       font-size: 10px;
       font-weight: 700;
@@ -107,238 +120,238 @@
       border-bottom: 1px solid #e2e8f0;
     }
 
-    /* === GRADES TABLE === */
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 18px;
-      font-size: 10.5px;
-    }
-    thead tr {
-      background: #1d4ed8;
-      color: white;
-    }
-    thead th {
-      padding: 8px 10px;
-      text-align: left;
+    /* GRADES TABLE */
+    table.grades { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+    table.grades thead tr { background: #1d4ed8; color: #ffffff; }
+    table.grades thead th {
+      padding: 7px 8px;
+      font-size: 9px;
       font-weight: 700;
-      font-size: 10px;
-      letter-spacing: 0.3px;
+      text-align: left;
+      letter-spacing: 0.2px;
     }
-    thead th:not(:first-child) { text-align: center; }
-    tbody tr:nth-child(even) { background: #f8fafc; }
-    tbody tr:hover { background: #f0f7ff; }
-    tbody td {
-      padding: 7px 10px;
+    table.grades thead th.center { text-align: center; }
+    table.grades tbody tr.even  { background: #f8fafc; }
+    table.grades tbody td {
+      padding: 6px 8px;
       border-bottom: 1px solid #e2e8f0;
+      font-size: 10.5px;
       color: #1e293b;
     }
-    tbody td:not(:first-child) { text-align: center; font-weight: 600; }
-    .td-disciplina { font-weight: 600; color: #0f172a; max-width: 140px; }
+    table.grades tbody td.center { text-align: center; font-weight: 600; }
+    .td-disciplina { font-weight: 600; color: #0f172a; }
+
+    /* Grade colours */
+    .g-ok   { color: #15803d; }
+    .g-bad  { color: #dc2626; }
+    .g-warn { color: #b45309; }
+    .g-na   { color: #94a3b8; }
+    .g-total { font-size: 12px; font-weight: 700; }
 
     /* Status badges */
     .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 10px;
+      display: inline;
+      padding: 2px 6px;
+      border-radius: 8px;
       font-size: 9px;
       font-weight: 700;
       text-transform: uppercase;
     }
-    .badge-aprovado { background: #dcfce7; color: #166534; }
-    .badge-reprovado { background: #fee2e2; color: #991b1b; }
-    .badge-recuperacao { background: #fef9c3; color: #854d0e; }
+    .b-apr  { background: #dcfce7; color: #166534; }
+    .b-rep  { background: #fee2e2; color: #991b1b; }
+    .b-rec  { background: #fef9c3; color: #854d0e; }
+    .b-out  { background: #f1f5f9; color: #475569; }
 
-    /* Grade coloring */
-    .grade-ok { color: #15803d; }
-    .grade-warn { color: #b45309; }
-    .grade-bad { color: #dc2626; }
-    .grade-na { color: #94a3b8; }
-
-    /* === SUMMARY BAR === */
-    .summary-bar {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 20px;
-    }
-    .summary-box {
-      flex: 1;
-      border-radius: 8px;
-      padding: 12px 16px;
-      text-align: center;
-      border: 1px solid;
-    }
-    .summary-box.gpa {
-      background: #eff6ff;
-      border-color: #bfdbfe;
-    }
-    .summary-box.disciplinas {
-      background: #f0fdf4;
-      border-color: #bbf7d0;
-    }
-    .summary-box.faltas {
-      background: #fff7ed;
-      border-color: #fed7aa;
-    }
-    .summary-box .val {
-      font-size: 22px;
-      font-weight: 800;
-      color: #1d4ed8;
-      display: block;
-    }
-    .summary-box.disciplinas .val { color: #15803d; }
-    .summary-box.faltas .val { color: #c2410c; }
-    .summary-box .lbl {
-      font-size: 9px;
-      font-weight: 600;
-      color: #64748b;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-top: 2px;
-      display: block;
-    }
-
-    /* === FOOTER === */
-    .footer {
+    /* FOOTER */
+    .footer-wrap {
       border-top: 1px solid #e2e8f0;
       padding-top: 10px;
       margin-top: 8px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
     }
-    .footer p { font-size: 9px; color: #94a3b8; }
-    .footer .signatures {
-      display: flex;
-      gap: 36px;
-    }
-    .signature {
-      text-align: center;
-    }
-    .signature .line {
-      width: 130px;
-      border-top: 1px solid #475569;
-      margin-bottom: 4px;
-    }
-    .signature p { font-size: 9px; color: #475569; }
+    .footer-tbl { width: 100%; border-collapse: collapse; }
+    .footer-note p { font-size: 9px; color: #94a3b8; margin-bottom: 3px; }
+    .sig-tbl { border-collapse: collapse; }
+    .sig-cell { text-align: center; padding: 0 16px; vertical-align: bottom; }
+    .sig-line { width: 120px; border-top: 1px solid #475569; margin-bottom: 4px; }
+    .sig-cell p { font-size: 9px; color: #475569; }
   </style>
 </head>
 <body>
-<div class="page">
 
   <!-- HEADER -->
-  <div class="header">
-    <div class="header-logo">🎓</div>
-    <div class="header-info">
-      <h1>{{ school_name }}</h1>
-      <p>Boletim Escolar Individual · Emitido em {{ aluno.generated_at }}</p>
-    </div>
-    <div class="header-year">Ano {{ year }}</div>
+  <div class="header-wrap">
+    <table class="header-tbl">
+      <tr>
+        <td class="logo-cell">
+          <div class="logo-box">{{ school_name[0] | upper }}</div>
+        </td>
+        <td class="title-cell">
+          <h1>{{ school_name }}</h1>
+          <p>Boletim Escolar Individual &middot; Emitido em {{ aluno.generated_at }}</p>
+        </td>
+        <td class="year-cell">
+          <span class="year-badge">Ano Letivo {{ year }}</span>
+        </td>
+      </tr>
+    </table>
   </div>
 
   <!-- STUDENT CARD -->
   <div class="student-card">
-    <div class="student-field student-name-field" style="flex: 2">
-      <label>Nome do Aluno</label>
-      <span>{{ aluno.nome }}</span>
-    </div>
-    <div class="student-field">
-      <label>Matrícula</label>
-      <span>{{ aluno.matricula or '—' }}</span>
-    </div>
-    <div class="student-field">
-      <label>Turma</label>
-      <span>{{ aluno.turma }}</span>
-    </div>
-    <div class="student-field">
-      <label>Turno</label>
-      <span>{{ aluno.turno | title }}</span>
-    </div>
+    <table class="student-tbl">
+      <tr>
+        <td style="width:38%">
+          <span class="field-lbl">Nome do Aluno</span>
+          <span class="field-val field-val-name">{{ aluno.nome }}</span>
+        </td>
+        <td style="width:20%">
+          <span class="field-lbl">Matrícula</span>
+          <span class="field-val">{{ aluno.matricula or '—' }}</span>
+        </td>
+        <td style="width:22%">
+          <span class="field-lbl">Turma</span>
+          <span class="field-val">{{ aluno.turma }}</span>
+        </td>
+        <td style="width:20%">
+          <span class="field-lbl">Turno</span>
+          <span class="field-val">{{ aluno.turno | title }}</span>
+        </td>
+      </tr>
+    </table>
   </div>
 
   <!-- SUMMARY BAR -->
-  <div class="summary-bar">
-    <div class="summary-box gpa">
-      <span class="val">{{ "%.1f" | format(aluno.media) }}</span>
-      <span class="lbl">Média Geral</span>
-    </div>
-    <div class="summary-box disciplinas">
-      <span class="val">{{ aluno.notas | length }}</span>
-      <span class="lbl">Disciplinas</span>
-    </div>
-    <div class="summary-box faltas">
-      <span class="val">{{ aluno.notas | sum(attribute='faltas') }}</span>
-      <span class="lbl">Faltas Totais</span>
-    </div>
-  </div>
+  <table class="summary-tbl">
+    <tr>
+      <td style="width:50%">
+        <div class="summary-box s-gpa">
+          <span class="s-val">
+            {{ "%.0f" | format(aluno.media) }}
+            <span style="font-size:13px; font-weight:600">/ 100 pts</span>
+          </span>
+          <span class="s-lbl">Média Geral &middot; Aprovação: mín. 50 pts</span>
+        </div>
+      </td>
+      <td style="width:25%; padding-left:8px">
+        <div class="summary-box s-disc">
+          <span class="s-val s-val-disc">{{ aluno.notas | length }}</span>
+          <span class="s-lbl">Disciplinas</span>
+        </div>
+      </td>
+      <td style="width:25%; padding-left:8px">
+        <div class="summary-box s-faltas">
+          <span class="s-val s-val-faltas">{{ aluno.total_faltas }}</span>
+          <span class="s-lbl">Faltas Totais</span>
+        </div>
+      </td>
+    </tr>
+  </table>
 
   <!-- GRADES TABLE -->
-  <div class="section-title">Desempenho por Disciplina</div>
-  <table>
+  <div class="section-title">Componentes Curriculares</div>
+  <table class="grades">
     <thead>
       <tr>
-        <th>Disciplina</th>
-        <th>1º Trim.</th>
-        <th>2º Trim.</th>
-        <th>3º Trim.</th>
-        <th>Média Final</th>
-        <th>Faltas</th>
-        <th>Situação</th>
+        <th style="width:26%">Disciplina</th>
+        <th class="center">1&ordm; Trim.<br><span style="font-weight:400; font-size:8px">(máx. 30)</span></th>
+        <th class="center">2&ordm; Trim.<br><span style="font-weight:400; font-size:8px">(máx. 30)</span></th>
+        <th class="center">3&ordm; Trim.<br><span style="font-weight:400; font-size:8px">(máx. 40)</span></th>
+        <th class="center">Total<br><span style="font-weight:400; font-size:8px">(máx. 100)</span></th>
+        <th class="center">Recup.</th>
+        <th class="center">C. Classe</th>
+        <th class="center">Faltas</th>
+        <th class="center">Situação</th>
       </tr>
     </thead>
     <tbody>
       {% for nota in aluno.notas %}
-      <tr>
+      <tr class="{{ 'even' if loop.index is even else '' }}">
+
         <td class="td-disciplina">{{ nota.disciplina | title }}</td>
-        <td class="{{ 'grade-ok' if nota.trimestre1 and nota.trimestre1 >= 50 else ('grade-bad' if nota.trimestre1 else 'grade-na') }}">
+
+        {# Trimestre 1 — mínimo 15 #}
+        <td class="center {% if nota.trimestre1 is not none %}{% if nota.trimestre1 >= 15 %}g-ok{% else %}g-bad{% endif %}{% else %}g-na{% endif %}">
           {{ "%.1f" | format(nota.trimestre1) if nota.trimestre1 is not none else '—' }}
         </td>
-        <td class="{{ 'grade-ok' if nota.trimestre2 and nota.trimestre2 >= 50 else ('grade-bad' if nota.trimestre2 else 'grade-na') }}">
+
+        {# Trimestre 2 — mínimo 15 #}
+        <td class="center {% if nota.trimestre2 is not none %}{% if nota.trimestre2 >= 15 %}g-ok{% else %}g-bad{% endif %}{% else %}g-na{% endif %}">
           {{ "%.1f" | format(nota.trimestre2) if nota.trimestre2 is not none else '—' }}
         </td>
-        <td class="{{ 'grade-ok' if nota.trimestre3 and nota.trimestre3 >= 50 else ('grade-bad' if nota.trimestre3 else 'grade-na') }}">
+
+        {# Trimestre 3 — mínimo 20 #}
+        <td class="center {% if nota.trimestre3 is not none %}{% if nota.trimestre3 >= 20 %}g-ok{% else %}g-bad{% endif %}{% else %}g-na{% endif %}">
           {{ "%.1f" | format(nota.trimestre3) if nota.trimestre3 is not none else '—' }}
         </td>
-        <td class="{{ 'grade-ok' if nota.total and nota.total >= 50 else 'grade-bad' }}" style="font-size: 12px;">
+
+        {# Total — mínimo 50 #}
+        <td class="center g-total {% if nota.total is not none %}{% if nota.total >= 50 %}g-ok{% else %}g-bad{% endif %}{% else %}g-na{% endif %}">
           {{ "%.1f" | format(nota.total) if nota.total is not none else '—' }}
         </td>
-        <td>{{ nota.faltas or 0 }}</td>
-        <td>
+
+        {# Recuperação #}
+        <td class="center g-warn">
+          {{ "%.1f" | format(nota.recuperacao) if nota.recuperacao is not none else '—' }}
+        </td>
+
+        {# Conselho de Classe #}
+        <td class="center g-na">
+          {{ "%.1f" | format(nota.conselho_de_classe) if nota.conselho_de_classe is not none else '—' }}
+        </td>
+
+        <td class="center">{{ nota.faltas or 0 }}</td>
+
+        <td class="center">
           {% if nota.situacao %}
-            {% if nota.situacao | lower == 'aprovado' %}
-              <span class="badge badge-aprovado">Aprovado</span>
-            {% elif nota.situacao | lower == 'reprovado' %}
-              <span class="badge badge-reprovado">Reprovado</span>
+            {% set sit = nota.situacao | upper | trim %}
+            {% if sit == 'APR' %}
+              <span class="badge b-apr">APR</span>
+            {% elif sit == 'REP' or sit == 'DPC' %}
+              <span class="badge b-rep">REP</span>
+            {% elif sit in ('APCC', 'ACC', 'AR', 'AFC') %}
+              <span class="badge b-apr">ACC</span>
+            {% elif sit in ('REC', 'EMR') %}
+              <span class="badge b-rec">{{ sit }}</span>
+            {% elif sit == 'EMC' %}
+              <span class="badge b-out">EMC</span>
             {% else %}
-              <span class="badge badge-recuperacao">{{ nota.situacao }}</span>
+              <span class="badge b-out">{{ sit }}</span>
             {% endif %}
           {% else %}
-            <span class="grade-na">—</span>
+            <span class="g-na">—</span>
           {% endif %}
         </td>
+
       </tr>
       {% endfor %}
     </tbody>
   </table>
 
   <!-- FOOTER -->
-  <div class="footer">
-    <div>
-      <p>Documento gerado automaticamente pelo sistema ColaboraEdu.</p>
-      <p>{{ school_name }} · Ano Letivo {{ year }}</p>
-    </div>
-    <div class="signatures">
-      <div class="signature">
-        <div class="line"></div>
-        <p>Diretor(a)</p>
-      </div>
-      <div class="signature">
-        <div class="line"></div>
-        <p>Secretaria Escolar</p>
-      </div>
-    </div>
+  <div class="footer-wrap">
+    <table class="footer-tbl">
+      <tr>
+        <td class="footer-note" style="vertical-align:bottom">
+          <p>Documento gerado automaticamente pelo sistema ColaboraEdu.</p>
+          <p>{{ school_name }} &middot; Ano Letivo {{ year }}</p>
+        </td>
+        <td style="text-align:right; vertical-align:bottom">
+          <table class="sig-tbl">
+            <tr>
+              <td class="sig-cell">
+                <div class="sig-line"></div>
+                <p>Diretor(a)</p>
+              </td>
+              <td class="sig-cell">
+                <div class="sig-line"></div>
+                <p>Secretaria Escolar</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
   </div>
 
-</div>
 </body>
 </html>

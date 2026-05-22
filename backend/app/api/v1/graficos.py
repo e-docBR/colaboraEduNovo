@@ -5,7 +5,7 @@ from typing import Callable
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from ...core.database import session_scope
@@ -28,6 +28,7 @@ def _normalize_disciplina(nome: str | None) -> str:
     chave = nome.strip().upper()
     return DISCIPLINA_NORMALIZACAO.get(chave, nome.strip())
 
+
 GraphBuilder = Callable[
     [Session, str | None, str | None, str | None, str | None, str | None],
     list[dict[str, object]],
@@ -40,7 +41,7 @@ def register(parent: Blueprint) -> None:
     @bp.get("/graficos/<string:slug>")
     @jwt_required()
     @require_roles("admin", "super_admin", "coordenador", "diretor", "orientador", "professor")
-    @cache_response(timeout=600, key_prefix="graficos")
+    @cache_response(timeout=300, key_prefix="graficos")
     def get_grafico(slug: str):
         builder = GRAPH_BUILDERS.get(slug)
         if not builder:
@@ -66,6 +67,10 @@ TRIMESTRE_COLUMNS = {
     "3": Nota.trimestre3,
 }
 
+_ABAIXO_THRESHOLD: dict[str, int] = {
+    "1": 15, "2": 15, "3": 20, "final": 50,
+}
+
 
 def _resolve_trimestre_column(trimestre: str | None):
     if trimestre in TRIMESTRE_COLUMNS:
@@ -77,12 +82,12 @@ def _apply_common_filters(query, turno: str | None, serie: str | None, turma: st
     from flask import g
     tenant_id = getattr(g, "tenant_id", None)
     year_id = getattr(g, "academic_year_id", None)
-    
+
     if tenant_id:
         query = query.filter(Aluno.tenant_id == tenant_id)
     if year_id:
         query = query.filter(Aluno.academic_year_id == year_id)
-        
+
     if turno:
         query = query.filter(Aluno.turno == turno)
     if serie:
@@ -93,6 +98,93 @@ def _apply_common_filters(query, turno: str | None, serie: str | None, turma: st
         query = query.filter(Nota.disciplina.ilike(f"%{disciplina}%"))
     return query
 
+
+# ── Agrupamento de situação para o gráfico de rosca ─────────────────────────
+
+_SITUACAO_GRUPO = {
+    "APR":  "Aprovado",
+    "APCC": "Aprovado",
+    "AR":   "Aprovado",
+    "AFC":  "Aprovado",
+    "REP":  "Reprovado",
+    "DPC":  "Reprovado",
+    "REC":  "Em Recuperação",
+    "EMR":  "Em Recuperação",
+    "EMC":  "Em Curso",
+    "TRN":  "Transferido",
+    "ABA":  "Abandono",
+}
+
+
+def _situacao_distribuicao(
+    session,
+    turno: str | None,
+    serie: str | None,
+    turma: str | None,
+    _trimestre: str | None,
+    _disciplina: str | None,
+):
+    """Distribuição de alunos por grupo de situação (Aprovado / Em Recuperação / Reprovado / Em Curso / …)."""
+    from flask import g
+    tenant_id = getattr(g, "tenant_id", None)
+    year_id   = getattr(g, "academic_year_id", None)
+
+    query = session.query(Nota.aluno_id, Nota.situacao, Aluno.status)
+    query = query.join(Aluno, Nota.aluno_id == Aluno.id)
+    if tenant_id:
+        query = query.filter(Nota.tenant_id == tenant_id)
+    if year_id:
+        query = query.filter(Nota.academic_year_id == year_id)
+    if turno:
+        query = query.filter(Aluno.turno == turno)
+    if serie:
+        query = query.filter(Aluno.turma.ilike(f"{serie}%"))
+    if turma:
+        query = query.filter(Aluno.turma == turma)
+
+    # Acumula situações por aluno (1 aluno pode ter várias disciplinas)
+    aluno_situacoes: dict[int, set[str]] = {}
+    aluno_status:    dict[int, str]       = {}
+
+    for aluno_id, nota_sit, student_status in query.all():
+        if student_status:
+            aluno_status[aluno_id] = student_status
+        if nota_sit:
+            aluno_situacoes.setdefault(aluno_id, set()).add(nota_sit.strip().upper())
+
+    counts: dict[str, int] = {}
+
+    for aluno_id, situacoes in aluno_situacoes.items():
+        # Alunos com status administrativo (TRN, ABA, …) têm prioridade
+        if aluno_id in aluno_status:
+            grupo = _SITUACAO_GRUPO.get(aluno_status[aluno_id].upper(), "Outros")
+            counts[grupo] = counts.get(grupo, 0) + 1
+            continue
+
+        # Classifica pelo "pior" status acadêmico entre as disciplinas
+        if situacoes & {"REP", "DPC"}:
+            grupo = "Reprovado"
+        elif situacoes & {"REC", "EMR"}:
+            grupo = "Em Recuperação"
+        elif situacoes & {"APR", "APCC", "AR", "AFC"}:
+            grupo = "Aprovado"
+        elif situacoes & {"EMC"}:
+            grupo = "Em Curso"
+        else:
+            grupo = "Outros"
+
+        counts[grupo] = counts.get(grupo, 0) + 1
+
+    # Ordem de exibição natural
+    ORDER = ["Aprovado", "Em Recuperação", "Reprovado", "Em Curso", "Abandono", "Transferido", "Outros"]
+    return [
+        {"situacao": grupo, "total": counts[grupo]}
+        for grupo in ORDER
+        if grupo in counts
+    ]
+
+
+# ── Disciplinas: média por disciplina ────────────────────────────────────────
 
 def _disciplinas_medias(
     session,
@@ -113,22 +205,23 @@ def _disciplinas_medias(
     query = query.group_by(Nota.disciplina)
 
     agregados: dict[str, dict[str, float]] = {}
-    for disciplina, soma, quantidade in query.all():
-        disciplina_normalizada = _normalize_disciplina(disciplina)
-        bucket = agregados.setdefault(disciplina_normalizada, {"soma": 0.0, "quantidade": 0})
+    for disc, soma, quantidade in query.all():
+        disc_norm = _normalize_disciplina(disc)
+        bucket = agregados.setdefault(disc_norm, {"soma": 0.0, "quantidade": 0})
         bucket["soma"] += float(soma or 0.0)
         bucket["quantidade"] += int(quantidade or 0)
 
-    resultados = []
-    for disciplina_normalizada, valores in agregados.items():
-        media_final = valores["soma"] / valores["quantidade"] if valores["quantidade"] else 0.0
-        resultados.append({"disciplina": disciplina_normalizada, "media": round(media_final, 2)})
-
-    resultados.sort(key=lambda item: item["media"], reverse=True)
+    resultados = [
+        {"disciplina": d, "media": round(v["soma"] / v["quantidade"], 2) if v["quantidade"] else 0.0}
+        for d, v in agregados.items()
+    ]
+    resultados.sort(key=lambda x: x["media"])  # crescente: piores primeiro → útil para diagnóstico
     return resultados
 
 
-def _turmas_trimestre(
+# ── Médias por trimestre (evolução) ──────────────────────────────────────────
+
+def _medias_por_trimestre(
     session,
     turno: str | None,
     serie: str | None,
@@ -136,79 +229,159 @@ def _turmas_trimestre(
     _trimestre: str | None,
     disciplina: str | None,
 ):
-    results: list[dict[str, object]] = []
-    for trimestre, column in TRIMESTRE_COLUMNS.items():
+    # Retorna também os limites de cada trimestre para referência no gráfico
+    TRIMESTRE_META = {"1": 15, "2": 30, "3": 50}
+    TRIMESTRE_MAX  = {"1": 30, "2": 30, "3": 40}
+
+    resultados: list[dict[str, object]] = []
+    for t_key, column in TRIMESTRE_COLUMNS.items():
         query = session.query(func.avg(column))
         query = query.join(Aluno)
         query = _apply_common_filters(query, turno, serie, turma, disciplina)
         media = query.scalar()
-        results.append({"trimestre": f"{trimestre}º", "media": round(float(media), 2) if media else 0.0})
+        resultados.append({
+            "trimestre": f"{t_key}º Trim.",
+            "media":     round(float(media), 1) if media else 0.0,
+            "meta":      TRIMESTRE_META[t_key],
+            "max_pts":   TRIMESTRE_MAX[t_key],
+        })
+    return resultados
+
+
+# ── Evolução por turno ao longo dos trimestres ───────────────────────────────
+
+def _evolucao_turnos(
+    session: Session,
+    _turno: str | None,
+    serie: str | None,
+    _turma: str | None,
+    _trimestre: str | None,
+    disciplina: str | None,
+):
+    """Média por trimestre para cada turno detectado dinamicamente."""
+    from flask import g
+    tenant_id = getattr(g, "tenant_id", None)
+    year_id   = getattr(g, "academic_year_id", None)
+
+    # Detecta os turnos realmente existentes
+    q_turnos = session.query(func.distinct(Aluno.turno)).filter(Aluno.turno.isnot(None))
+    if tenant_id:
+        q_turnos = q_turnos.filter(Aluno.tenant_id == tenant_id)
+    if year_id:
+        q_turnos = q_turnos.filter(Aluno.academic_year_id == year_id)
+    turnos = sorted([r[0] for r in q_turnos.all() if r[0]])
+
+    periodos = [("1º", Nota.trimestre1), ("2º", Nota.trimestre2), ("3º", Nota.trimestre3)]
+    results = []
+
+    for periodo_label, col in periodos:
+        row: dict[str, object] = {"periodo": periodo_label}
+        for turno_nome in turnos:
+            q = session.query(func.avg(col)).join(Aluno).filter(Aluno.turno == turno_nome)
+            if tenant_id:
+                q = q.filter(Aluno.tenant_id == tenant_id)
+            if year_id:
+                q = q.filter(Aluno.academic_year_id == year_id)
+            if serie:
+                q = q.filter(Aluno.turma.ilike(f"{serie}%"))
+            if disciplina:
+                q = q.filter(Nota.disciplina.ilike(f"%{disciplina}%"))
+            media = q.scalar()
+            row[turno_nome] = round(float(media), 1) if media else 0.0
+        results.append(row)
+
     return results
 
 
-def _situacao_distribuicao(
-    session,
+# ── Gauss: distribuição de pontos totais ─────────────────────────────────────
+
+def _gauss_escola(
+    session: Session,
+    turno: str | None,
+    serie: str | None,
+    turma: str | None,
+    trimestre: str | None,
+    disciplina: str | None,
+):
+    """Histograma de alunos por faixa de pontuação total (0-100)."""
+    # Média por aluno (para contar um aluno uma vez, não por disciplina)
+    subq = (
+        session.query(Nota.aluno_id, func.avg(Nota.total).label("media"))
+        .join(Aluno)
+    )
+    subq = _apply_common_filters(subq, turno, serie, turma, disciplina)
+    subq = subq.group_by(Nota.aluno_id).subquery()
+
+    FAIXAS = [
+        ("0–10",   0,  10),
+        ("11–20",  10, 20),
+        ("21–30",  20, 30),
+        ("31–40",  30, 40),
+        ("41–50",  40, 50),
+        ("51–60",  50, 60),
+        ("61–70",  60, 70),
+        ("71–80",  70, 80),
+        ("81–90",  80, 90),
+        ("91–100", 90, 101),
+    ]
+
+    faixa_col = case(
+        *[
+            (subq.c.media.between(low, high - 0.01), label)
+            for label, low, high in FAIXAS
+        ],
+        else_="91–100",
+    ).label("faixa")
+
+    from sqlalchemy import select as sa_select
+    stm = (
+        sa_select(faixa_col, func.count().label("alunos"))
+        .select_from(subq)
+        .group_by(faixa_col)
+    )
+
+    raw: dict[str, int] = {label: 0 for label, *_ in FAIXAS}
+    for row in session.execute(stm).all():
+        raw[row.faixa] = int(row.alunos)
+
+    return [{"faixa": label, "alunos": raw.get(label, 0)} for label, *_ in FAIXAS]
+
+
+# ── Correlação frequência × nota ─────────────────────────────────────────────
+
+def _correlacao_frequencia(
+    session: Session,
     turno: str | None,
     serie: str | None,
     turma: str | None,
     _trimestre: str | None,
-    _disciplina: str | None,
+    disciplina: str | None,
 ):
-    # Conta alunos únicos por situação
-    # Prioridade: Status do Aluno (Desistente, Transferido) > Status das Notas (Reprovado, Aprovado)
-    
-    # Busca todas as notas e o status do aluno
-    query = session.query(Nota.aluno_id, Nota.situacao, Aluno.status)
-    query = query.join(Aluno, Nota.aluno_id == Aluno.id)
-    query = _apply_common_filters(query, turno, serie, turma, None)
-    
-    aluno_grades_status: dict[int, set[str]] = {}
-    aluno_special_status: dict[int, str] = {}
-    
-    STATUS_REPROVADO = {"REP", "REC", "REPROVADO"}
-    STATUS_APROVADO = {"APR", "APROVADO", "AR", "ACC", "APCC"}
-    
-    for aluno_id, grade_situacao, student_status in query.all():
-        if aluno_id not in aluno_grades_status:
-            aluno_grades_status[aluno_id] = set()
-        
-        # Capture special status if present
-        if student_status:
-            aluno_special_status[aluno_id] = student_status
-            
-        if grade_situacao:
-            aluno_grades_status[aluno_id].add(grade_situacao.upper())
-            
-    # Determinar status final de cada aluno
-    final_counts: dict[str, int] = {}
-    
-    # Get all unique student IDs found
-    all_student_ids = set(aluno_grades_status.keys())
-    
-    for aluno_id in all_student_ids:
-        # 1. Special Status (Administrative)
-        if aluno_id in aluno_special_status:
-            status = aluno_special_status[aluno_id]
-            # Normalize common terms if needed, or keep as is
-            final_counts[status] = final_counts.get(status, 0) + 1
-            continue
-            
-        # 2. Grade-based Status (Academic)
-        status_set = aluno_grades_status[aluno_id]
-        label = "Outros"
-        
-        if not status_set.isdisjoint(STATUS_REPROVADO):
-            label = "Reprovado" # or Recuperação
-        elif not status_set.isdisjoint(STATUS_APROVADO):
-            label = "Aprovado"
-            
-        final_counts[label] = final_counts.get(label, 0) + 1
-    
-    return [
-        {"situacao": label, "total": quantidade}
-        for label, quantidade in sorted(final_counts.items())
-    ]
+    query = (
+        session.query(
+            Aluno.id,
+            Aluno.nome,
+            Aluno.turma,
+            func.avg(Nota.total).label("media"),
+            func.sum(Nota.faltas).label("faltas"),
+        )
+        .join(Nota)
+    )
+    query = _apply_common_filters(query, turno, serie, turma, disciplina)
+    query = query.group_by(Aluno.id, Aluno.nome, Aluno.turma).limit(400)
 
+    results = []
+    for _, nome, turma_aluno, media, faltas in query.all():
+        results.append({
+            "nome":    nome,
+            "turma":   turma_aluno,
+            "media":   round(float(media or 0), 1),
+            "faltas":  int(faltas or 0),
+        })
+    return results
+
+
+# ── Faltas por turma ──────────────────────────────────────────────────────────
 
 def _faltas_por_turma(
     session,
@@ -219,18 +392,29 @@ def _faltas_por_turma(
     _disciplina: str | None,
 ):
     query = (
-        session.query(Aluno.turma, func.sum(Nota.faltas).label("faltas"))
+        session.query(
+            Aluno.turma,
+            func.sum(Nota.faltas).label("faltas"),
+            func.count(func.distinct(Aluno.id)).label("alunos"),
+        )
         .join(Nota)
         .group_by(Aluno.turma)
         .order_by(func.sum(Nota.faltas).desc())
     )
     query = _apply_common_filters(query, turno, serie, turma, None)
-    results = query.limit(10).all()
+    results = query.limit(15).all()
     return [
-        {"turma": turma_nome, "faltas": int(faltas or 0)}
-        for turma_nome, faltas in results
+        {
+            "turma":         turma_nome,
+            "faltas":        int(faltas or 0),
+            "alunos":        int(alunos or 0),
+            "media_faltas":  round(int(faltas or 0) / int(alunos), 1) if alunos else 0.0,
+        }
+        for turma_nome, faltas, alunos in results
     ]
 
+
+# ── Heatmap disciplina × turma ────────────────────────────────────────────────
 
 def _heatmap_disciplinas(
     session,
@@ -247,29 +431,28 @@ def _heatmap_disciplinas(
     query = query.group_by(Aluno.turma, Nota.disciplina)
 
     agregados: dict[tuple[str, str], dict[str, float]] = {}
-    for turma_nome, disciplina, media in query.all():
-        disciplina_normalizada = _normalize_disciplina(disciplina)
-        chave = (turma_nome, disciplina_normalizada)
+    for turma_nome, disc, media in query.all():
+        disc_norm = _normalize_disciplina(disc)
+        chave = (turma_nome, disc_norm)
         bucket = agregados.setdefault(chave, {"soma": 0.0, "quantidade": 0})
-        bucket["soma"] += float(media or 0.0)
+        bucket["soma"]       += float(media or 0.0)
         bucket["quantidade"] += 1
 
-    resultados = []
-    for (turma_nome, disciplina_normalizada), valores in agregados.items():
-        media_final = valores["soma"] / valores["quantidade"] if valores["quantidade"] else 0.0
-        resultados.append(
-            {
-                "turma": turma_nome,
-                "disciplina": disciplina_normalizada,
-                "media": round(media_final, 2),
-            }
-        )
-
-    resultados.sort(key=lambda item: (item["turma"], item["disciplina"]))
+    resultados = [
+        {
+            "turma":      turma_nome,
+            "disciplina": disc_norm,
+            "media":      round(v["soma"] / v["quantidade"], 1) if v["quantidade"] else 0.0,
+        }
+        for (turma_nome, disc_norm), v in agregados.items()
+    ]
+    resultados.sort(key=lambda x: (x["turma"], x["disciplina"]))
     return resultados
 
 
-def _medias_por_trimestre(
+# ── Turmas × trimestre (evolução por turma) ───────────────────────────────────
+
+def _turmas_trimestre(
     session,
     turno: str | None,
     serie: str | None,
@@ -277,22 +460,83 @@ def _medias_por_trimestre(
     _trimestre: str | None,
     disciplina: str | None,
 ):
-    resultados: list[dict[str, object]] = []
-    for trimestre_label, column in TRIMESTRE_COLUMNS.items():
+    results: list[dict[str, object]] = []
+    for t_key, column in TRIMESTRE_COLUMNS.items():
         query = session.query(func.avg(column))
         query = query.join(Aluno)
         query = _apply_common_filters(query, turno, serie, turma, disciplina)
         media = query.scalar()
-        resultados.append(
-            {
-                "trimestre": f"{trimestre_label}º",
-                "media": round(float(media), 2) if media else 0.0,
-            }
+        results.append({"trimestre": f"{t_key}º", "media": round(float(media), 2) if media else 0.0})
+    return results
+
+
+# ── Aprovação por turma ───────────────────────────────────────────────────────
+
+def _aprovacao_por_turma(
+    session: Session,
+    turno: str | None,
+    serie: str | None,
+    turma: str | None,
+    _trimestre: str | None,
+    _disciplina: str | None,
+):
+    """Taxa de aprovação (média ≥ threshold) por turma, com ranking."""
+    from flask import g
+    from ...services.analytics import get_grading_stage
+
+    tenant_id = getattr(g, "tenant_id", None)
+    year_id   = getattr(g, "academic_year_id", None)
+    stage     = get_grading_stage(session, tenant_id, year_id)
+    threshold = stage["threshold"]
+
+    # Subquery: média total por aluno
+    subq = (
+        session.query(
+            Aluno.turma,
+            Nota.aluno_id,
+            func.avg(Nota.total).label("media"),
         )
-    return resultados
+        .join(Aluno)
+    )
+    if tenant_id:
+        subq = subq.filter(Nota.tenant_id == tenant_id)
+    if year_id:
+        subq = subq.filter(Nota.academic_year_id == year_id)
+    if turno:
+        subq = subq.filter(Aluno.turno == turno)
+    if serie:
+        subq = subq.filter(Aluno.turma.ilike(f"{serie}%"))
+    if turma:
+        subq = subq.filter(Aluno.turma == turma)
+    subq = subq.group_by(Aluno.turma, Nota.aluno_id).subquery()
+
+    rows = (
+        session.query(
+            subq.c.turma,
+            func.count().label("total"),
+            func.sum(case((subq.c.media >= threshold, 1), else_=0)).label("aprovados"),
+            func.sum(case((subq.c.media < threshold, 1), else_=0)).label("em_risco"),
+            func.avg(subq.c.media).label("media_turma"),
+        )
+        .group_by(subq.c.turma)
+        .order_by(func.avg(subq.c.media).desc())
+        .all()
+    )
+
+    return [
+        {
+            "turma":          r.turma,
+            "total":          int(r.total),
+            "aprovados":      int(r.aprovados),
+            "em_risco":       int(r.em_risco),
+            "taxa_aprovacao": round(int(r.aprovados) / int(r.total) * 100, 1) if r.total else 0.0,
+            "media":          round(float(r.media_turma), 1) if r.media_turma else 0.0,
+        }
+        for r in rows
+    ]
 
 
-def _gauss_escola(
+def _abaixo_por_disciplina(
     session: Session,
     turno: str | None,
     serie: str | None,
@@ -300,98 +544,154 @@ def _gauss_escola(
     trimestre: str | None,
     disciplina: str | None,
 ):
-    column = _resolve_trimestre_column(trimestre)
-    query = session.query(column)
-    query = query.join(Aluno)
+    """Disciplinas com mais registros abaixo do threshold do trimestre selecionado."""
+    col = _resolve_trimestre_column(trimestre)
+    threshold = _ABAIXO_THRESHOLD.get(trimestre or "", 50)
+
+    query = (
+        session.query(
+            Nota.disciplina,
+            func.count().label("registros"),
+            func.sum(case((col < threshold, 1), else_=0)).label("abaixo"),
+        )
+        .join(Aluno)
+        .filter(col.isnot(None))
+    )
     query = _apply_common_filters(query, turno, serie, turma, disciplina)
-    
-    notas = [n[0] for n in query.all() if n[0] is not None]
-    
-    # Distribuição em faixas de 0 a 100
-    faixas = [
-        {"faixa": f"{i}-{i+10}", "alunos": 0}
-        for i in range(0, 100, 10)
+    query = (
+        query.group_by(Nota.disciplina)
+        .having(func.sum(case((col < threshold, 1), else_=0)) > 0)
+        .order_by(func.sum(case((col < threshold, 1), else_=0)).desc())
+    )
+
+    return [
+        {
+            "disciplina": _normalize_disciplina(r.disciplina),
+            "registros":  int(r.registros),
+            "abaixo":     int(r.abaixo),
+            "percentual": round(int(r.abaixo) / int(r.registros) * 100, 1) if r.registros else 0.0,
+        }
+        for r in query.all()
     ]
-    
-    for nota in notas:
-        idx = min(int(nota // 10), 9)
-        faixas[idx]["alunos"] += 1
-        
-    return faixas
 
 
-def _correlacao_frequencia(
+def _abaixo_por_turma(
     session: Session,
     turno: str | None,
     serie: str | None,
     turma: str | None,
-    _trimestre: str | None,
+    trimestre: str | None,
     disciplina: str | None,
 ):
-    # Correlação entre média global (ou da disciplina) e presença
-    query = session.query(
-        Aluno.id,
-        func.avg(Nota.total).label("media"),
-        func.avg(Nota.faltas).label("faltas")
+    """Por turma: alunos com ao menos uma disciplina abaixo do threshold vs acima."""
+    from flask import g
+
+    col = _resolve_trimestre_column(trimestre)
+    threshold = _ABAIXO_THRESHOLD.get(trimestre or "", 50)
+    tenant_id = getattr(g, "tenant_id", None)
+    year_id   = getattr(g, "academic_year_id", None)
+
+    # Subquery: nota mínima por aluno (qualquer disciplina abaixo ⇒ em risco)
+    subq = (
+        session.query(
+            Aluno.turma,
+            Nota.aluno_id,
+            func.min(col).label("nota_min"),
+        )
+        .join(Aluno, Nota.aluno_id == Aluno.id)
+        .filter(col.isnot(None))
     )
-    query = query.join(Nota)
-    query = _apply_common_filters(query, turno, serie, turma, disciplina)
-    query = query.group_by(Aluno.id)
-    
-    results = []
-    for _, media, faltas in query.all():
-        # Cálculo simples de frequência: 100% - (faltas / 20 * 100)
-        # Assumindo 20 dias letivos por disciplina/mês ou algo similar para visualização
-        freq = max(0, 100 - (float(faltas or 0) * 2)) 
-        results.append({
-            "media": round(float(media or 0), 1),
-            "frequencia": round(freq, 1)
-        })
-    return results
+    if tenant_id:
+        subq = subq.filter(Nota.tenant_id == tenant_id)
+    if year_id:
+        subq = subq.filter(Nota.academic_year_id == year_id)
+    if turno:
+        subq = subq.filter(Aluno.turno == turno)
+    if serie:
+        subq = subq.filter(Aluno.turma.ilike(f"{serie}%"))
+    if turma:
+        subq = subq.filter(Aluno.turma == turma)
+    if disciplina:
+        subq = subq.filter(Nota.disciplina.ilike(f"%{disciplina}%"))
+    subq = subq.group_by(Aluno.turma, Nota.aluno_id).subquery()
+
+    rows = (
+        session.query(
+            subq.c.turma,
+            func.count().label("total"),
+            func.sum(case((subq.c.nota_min < threshold, 1), else_=0)).label("abaixo"),
+        )
+        .group_by(subq.c.turma)
+        .order_by(func.sum(case((subq.c.nota_min < threshold, 1), else_=0)).desc())
+        .all()
+    )
+
+    return [
+        {
+            "turma":      r.turma,
+            "total":      int(r.total),
+            "abaixo":     int(r.abaixo),
+            "acima":      int(r.total) - int(r.abaixo),
+            "percentual": round(int(r.abaixo) / int(r.total) * 100, 1) if r.total else 0.0,
+        }
+        for r in rows
+    ]
 
 
-def _evolucao_turnos(
+def _deficit_ranking(
     session: Session,
-    _turno: str | None,
+    turno: str | None,
     serie: str | None,
-    _turma: str | None,
-    _trimestre: str | None,
+    turma: str | None,
+    trimestre: str | None,
     disciplina: str | None,
 ):
-    # Comparativo Matutino vs Vespertino ao longo dos trimestres
-    periodos = ["1º", "2º", "3º"]
-    results = []
-    
-    for i, trimestre_label in enumerate(periodos):
-        col = TRIMESTRE_COLUMNS[str(i+1)]
-        
-        # Matutino
-        q_mat = session.query(func.avg(col)).join(Aluno).filter(Aluno.turno == "Matutino")
-        q_mat = _apply_common_filters(q_mat, None, serie, None, disciplina)
-        m_mat = q_mat.scalar() or 0
-        
-        # Vespertino
-        q_vesp = session.query(func.avg(col)).join(Aluno).filter(Aluno.turno == "Vespertino")
-        q_vesp = _apply_common_filters(q_vesp, None, serie, None, disciplina)
-        m_vesp = q_vesp.scalar() or 0
-        
-        results.append({
-            "periodo": trimestre_label,
-            "matutino": round(float(m_mat), 1),
-            "vespertino": round(float(m_vesp), 1)
-        })
-        
-    return results
+    """Top 20 alunos com maior soma de déficit de pontos no trimestre."""
+    col = _resolve_trimestre_column(trimestre)
+    threshold = _ABAIXO_THRESHOLD.get(trimestre or "", 50)
 
+    query = (
+        session.query(
+            Aluno.nome,
+            Aluno.turma,
+            func.sum(threshold - col).label("deficit_total"),
+            func.count().label("disciplinas"),
+        )
+        .join(Aluno, Nota.aluno_id == Aluno.id)
+        .filter(col.isnot(None), col < threshold)
+    )
+    query = _apply_common_filters(query, turno, serie, turma, disciplina)
+    query = (
+        query.group_by(Aluno.nome, Aluno.turma)
+        .order_by(func.sum(threshold - col).desc())
+        .limit(20)
+    )
+
+    return [
+        {
+            "nome":          r.nome,
+            "turma":         r.turma,
+            "deficit_total": round(float(r.deficit_total), 1) if r.deficit_total else 0.0,
+            "disciplinas":   int(r.disciplinas),
+        }
+        for r in query.all()
+    ]
+
+
+# ── Registro de todos os builders ────────────────────────────────────────────
 
 GRAPH_BUILDERS: dict[str, GraphBuilder] = {
-    "disciplinas-medias": _disciplinas_medias,
-    "turmas-trimestre": _turmas_trimestre,
-    "situacao-distribuicao": _situacao_distribuicao,
-    "faltas-por-turma": _faltas_por_turma,
-    "heatmap-disciplinas": _heatmap_disciplinas,
-    "medias-por-trimestre": _medias_por_trimestre,
-    "gauss-escola": _gauss_escola,
-    "correlacao-frequencia": _correlacao_frequencia,
-    "evolucao-turnos": _evolucao_turnos,
+    "disciplinas-medias":     _disciplinas_medias,
+    "turmas-trimestre":       _turmas_trimestre,
+    "situacao-distribuicao":  _situacao_distribuicao,
+    "faltas-por-turma":       _faltas_por_turma,
+    "heatmap-disciplinas":    _heatmap_disciplinas,
+    "medias-por-trimestre":   _medias_por_trimestre,
+    "gauss-escola":           _gauss_escola,
+    "correlacao-frequencia":  _correlacao_frequencia,
+    "evolucao-turnos":        _evolucao_turnos,
+    "aprovacao-por-turma":    _aprovacao_por_turma,
+    "abaixo-por-disciplina":  _abaixo_por_disciplina,
+    "abaixo-por-turma":       _abaixo_por_turma,
+    "deficit-ranking":        _deficit_ranking,
 }

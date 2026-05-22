@@ -26,6 +26,8 @@ class ParsedNotaRecord:
     trimestre2: float | None = None
     trimestre3: float | None = None
     total: float | None = None
+    recuperacao: float | None = None
+    conselho_de_classe: float | None = None
     faltas: int | None = None
     situacao: str | None = None
 
@@ -207,12 +209,14 @@ def parse_pdf(filepath: Path, errors: list[str], *, turno: str | None = None, tu
                         continue
                     registro.notas.append(
                         ParsedNotaRecord(
-                            disciplina=disciplina.strip(),
+                            disciplina=_clean_disciplina(disciplina),
                             disciplina_normalizada=_normalize_disciplina(disciplina),
                             trimestre1=_parse_float(row.get("trimestre1")),
                             trimestre2=_parse_float(row.get("trimestre2")),
                             trimestre3=_parse_float(row.get("trimestre3")),
                             total=_parse_float(row.get("total")),
+                            recuperacao=_parse_float(row.get("recuperacao")),
+                            conselho_de_classe=_parse_float(row.get("conselho_de_classe")),
                             faltas=_parse_int(row.get("faltas")),
                             situacao=_clean_text(row.get("situacao")),
                         )
@@ -557,6 +561,8 @@ def _upsert_notas(session: Session, aluno: Aluno, notas: Sequence[ParsedNotaReco
         nota.trimestre2 = nota_data.trimestre2
         nota.trimestre3 = nota_data.trimestre3
         nota.total = nota_data.total
+        nota.recuperacao = nota_data.recuperacao
+        nota.conselho_de_classe = nota_data.conselho_de_classe
         nota.faltas = nota_data.faltas or 0
         nota.situacao = _normalize_situacao(nota_data.situacao)
 
@@ -579,6 +585,8 @@ _SITUACAO_ALIASES: dict[str, str] = {
     "EM RECUPERAÇÃO": "REC",
     "APROVADO POR CONSELHO": "APCC",
     "APCC": "APCC",
+    "ACC": "APCC",
+    "APROVADO CONSELHO": "APCC",
     "EM CURSO": "EMC",
     "EMCURSO": "EMC",
     "EM REGIME": "EMR",
@@ -636,6 +644,9 @@ def _normalize_header(value: str | None) -> str | None:
         "total": "total",
         "total-de-pontos": "total",
         "recuperacao": "recuperacao",
+        "recuperacao-final": "recuperacao",
+        "conselho-de-classe": "conselho_de_classe",
+        "conselho": "conselho_de_classe",
         "t-faltas": "faltas",
         "faltas": "faltas",
         "situacao": "situacao",
@@ -643,8 +654,19 @@ def _normalize_header(value: str | None) -> str | None:
     return aliases.get(key)
 
 
+_DISCIPLINA_NOISE = re.compile(
+    r"\s*gerado\s+por\s+.*$",
+    re.IGNORECASE,
+)
+
+
+def _clean_disciplina(value: str) -> str:
+    """Remove rodapés do SGE capturados junto com o nome da disciplina."""
+    return _DISCIPLINA_NOISE.sub("", value).strip()
+
+
 def _normalize_disciplina(value: str) -> str:
-    return _slugify(value)
+    return _slugify(_clean_disciplina(value))
 
 
 def _slugify(value: str) -> str:

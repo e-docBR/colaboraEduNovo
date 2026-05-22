@@ -60,6 +60,8 @@ import {
 } from "recharts";
 import ScatterPlotIcon from "@mui/icons-material/ScatterPlot";
 import InsightsIcon from "@mui/icons-material/Insights";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import TrendingDownIcon from "@mui/icons-material/TrendingDown";
 import {
   useGetGraficoQuery,
   useGetNotasFiltrosQuery,
@@ -87,15 +89,18 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const CHART_ICONS: Record<string, React.ElementType> = {
-  "disciplinas-medias": BarChartIcon,
-  "medias-por-trimestre": EqualizerIcon,
-  "turmas-trimestre": TimelineIcon,
+  "disciplinas-medias":    BarChartIcon,
+  "medias-por-trimestre":  EqualizerIcon,
+  "turmas-trimestre":      TimelineIcon,
   "situacao-distribuicao": PieChartIcon,
-  "faltas-por-turma": BarChartIcon,
-  "heatmap-disciplinas": GridOnIcon,
-  "gauss-escola": InsightsIcon,
+  "faltas-por-turma":      BarChartIcon,
+  "heatmap-disciplinas":   GridOnIcon,
+  "gauss-escola":          InsightsIcon,
   "correlacao-frequencia": ScatterPlotIcon,
-  "evolucao-turnos": TimelineIcon,
+  "evolucao-turnos":       TimelineIcon,
+  "abaixo-por-disciplina": WarningAmberIcon,
+  "abaixo-por-turma":      BarChartIcon,
+  "deficit-ranking":       TrendingDownIcon,
 };
 
 export const GraficosPage = () => {
@@ -437,6 +442,109 @@ export const GraficosPage = () => {
             </TableBody>
           </Table>
         </TableContainer>
+      );
+    }
+
+    if (chart.horizontal) {
+      return (
+        <ResponsiveContainer width="100%" height={Math.max(300, rawData.length * 36 + 60)}>
+          <BarChart
+            data={rawData}
+            layout="vertical"
+            margin={{ top: 5, right: 50, left: 10, bottom: 5 }}
+            barSize={18}
+          >
+            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={theme.palette.divider} />
+            <XAxis
+              type="number"
+              domain={[0, "auto"]}
+              tick={{ fill: theme.palette.text.secondary, fontSize: 12 }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <YAxis
+              type="category"
+              dataKey="nome"
+              width={150}
+              tick={{ fill: theme.palette.text.secondary, fontSize: 11 }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <Tooltip
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                const d = payload[0].payload;
+                return (
+                  <Card sx={{ p: 1.5, boxShadow: theme.shadows[4] }}>
+                    <Typography variant="subtitle2" fontWeight={600}>{d.nome}</Typography>
+                    <Typography variant="body2" color="text.secondary">{d.turma}</Typography>
+                    <Typography variant="body2">
+                      Déficit: <b style={{ color: "#ef4444" }}>{d.deficit_total} pts</b>
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {d.disciplinas} disciplina{d.disciplinas !== 1 ? "s" : ""}
+                    </Typography>
+                  </Card>
+                );
+              }}
+            />
+            <Bar dataKey="deficit_total" name="Déficit (pts)" radius={[0, 4, 4, 0]}>
+              {rawData.map((_: unknown, index: number) => (
+                <Cell key={index} fill={COLORS[index % 2 === 0 ? 4 : 6]} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      );
+    }
+
+    if (chart.stacked) {
+      return (
+        <ResponsiveContainer width="100%" height={400}>
+          <BarChart data={rawData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }} barSize={28}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.palette.divider} />
+            <XAxis
+              dataKey={chart.xKey ?? "turma"}
+              tick={{ fill: theme.palette.text.secondary, fontSize: 11 }}
+              interval={0}
+              angle={-30}
+              textAnchor="end"
+              height={60}
+              axisLine={false}
+              tickLine={false}
+            />
+            <YAxis
+              tick={{ fill: theme.palette.text.secondary, fontSize: 12 }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <Tooltip
+              content={({ active, payload, label }) => {
+                if (!active || !payload?.length) return null;
+                const d = payload[0]?.payload;
+                return (
+                  <Card sx={{ p: 1.5, boxShadow: theme.shadows[4] }}>
+                    <Typography variant="subtitle2" fontWeight={600}>{label}</Typography>
+                    <Box display="flex" alignItems="center" gap={1} mt={0.5}>
+                      <Box width={8} height={8} borderRadius="50%" bgcolor="#ef4444" />
+                      <Typography variant="body2">Abaixo: <b>{d?.abaixo ?? 0}</b></Typography>
+                    </Box>
+                    <Box display="flex" alignItems="center" gap={1}>
+                      <Box width={8} height={8} borderRadius="50%" bgcolor="#10b981" />
+                      <Typography variant="body2">Acima: <b>{d?.acima ?? 0}</b></Typography>
+                    </Box>
+                    <Typography variant="caption" color="text.secondary">
+                      {d?.percentual ?? 0}% em risco
+                    </Typography>
+                  </Card>
+                );
+              }}
+            />
+            <Legend />
+            <Bar dataKey="acima"  name="Acima do mínimo"  stackId="a" fill="#10b981" />
+            <Bar dataKey="abaixo" name="Abaixo do mínimo" stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
       );
     }
 

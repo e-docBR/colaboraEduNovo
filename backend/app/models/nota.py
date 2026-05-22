@@ -22,6 +22,10 @@ class Nota(Base, TenantYearMixin):
     trimestre2: Mapped[float | None] = mapped_column(Numeric(5, 2))
     trimestre3: Mapped[float | None] = mapped_column(Numeric(5, 2))
     total: Mapped[float | None] = mapped_column(Numeric(5, 2))
+    # Recuperação: prova aplicada quando total < 50, escala 0–100
+    recuperacao: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    # Conselho de Classe: nota final aprovada pelo conselho (override), escala 0–100
+    conselho_de_classe: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
     faltas: Mapped[int] = mapped_column(Integer, default=0)
     # M2: restrict to known values at DB level
     situacao: Mapped[str | None] = mapped_column(String(20))

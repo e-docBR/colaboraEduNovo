@@ -119,7 +119,10 @@ class TurmaRepository(BaseRepository[Aluno]):
         return len(alunos)
 
     def delete_turma(self, turma_nome: str) -> int:
+        from datetime import datetime, timezone
         from flask import g
+        from app.models.usuario import Usuario
+
         tenant_id = getattr(g, "tenant_id", None)
         academic_year_id = getattr(g, "academic_year_id", None)
 
@@ -127,6 +130,13 @@ class TurmaRepository(BaseRepository[Aluno]):
         aluno_ids = [a.id for a in alunos]
 
         if aluno_ids:
+            # Soft-delete user accounts linked to these students
+            now = datetime.now(timezone.utc)
+            self.session.query(Usuario).filter(
+                Usuario.aluno_id.in_(aluno_ids)
+            ).update({"deleted_at": now, "is_active": False}, synchronize_session=False)
+
+            # Delete grades then students
             self.session.query(Nota).filter(Nota.aluno_id.in_(aluno_ids)).delete(synchronize_session=False)
             query = self.session.query(Aluno).filter(Aluno.turma == turma_nome)
             if tenant_id:

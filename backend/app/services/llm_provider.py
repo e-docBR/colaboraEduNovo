@@ -153,14 +153,6 @@ def call_llm(config: "AIConfiguration", messages: list[dict]) -> str | None:
 
 def test_llm_connection(provider: str, api_key: str, model: str) -> dict:
     """Testa a conexão com o LLM. Retorna {'ok': bool, 'message': str}."""
-    config_mock = type("Cfg", (), {
-        "is_active": True,
-        "api_key": api_key,
-        "provider": provider,
-        "model_name": model,
-        "temperature": 0.1,
-    })()
-
     provider = provider.lower()
 
     try:

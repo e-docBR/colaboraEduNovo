@@ -5,7 +5,7 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import { AppState, type AppStateStatus } from 'react-native';
-import type { LoginResponse } from './api';
+import { logoutRequest, type LoginResponse } from './api';
 
 type User = LoginResponse['user'];
 
@@ -19,7 +19,7 @@ interface AuthState {
   isLoading: boolean;
 
   /** Call after successful login API response */
-  signIn: (token: string, refreshToken: string, user: User) => Promise<void>;
+  signIn: (token: string, refreshToken: string | null | undefined, user: User) => Promise<void>;
 
   /** Clears all credentials and navigates to login */
   signOut: () => Promise<void>;
@@ -49,7 +49,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signIn: async (token, refreshToken, user) => {
     await SecureStore.setItemAsync('access_token', token);
-    await SecureStore.setItemAsync('refresh_token', refreshToken);
+    if (refreshToken) {
+      await SecureStore.setItemAsync('refresh_token', refreshToken);
+    } else {
+      await SecureStore.deleteItemAsync('refresh_token');
+    }
     await SecureStore.setItemAsync('user_data', JSON.stringify(user));
     await SecureStore.setItemAsync('last_active', String(Date.now()));
     set({ token, user, isAuthenticated: true });
@@ -60,6 +64,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (_inactivityTimer) {
       clearTimeout(_inactivityTimer);
       _inactivityTimer = null;
+    }
+    const accessToken = await SecureStore.getItemAsync('access_token');
+    const refreshToken = await SecureStore.getItemAsync('refresh_token');
+    try {
+      await logoutRequest(accessToken, refreshToken);
+    } catch {
+      // Best effort: local cleanup must continue even if backend is unavailable.
     }
     await SecureStore.deleteItemAsync('access_token');
     await SecureStore.deleteItemAsync('refresh_token');

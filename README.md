@@ -149,6 +149,8 @@ Variáveis obrigatórias para produção:
 | `SECRET_KEY` | Chave Flask (mín. 32 chars — `openssl rand -hex 32`) |
 | `JWT_SECRET_KEY` | Chave JWT (mín. 32 chars — `openssl rand -hex 32`) |
 | `POSTGRES_PASSWORD` | Senha do PostgreSQL |
+| `APP_DB_USER` | Usuário limitado usado pela aplicação em runtime |
+| `APP_DB_PASSWORD` | Senha do usuário limitado da aplicação |
 | `REDIS_PASSWORD` | Senha do Redis |
 | `SMTP_SERVER` | Servidor SMTP para e-mails de recuperação de senha |
 | `SMTP_USER` | Usuário SMTP |
@@ -162,6 +164,7 @@ Veja `.env.example` para a lista completa com descrições.
 ## Documentação
 
 - **[Guia de Deployment](docs/DEPLOYMENT.md)** — instalação, produção, variáveis de ambiente, SSL
+- **[Production Readiness](docs/PRODUCTION_READINESS.md)** — estado real do stack, gates de go-live e segredos do GitHub
 - **[Arquitetura do Sistema](docs/ARCHITECTURE.md)** — stack, multi-tenancy, segurança, modelos de dados
 - **[Referência da API](docs/API.md)** — endpoints, autenticação, exemplos de request/response
 - **[CHANGELOG](CHANGELOG.md)** — histórico de versões
@@ -257,7 +260,7 @@ docker-compose logs -f backend
 docker-compose exec postgres pg_dump -U ${POSTGRES_USER} ${POSTGRES_DB} > backup_$(date +%Y%m%d).sql
 
 # Produção — iniciar
-docker-compose -f docker-compose.prod.yml up -d --build
+docker-compose -f docker-compose.prod.yml up -d --build --scale worker=3
 
 # Produção — ver status
 docker-compose -f docker-compose.prod.yml ps
