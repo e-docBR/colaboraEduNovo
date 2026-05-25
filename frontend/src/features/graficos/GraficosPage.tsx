@@ -26,7 +26,7 @@ import {
   Fade,
   Menu
 } from "@mui/material";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import type { RootState } from "../../app/store";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
@@ -89,18 +89,22 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const CHART_ICONS: Record<string, React.ElementType> = {
-  "disciplinas-medias":    BarChartIcon,
-  "medias-por-trimestre":  EqualizerIcon,
-  "turmas-trimestre":      TimelineIcon,
-  "situacao-distribuicao": PieChartIcon,
-  "faltas-por-turma":      BarChartIcon,
-  "heatmap-disciplinas":   GridOnIcon,
-  "gauss-escola":          InsightsIcon,
-  "correlacao-frequencia": ScatterPlotIcon,
-  "evolucao-turnos":       TimelineIcon,
-  "abaixo-por-disciplina": WarningAmberIcon,
-  "abaixo-por-turma":      BarChartIcon,
-  "deficit-ranking":       TrendingDownIcon,
+  "disciplinas-medias":          BarChartIcon,
+  "medias-por-trimestre":        EqualizerIcon,
+  "turmas-trimestre":            TimelineIcon,
+  "situacao-distribuicao":       PieChartIcon,
+  "faltas-por-turma":            BarChartIcon,
+  "heatmap-disciplinas":         GridOnIcon,
+  "gauss-escola":                InsightsIcon,
+  "correlacao-frequencia":       ScatterPlotIcon,
+  "evolucao-turnos":             TimelineIcon,
+  "abaixo-por-disciplina":       WarningAmberIcon,
+  "abaixo-por-turma":            BarChartIcon,
+  "deficit-ranking":             TrendingDownIcon,
+  "aprovacao-por-turma":         EqualizerIcon,
+  "ocorrencias-por-tipo":        WarningAmberIcon,
+  "ocorrencias-evolucao-mensal": TimelineIcon,
+  "recuperacao-efetividade":     InsightsIcon,
 };
 
 export const GraficosPage = () => {
@@ -166,11 +170,18 @@ export const GraficosPage = () => {
   };
 
   const { data: turmasData } = useListTurmasQuery();
-  const turmaOptions = useMemo(() => turmasData?.items ?? [], [turmasData]);
-  const serieOptions = useMemo(() => {
+
+  // Filter turmas by selected turno
+  const turmasByTurno = useMemo(() => {
     const items = turmasData?.items ?? [];
+    if (!turno) return items;
+    return items.filter((item) => item.turno === turno);
+  }, [turmasData, turno]);
+
+  // Filter series from turmas already filtered by turno
+  const serieOptions = useMemo(() => {
     const series = new Set<string>();
-    items.forEach((item) => {
+    turmasByTurno.forEach((item) => {
       const parts = (item.turma ?? "").split(" ");
       const prefix = parts.length >= 2 ? `${parts[0]} ${parts[1]}` : item.turma;
       if (prefix) {
@@ -178,7 +189,23 @@ export const GraficosPage = () => {
       }
     });
     return Array.from(series).sort();
-  }, [turmasData]);
+  }, [turmasByTurno]);
+
+  // Filter turma options by turno + serie
+  const turmaOptions = useMemo(() => {
+    if (!serie) return turmasByTurno;
+    return turmasByTurno.filter((item) => (item.turma ?? "").startsWith(serie));
+  }, [turmasByTurno, serie]);
+
+  // Reset dependent filters when parent changes
+  useEffect(() => {
+    setSerie("");
+    setTurma("");
+  }, [turno]);
+
+  useEffect(() => {
+    setTurma("");
+  }, [serie]);
 
   const { data: notasFiltrosData } = useGetNotasFiltrosQuery();
   const disciplinaOptions = useMemo(() => {
@@ -301,10 +328,21 @@ export const GraficosPage = () => {
             />
             <Tooltip content={<CustomChartTooltip />} cursor={{ stroke: theme.palette.divider, strokeWidth: 1 }} />
             {chart.slug === "evolucao-turnos" ? (
-              // Hardcoded assumption for this specific chart based on data structure
               <>
-                <Line type="monotone" dataKey="matutino" name="Matutino" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="vespertino" name="Vespertino" stroke="#6366f1" strokeWidth={3} dot={{ r: 4 }} />
+                {rawData.length > 0 &&
+                  Object.keys(rawData[0])
+                    .filter((k) => k !== "periodo")
+                    .map((turnoKey, idx) => (
+                      <Line
+                        key={turnoKey}
+                        type="monotone"
+                        dataKey={turnoKey}
+                        name={turnoKey}
+                        stroke={COLORS[idx % COLORS.length]}
+                        strokeWidth={3}
+                        dot={{ r: 4 }}
+                      />
+                    ))}
                 <Legend />
               </>
             ) : (
@@ -366,9 +404,8 @@ export const GraficosPage = () => {
             <XAxis
               type="number"
               dataKey={chart.xKey}
-              name="Frequência"
-              unit="%"
-              domain={[0, 100]}
+              name="Faltas"
+              domain={[0, "auto"]}
               tick={{ fill: theme.palette.text.secondary, fontSize: 12 }}
               axisLine={false}
               tickLine={false}
@@ -377,7 +414,7 @@ export const GraficosPage = () => {
               type="number"
               dataKey={chart.yKey}
               name="Média"
-              domain={[0, 20]}
+              domain={[0, 100]}
               tick={{ fill: theme.palette.text.secondary, fontSize: 12 }}
               axisLine={false}
               tickLine={false}
@@ -499,6 +536,10 @@ export const GraficosPage = () => {
     }
 
     if (chart.stacked) {
+      const stacks = chart.stackConfig ?? [
+        { key: "abaixo", name: "Abaixo do mínimo", color: "#ef4444" },
+        { key: "acima", name: "Acima do mínimo", color: "#10b981" },
+      ];
       return (
         <ResponsiveContainer width="100%" height={400}>
           <BarChart data={rawData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }} barGap={4} barCategoryGap="20%">
@@ -525,24 +566,25 @@ export const GraficosPage = () => {
                 return (
                   <Card sx={{ p: 1.5, boxShadow: theme.shadows[4] }}>
                     <Typography variant="subtitle2" fontWeight={600}>{label}</Typography>
-                    <Box display="flex" alignItems="center" gap={1} mt={0.5}>
-                      <Box width={8} height={8} borderRadius="50%" bgcolor="#ef4444" />
-                      <Typography variant="body2">Abaixo: <b>{d?.abaixo ?? 0}</b></Typography>
-                    </Box>
-                    <Box display="flex" alignItems="center" gap={1}>
-                      <Box width={8} height={8} borderRadius="50%" bgcolor="#10b981" />
-                      <Typography variant="body2">Acima: <b>{d?.acima ?? 0}</b></Typography>
-                    </Box>
-                    <Typography variant="caption" color="text.secondary">
-                      {d?.percentual ?? 0}% em risco
-                    </Typography>
+                    {stacks.map((s) => (
+                      <Box key={s.key} display="flex" alignItems="center" gap={1} mt={0.5}>
+                        <Box width={8} height={8} borderRadius="50%" bgcolor={s.color} />
+                        <Typography variant="body2">{s.name}: <b>{d?.[s.key] ?? 0}</b></Typography>
+                      </Box>
+                    ))}
+                    {d?.percentual !== undefined && (
+                      <Typography variant="caption" color="text.secondary">
+                        {d.percentual}% em risco
+                      </Typography>
+                    )}
                   </Card>
                 );
               }}
             />
             <Legend />
-            <Bar dataKey="abaixo" name="Abaixo do mínimo" fill="#ef4444" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="acima"  name="Acima do mínimo"  fill="#10b981" radius={[4, 4, 0, 0]} />
+            {stacks.map((s) => (
+              <Bar key={s.key} dataKey={s.key} name={s.name} fill={s.color} radius={[4, 4, 0, 0]} />
+            ))}
           </BarChart>
         </ResponsiveContainer>
       );

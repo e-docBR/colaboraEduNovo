@@ -359,6 +359,7 @@ def register(parent: Blueprint) -> None:
         return jsonify({"photo_url": photo_url})
 
     @bp.route("/static/photos/<path:filename>")
+    @jwt_required()
     def serve_photo(filename):
         import os
         from flask import current_app
@@ -382,12 +383,12 @@ def register(parent: Blueprint) -> None:
             if not usuario:
                 return jsonify({"error": "Usuário não encontrado"}), 404
             
-            # If user is an aluno, resolve their Aluno record for the active academic year
-            # The ORM listener automatically filters Aluno queries by academic_year_id from g.academic_year_id
-            if usuario.role == "aluno":
-                # Search by matricula (which is persistent) in the current year
+            # Resolve the current-year Aluno row using stable matricula instead of
+            # username/aluno_id, which may point to a previous academic year.
+            if usuario.role in {"aluno", "responsavel"}:
+                stable_matricula = usuario.matricula or (usuario.aluno.matricula if usuario.aluno else None)
                 active_aluno = session.query(Aluno).filter(
-                    Aluno.matricula == usuario.username
+                    Aluno.matricula == stable_matricula
                 ).first()
                 if active_aluno:
                     usuario.aluno = active_aluno

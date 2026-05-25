@@ -1,6 +1,7 @@
 """Uploads endpoints for boletim PDFs."""
 from pathlib import Path
 import re
+import uuid
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
@@ -43,12 +44,12 @@ def register(parent: Blueprint) -> None:
             return jsonify({"error": "turno e turma devem ter no máximo 60 caracteres"}), 400
 
         file = request.files["file"]
-        filename = secure_filename(file.filename)
-        if not filename:
+        original_filename = secure_filename(file.filename)
+        if not original_filename:
             return jsonify({"error": "nome de arquivo inválido"}), 400
 
         # Valida extensão
-        if not filename.lower().endswith(_MAX_EXTENSION):
+        if not original_filename.lower().endswith(_MAX_EXTENSION):
             return jsonify({"error": "apenas arquivos PDF são permitidos"}), 400
 
         # Valida magic bytes (evita renomear outros tipos para .pdf)
@@ -63,6 +64,7 @@ def register(parent: Blueprint) -> None:
         if file_size > max_bytes:
             return jsonify({"error": f"arquivo muito grande (máximo {settings.max_upload_size_mb} MB)"}), 413
 
+        filename = f"{uuid.uuid4().hex}_{original_filename}"
         base_upload = Path(settings.upload_folder).resolve()
         upload_dir = (base_upload / _normalize_segment(turno) / _normalize_segment(turma)).resolve()
         filepath = (upload_dir / filename).resolve()
@@ -117,8 +119,9 @@ def register(parent: Blueprint) -> None:
         if not filename.lower().endswith(".csv"):
             return jsonify({"error": "apenas arquivos CSV são permitidos"}), 400
 
-        raw = file.read(2 * 1024 * 1024)  # cap at 2 MB
-        if len(raw) >= 2 * 1024 * 1024:
+        max_bytes = 2 * 1024 * 1024
+        raw = file.read(max_bytes + 1)
+        if len(raw) > max_bytes:
             return jsonify({"error": "arquivo muito grande (máximo 2 MB)"}), 413
 
         rows, parse_errors = parse_csv_bytes(raw)

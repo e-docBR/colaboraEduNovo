@@ -37,12 +37,15 @@ run_backend() {
 
 run_frontend() {
   if [ -x "./frontend/node_modules/.bin/eslint" ] && [ -x "./frontend/node_modules/.bin/tsc" ] && [ -x "./frontend/node_modules/.bin/vite" ]; then
-    echo "==> frontend: eslint"
-    ./frontend/node_modules/.bin/eslint frontend/src --ext ts,tsx
+    (
+      cd ./frontend
+      echo "==> frontend: eslint"
+      ./node_modules/.bin/eslint src --ext ts,tsx
 
-    echo "==> frontend: build"
-    ./frontend/node_modules/.bin/tsc -p frontend/tsconfig.json
-    ./frontend/node_modules/.bin/vite build --config frontend/vite.config.ts
+      echo "==> frontend: build"
+      ./node_modules/.bin/tsc -p tsconfig.json
+      ./node_modules/.bin/vite build --config vite.config.ts
+    )
     return
   fi
 

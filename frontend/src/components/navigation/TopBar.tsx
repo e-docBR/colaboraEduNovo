@@ -22,7 +22,7 @@ import { memo, MouseEvent, useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
-import { logout } from "../../features/auth/authSlice";
+import { logout, setCredentials, updateUser } from "../../features/auth/authSlice";
 import { setAcademicYearId, setTenantId } from "../../features/app/appSlice";
 import { useUploadPhotoMutation, useListAcademicYearsQuery, useListPublicTenantsQuery, useUpdateAcademicYearStatusMutation, api } from "../../lib/api";
 import { ThemeToggle } from "./ThemeToggle";
@@ -47,6 +47,126 @@ const ROLE_LABELS: Record<string, string> = {
 
 const TRIM_LABELS: Record<number, string> = { 1: "1º Trim.", 2: "2º Trim.", 3: "3º Trim." };
 const TRIM_ADMIN_ROLES = new Set(["admin", "super_admin", "diretor", "coordenador"]);
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api/v1";
+
+const resolvePhotoUrl = (photoUrl: string) => {
+  if (/^https?:\/\//i.test(photoUrl)) return photoUrl;
+  if (photoUrl.startsWith("/")) return photoUrl;
+  return `${API_BASE}/${photoUrl.replace(/^\/+/, "")}`;
+};
+
+const AuthenticatedAvatar = ({
+  accessToken,
+  displayName,
+  photoUrl,
+  tenantId,
+}: {
+  accessToken?: string;
+  displayName?: string;
+  photoUrl?: string;
+  tenantId?: number | null;
+}) => {
+  const dispatch = useAppDispatch();
+  const [imageSrc, setImageSrc] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (!photoUrl || !accessToken) {
+      setImageSrc(undefined);
+      return;
+    }
+
+    let isActive = true;
+    let objectUrl: string | undefined;
+
+    const makeAuthHeaders = (token: string) => ({
+      Authorization: `Bearer ${token}`,
+      ...(tenantId != null ? { "X-Tenant-ID": String(tenantId) } : {}),
+    });
+
+    const refreshToken = async () => {
+      const response = await fetch(`${API_BASE}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+        headers: tenantId != null ? { "X-Tenant-ID": String(tenantId) } : undefined,
+      });
+      if (!response.ok) return null;
+
+      const data = await response.json() as {
+        access_token: string;
+        user?: {
+          id: number;
+          username: string;
+          role?: string;
+          is_admin?: boolean;
+          aluno_id?: number | null;
+          photo_url?: string;
+          must_change_password?: boolean;
+          tenant_id?: number | null;
+          tenant_name?: string;
+        };
+      };
+      dispatch(setCredentials({ access_token: data.access_token, user: data.user }));
+      return data.access_token;
+    };
+
+    const loadPhoto = async () => {
+      const requestUrl = resolvePhotoUrl(photoUrl);
+      let token = accessToken;
+      let response = await fetch(requestUrl, {
+        credentials: "include",
+        headers: makeAuthHeaders(token),
+      });
+
+      if (response.status === 401) {
+        const refreshedToken = await refreshToken();
+        if (!refreshedToken) {
+          setImageSrc(undefined);
+          return;
+        }
+        token = refreshedToken;
+        response = await fetch(requestUrl, {
+          credentials: "include",
+          headers: makeAuthHeaders(token),
+        });
+      }
+
+      if (!response.ok) {
+        setImageSrc(undefined);
+        return;
+      }
+
+      const blob = await response.blob();
+      objectUrl = URL.createObjectURL(blob);
+      if (isActive) {
+        setImageSrc(objectUrl);
+      }
+    };
+
+    void loadPhoto();
+
+    return () => {
+      isActive = false;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [accessToken, dispatch, photoUrl, tenantId]);
+
+  return (
+    <Avatar
+      src={imageSrc}
+      sx={{
+        width: 32,
+        height: 32,
+        bgcolor: "primary.main",
+        fontSize: "0.875rem",
+        fontWeight: 700
+      }}
+    >
+      {getInitials(displayName)}
+    </Avatar>
+  );
+};
 
 const AcademicYearSelector = () => {
   const { data: years, isLoading } = useListAcademicYearsQuery();
@@ -182,6 +302,7 @@ const TenantSelector = () => {
 const TopBarInner = ({ onMenuClick }: { onMenuClick?: () => void }) => {
   const user = useAppSelector((state) => state.auth.user);
   const accessToken = useAppSelector((state) => state.auth.accessToken);
+  const currentTenantId = useAppSelector((state) => state.app.tenantId);
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const location = useLocation();
@@ -258,7 +379,8 @@ const TopBarInner = ({ onMenuClick }: { onMenuClick?: () => void }) => {
         const formData = new FormData();
         formData.append("file", file);
         try {
-          await uploadPhoto(formData).unwrap();
+          const result = await uploadPhoto(formData).unwrap();
+          dispatch(updateUser(user ? { ...user, photo_url: result.photo_url } : user));
           setPhotoSnackbar({ open: true, message: "Foto enviada! A imagem será atualizada em instantes.", severity: "success" });
         } catch {
           setPhotoSnackbar({ open: true, message: "Erro ao enviar foto. Tente novamente.", severity: "error" });
@@ -348,18 +470,12 @@ const TopBarInner = ({ onMenuClick }: { onMenuClick?: () => void }) => {
           aria-haspopup="true"
           aria-expanded={menuOpen ? "true" : undefined}
         >
-          <Avatar
-            src={user?.photo_url || undefined}
-            sx={{
-              width: 32,
-              height: 32,
-              bgcolor: "primary.main",
-              fontSize: "0.875rem",
-              fontWeight: 700
-            }}
-          >
-            {getInitials(user?.username)}
-          </Avatar>
+          <AuthenticatedAvatar
+            accessToken={accessToken}
+            displayName={user?.username}
+            photoUrl={user?.photo_url}
+            tenantId={currentTenantId ?? user?.tenant_id ?? null}
+          />
           <Box textAlign="left" sx={{ display: { xs: "none", sm: "block" } }}>
             <Typography variant="body2" fontWeight={600} fontSize="0.875rem">
               {user?.username ?? "Usuário ativo"}

@@ -135,8 +135,14 @@ export const AlunosPage = () => {
 
   const turmaOptions = useMemo(() => {
     const items = turmasData?.items ?? [];
-    return items.map((t) => t.turma).sort();
-  }, [turmasData]);
+    const filtered = turno ? items.filter((t) => t.turno === turno) : items;
+    return filtered.map((t) => t.turma).sort();
+  }, [turmasData, turno]);
+
+  // Reset turma when turno changes (cascading filter)
+  useEffect(() => {
+    setTurma("");
+  }, [turno]);
 
   const queryParams = useMemo(() => {
     const params: Record<string, string> = {

@@ -4,12 +4,15 @@ import io
 from datetime import datetime
 
 from flask import Blueprint, Response, jsonify, request, g
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import get_jwt_identity, jwt_required
 from sqlalchemy.orm import joinedload
+from werkzeug.utils import secure_filename
 
 from ...core.database import session_scope
 from ...core.decorators import require_roles
+from ...core.extensions import limiter
 from ...models import Aluno, Nota
+from ...services.audit import log_action
 
 
 def _safe(value) -> str:
@@ -32,6 +35,17 @@ def _float_or_empty(value) -> str:
         return ""
 
 
+def _safe_filename(prefix: str) -> str:
+    return secure_filename(prefix) or "export"
+
+
+def _apply_download_headers(response: Response) -> Response:
+    response.headers["Cache-Control"] = "no-store, no-cache, private"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
 def register(parent: Blueprint) -> None:
     bp = Blueprint("exports", __name__)
 
@@ -39,6 +53,7 @@ def register(parent: Blueprint) -> None:
 
     @bp.get("/exports/alunos")
     @jwt_required()
+    @limiter.limit("20 per hour")
     @require_roles("admin", "super_admin", "coordenador", "diretor", "orientador", "professor")
     def export_alunos():
         """Download the full student list with grade averages.
@@ -51,6 +66,7 @@ def register(parent: Blueprint) -> None:
         fmt = (request.args.get("format") or "csv").lower()
         turma_filter = (request.args.get("turma") or "").strip() or None
         turno_filter = (request.args.get("turno") or "").strip() or None
+        user_id = int(get_jwt_identity())
 
         if fmt not in ("csv", "xlsx"):
             return jsonify({"error": "Formato inválido. Use 'csv' ou 'xlsx'."}), 400
@@ -85,8 +101,21 @@ def register(parent: Blueprint) -> None:
                     "Total de Faltas": _safe(total_faltas),
                 })
 
+            log_action(
+                session,
+                user_id,
+                "EXPORT_ALUNOS",
+                "Aluno",
+                details={
+                    "format": fmt,
+                    "row_count": len(rows),
+                    "academic_year_id": getattr(g, "academic_year_id", None),
+                    "filters": {"turma": turma_filter, "turno": turno_filter},
+                },
+            )
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-        filename = f"alunos_{timestamp}"
+        filename = _safe_filename(f"alunos_{timestamp}")
 
         if fmt == "csv":
             return _csv_response(rows, filename)
@@ -96,6 +125,7 @@ def register(parent: Blueprint) -> None:
 
     @bp.get("/exports/notas")
     @jwt_required()
+    @limiter.limit("20 per hour")
     @require_roles("admin", "super_admin", "coordenador", "diretor", "orientador", "professor")
     def export_notas():
         """Download the complete grades table.
@@ -110,6 +140,7 @@ def register(parent: Blueprint) -> None:
         turma_filter = (request.args.get("turma") or "").strip() or None
         turno_filter = (request.args.get("turno") or "").strip() or None
         disciplina_filter = (request.args.get("disciplina") or "").strip() or None
+        user_id = int(get_jwt_identity())
 
         if fmt not in ("csv", "xlsx"):
             return jsonify({"error": "Formato inválido. Use 'csv' ou 'xlsx'."}), 400
@@ -154,8 +185,25 @@ def register(parent: Blueprint) -> None:
                     "Situação": _safe(n.situacao),
                 })
 
+            log_action(
+                session,
+                user_id,
+                "EXPORT_NOTAS",
+                "Nota",
+                details={
+                    "format": fmt,
+                    "row_count": len(rows),
+                    "academic_year_id": getattr(g, "academic_year_id", None),
+                    "filters": {
+                        "turma": turma_filter,
+                        "turno": turno_filter,
+                        "disciplina": disciplina_filter,
+                    },
+                },
+            )
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-        filename = f"notas_{timestamp}"
+        filename = _safe_filename(f"notas_{timestamp}")
 
         if fmt == "csv":
             return _csv_response(rows, filename)
@@ -174,11 +222,12 @@ def _csv_response(rows: list[dict], filename: str) -> Response:
     writer.writeheader()
     writer.writerows(rows)
     output.seek(0)
-    return Response(
+    response = Response(
         output.getvalue().encode("utf-8-sig"),  # BOM so Excel opens correctly
         mimetype="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}.csv"'},
     )
+    return _apply_download_headers(response)
 
 
 def _xlsx_response(rows: list[dict], sheet_name: str, filename: str) -> Response:
@@ -208,7 +257,7 @@ def _xlsx_response(rows: list[dict], sheet_name: str, filename: str) -> Response
     # Data rows
     for row_idx, row in enumerate(rows, start=2):
         for col_idx, header in enumerate(headers, start=1):
-            ws.cell(row=row_idx, column=col_idx, value=row.get(header, ""))
+            ws.cell(row=row_idx, column=col_idx, value=_safe(row.get(header, "")))
 
     # Auto-fit column widths
     for col_idx, header in enumerate(headers, start=1):
@@ -223,8 +272,9 @@ def _xlsx_response(rows: list[dict], sheet_name: str, filename: str) -> Response
     wb.save(buf)
     buf.seek(0)
 
-    return Response(
+    response = Response(
         buf.getvalue(),
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}.xlsx"'},
     )
+    return _apply_download_headers(response)

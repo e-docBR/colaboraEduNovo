@@ -1,4 +1,27 @@
 services:
+  # ─── Docker Socket Proxy (security: isolates Docker socket from Traefik) ────
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.2
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 64m
+          cpus: "0.25"
+    environment:
+      CONTAINERS: 1
+      SERVICES: 0
+      TASKS: 0
+      NETWORKS: 0
+      VOLUMES: 0
+      IMAGES: 0
+      INFO: 0
+      POST: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - socket_network
+
   traefik:
     image: traefik:v2.10
     restart: unless-stopped
@@ -10,6 +33,7 @@ services:
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.endpoint=tcp://socket-proxy:2375"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
       - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
@@ -22,10 +46,12 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - "letsencrypt:/letsencrypt"
     networks:
       - app_network
+      - socket_network
+    depends_on:
+      - socket-proxy
 
   postgres:
     image: postgres:15-alpine
@@ -76,6 +102,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
+    user: "1001:1001"
     deploy:
       resources:
         limits:
@@ -171,6 +198,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
+    user: "1001:1001"
     logging:
       driver: "json-file"
       options:
@@ -309,19 +337,17 @@ services:
         #!/bin/sh
         set -e
         TIMESTAMP=$$(date +%Y%m%d_%H%M%S)
-        # Encrypt backup if BACKUP_ENCRYPTION_KEY is set, otherwise plain gzip
-        if [ -n "$$BACKUP_ENCRYPTION_KEY" ]; then
-          FILENAME=/backups/backup_$${TIMESTAMP}.sql.gz.gpg
-          echo \"[pgbackup] Starting encrypted backup -> $$FILENAME\"
-          pg_dump -h postgres -U $$POSTGRES_USER $$POSTGRES_DB \
-            | gzip \
-            | gpg --batch --symmetric --cipher-algo AES256 --passphrase "$$BACKUP_ENCRYPTION_KEY" \
-            > \"$$FILENAME\"
-        else
-          FILENAME=/backups/backup_$${TIMESTAMP}.sql.gz
-          echo \"[pgbackup] Starting backup -> $$FILENAME (⚠ unencrypted — set BACKUP_ENCRYPTION_KEY)\"
-          pg_dump -h postgres -U $$POSTGRES_USER $$POSTGRES_DB | gzip > \"$$FILENAME\"
+        # Enforce encrypted backups — refuse to create unencrypted dumps
+        if [ -z "$$BACKUP_ENCRYPTION_KEY" ]; then
+          echo \"[pgbackup] ❌ FATAL: BACKUP_ENCRYPTION_KEY not set — refusing to create unencrypted backup\"
+          exit 1
         fi
+        FILENAME=/backups/backup_$${TIMESTAMP}.sql.gz.gpg
+        echo \"[pgbackup] Starting encrypted backup -> $$FILENAME\"
+        pg_dump -h postgres -U $$POSTGRES_USER $$POSTGRES_DB \
+          | gzip \
+          | gpg --batch --symmetric --cipher-algo AES256 --passphrase "$$BACKUP_ENCRYPTION_KEY" \
+          > \"$$FILENAME\"
         if [ $$? -eq 0 ]; then
           SIZE=$$(stat -c%s \"$$FILENAME\" 2>/dev/null || echo 0)
           if [ \"$$SIZE\" -lt 1024 ]; then
@@ -375,6 +401,9 @@ services:
 networks:
   app_network:
     driver: bridge
+  socket_network:
+    driver: bridge
+    internal: true
 
 volumes:
   postgres_data:

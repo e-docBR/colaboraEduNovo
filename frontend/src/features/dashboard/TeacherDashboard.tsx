@@ -74,7 +74,9 @@ export const TeacherDashboard = () => {
         count: value as number,
     }));
 
-    const uniqueTurmas = turmasData?.items.map((t: any) => t.turma) || [];
+    const uniqueTurmas = (turmasData?.items ?? [])
+        .filter((t: any) => !filters.turno || filters.turno === "Todos" || t.turno === filters.turno)
+        .map((t: any) => t.turma);
     const alertCount = data.alerts?.length ?? 0;
 
     const stats = [
@@ -124,7 +126,7 @@ export const TeacherDashboard = () => {
                                 labelId="turno-label"
                                 value={filters.turno}
                                 label="Turno"
-                                onChange={(e) => setFilters(prev => ({ ...prev, turno: e.target.value }))}
+                                onChange={(e) => setFilters(prev => ({ ...prev, turno: e.target.value, turma: "Todas" }))}
                                 sx={{ borderRadius: 2 }}
                             >
                                 <MenuItem value="Todos">Todos</MenuItem>

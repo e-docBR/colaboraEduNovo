@@ -1,3 +1,5 @@
+import re
+
 from flask import Blueprint, jsonify, request, g
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from sqlalchemy import desc, or_
@@ -7,6 +9,13 @@ from ...core.database import session_scope
 from ...core.helpers import parse_pagination
 from ...core.roles import STAFF_ROLES, MANAGER_ROLES, COMUNICADO_WRITE_ROLES
 from ...models import Comunicado, Aluno, ComunicadoLeitura
+
+_STRIP_TAGS_RE = re.compile(r"<[^>]+>")
+
+
+def _sanitize_text(value: str) -> str:
+    """Strip HTML tags from text to prevent stored XSS."""
+    return _STRIP_TAGS_RE.sub("", value)
 
 
 def _can_user_read_comunicado(session, comunicado: Comunicado, roles: list[str], claims: dict) -> bool:
@@ -123,7 +132,11 @@ def register(parent: Blueprint) -> None:
         conteudo = data.get("conteudo")
         if not titulo or not conteudo:
             return jsonify({"error": "Campos obrigatórios: titulo, conteudo"}), 400
-            
+
+        # Sanitize inputs to prevent stored XSS
+        titulo = _sanitize_text(str(titulo).strip())
+        conteudo = _sanitize_text(str(conteudo).strip())
+
         if len(titulo) > 200:
             return jsonify({"error": "Título muito longo (máx 200 caracteres)"}), 400
         if len(conteudo) > 50000:
@@ -173,8 +186,8 @@ def register(parent: Blueprint) -> None:
                     return jsonify({"error": f"Aluno com ID {target_value} não encontrado nesta escola"}), 400
 
             novo = Comunicado(
-                titulo=data["titulo"],
-                conteudo=data["conteudo"],
+                titulo=titulo,
+                conteudo=conteudo,
                 autor_id=user_id,
                 target_type=target_type,
                 target_value=target_value,
@@ -224,13 +237,15 @@ def register(parent: Blueprint) -> None:
                 return jsonify({"error": "Você só pode editar seus próprios comunicados"}), 403
 
             if "titulo" in data:
-                if len(str(data["titulo"])) > 200:
+                sanitized_titulo = _sanitize_text(str(data["titulo"]).strip())
+                if len(sanitized_titulo) > 200:
                     return jsonify({"error": "Título muito longo (máx 200 caracteres)"}), 400
-                comunicado.titulo = data["titulo"]
+                comunicado.titulo = sanitized_titulo
             if "conteudo" in data:
-                if len(str(data["conteudo"])) > 50000:
+                sanitized_conteudo = _sanitize_text(str(data["conteudo"]).strip())
+                if len(sanitized_conteudo) > 50000:
                     return jsonify({"error": "Conteúdo muito longo (máx 50000 caracteres)"}), 400
-                comunicado.conteudo = data["conteudo"]
+                comunicado.conteudo = sanitized_conteudo
             if "arquivado" in data:
                 comunicado.arquivado = bool(data["arquivado"])
 

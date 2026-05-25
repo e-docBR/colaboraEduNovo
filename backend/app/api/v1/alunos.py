@@ -2,12 +2,21 @@
 from flask import Blueprint, g, jsonify, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from pydantic import ValidationError
+from werkzeug.utils import secure_filename
 
 from ...core.database import session_scope
 from ...core.decorators import require_roles
+from ...core.extensions import limiter
 from ...core.helpers import parse_pagination
 from ...services.aluno_service import AlunoService
 from ...schemas.aluno import AlunoCreate, AlunoUpdate
+
+
+def _apply_download_headers(response):
+    response.headers["Cache-Control"] = "no-store, no-cache, private"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 def register(parent: Blueprint) -> None:
@@ -182,6 +191,7 @@ def register(parent: Blueprint) -> None:
 
     @bp.get("/alunos/<int:aluno_id>/boletim/pdf")
     @jwt_required()
+    @limiter.limit("30 per hour")
     def download_bulletin_pdf(aluno_id: int):
         from flask import send_file, g
         from ...services.document_service import DocumentService
@@ -224,12 +234,13 @@ def register(parent: Blueprint) -> None:
             html = DocumentService.render_bulletin_html(aluno_data, school_name, year_label)
             pdf_bytes = DocumentService.generate_pdf_from_html(html)
             
-            filename = f"Boletim_{aluno_data['nome'].replace(' ', '_')}.pdf"
-            return send_file(
+            filename = secure_filename(f"Boletim_{aluno_data['nome']}.pdf").replace("..", "_") or f"Boletim_{aluno_id}.pdf"
+            response = send_file(
                 pdf_bytes,
                 mimetype="application/pdf",
                 as_attachment=True,
                 download_name=filename
             )
+            return _apply_download_headers(response)
 
     parent.register_blueprint(bp)

@@ -43,6 +43,11 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY . .
 RUN chmod +x entrypoint.sh
 
+# Create non-root user for production
+RUN groupadd -g 1001 app && useradd -u 1001 -g app -s /bin/sh -m app && \
+    mkdir -p /data/uploads && chown -R app:app /data /app
+USER app
+
 # Expose port
 EXPOSE 5000
 

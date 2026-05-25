@@ -94,15 +94,18 @@ export const RelatorioDetailPage = () => {
 
   const serieOptions = useMemo(() => {
     if (!definition?.filters?.serie) return [];
+    const filtered = turmasList.filter((item) => {
+      return !filters.turno || item.turno === filters.turno;
+    });
     const set = new Set<string>();
-    turmasList.forEach((item) => {
+    filtered.forEach((item) => {
       const serie = deriveSerieFromTurma(item.turma);
       if (serie) {
         set.add(serie);
       }
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
-  }, [definition?.filters?.serie, turmasList]);
+  }, [definition?.filters?.serie, filters.turno, turmasList]);
 
   const turmaOptions = useMemo(() => {
     if (!definition?.filters?.turma) return [];
@@ -114,6 +117,13 @@ export const RelatorioDetailPage = () => {
     const set = new Set(filtered.map((item) => item.turma));
     return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [definition?.filters?.turma, filters.serie, filters.turno, turmasList]);
+
+  useEffect(() => {
+    if (!definition?.filters?.serie || !filters.serie) return;
+    if (!serieOptions.includes(filters.serie)) {
+      setFilters((prev) => ({ ...prev, serie: "", turma: "" }));
+    }
+  }, [definition?.filters?.serie, filters.serie, serieOptions]);
 
   useEffect(() => {
     if (!definition?.filters?.turma || !filters.turma) return;

@@ -687,6 +687,111 @@ def _deficit_ranking(
     ]
 
 
+# ── Ocorrências por tipo e gravidade ──────────────────────────────────────────
+
+def _ocorrencias_por_tipo(
+    session: Session,
+    turno: str | None,
+    serie: str | None,
+    turma: str | None,
+    _trimestre: str | None,
+    disciplina: str | None,
+):
+    from collections import defaultdict
+    from ...models import Ocorrencia
+
+    query = (
+        session.query(
+            Ocorrencia.tipo,
+            Ocorrencia.gravidade,
+            func.count(Ocorrencia.id).label("total"),
+        )
+        .join(Aluno, Ocorrencia.aluno_id == Aluno.id)
+        .filter(Aluno.status.is_(None))
+    )
+    query = _apply_common_filters(query, turno, serie, turma, None)
+    query = query.group_by(Ocorrencia.tipo, Ocorrencia.gravidade)
+
+    by_tipo: dict[str, dict] = defaultdict(
+        lambda: {"tipo": "", "LEVE": 0, "MEDIA": 0, "GRAVE": 0, "GRAVISSIMA": 0, "total": 0}
+    )
+    for tipo, grav, total in query.all():
+        by_tipo[tipo]["tipo"] = tipo
+        by_tipo[tipo][grav] = int(total)
+        by_tipo[tipo]["total"] += int(total)
+
+    return sorted(by_tipo.values(), key=lambda x: -x["total"])
+
+
+# ── Evolução mensal de ocorrências ───────────────────────────────────────────
+
+def _ocorrencias_evolucao_mensal(
+    session: Session,
+    turno: str | None,
+    serie: str | None,
+    turma: str | None,
+    _trimestre: str | None,
+    disciplina: str | None,
+):
+    from ...models import Ocorrencia
+
+    query = (
+        session.query(
+            func.extract("month", Ocorrencia.data_registro).label("mes_num"),
+            func.count(Ocorrencia.id).label("total"),
+        )
+        .join(Aluno, Ocorrencia.aluno_id == Aluno.id)
+        .filter(Aluno.status.is_(None))
+    )
+    query = _apply_common_filters(query, turno, serie, turma, None)
+    query = query.group_by("mes_num").order_by("mes_num")
+
+    _MESES = {
+        1: "Jan", 2: "Fev", 3: "Mar", 4: "Abr", 5: "Mai", 6: "Jun",
+        7: "Jul", 8: "Ago", 9: "Set", 10: "Out", 11: "Nov", 12: "Dez",
+    }
+    return [
+        {"mes": _MESES.get(int(mes), str(mes)), "total": int(total)}
+        for mes, total in query.all()
+    ]
+
+
+# ── Efetividade da recuperação ───────────────────────────────────────────────
+
+def _recuperacao_efetividade(
+    session: Session,
+    turno: str | None,
+    serie: str | None,
+    turma: str | None,
+    _trimestre: str | None,
+    disciplina: str | None,
+):
+    query = (
+        session.query(
+            Nota.disciplina,
+            func.count(Nota.id).label("fizeram_rec"),
+            func.sum(
+                case((Nota.situacao.in_(["APR", "APCC", "AR"]), 1), else_=0)
+            ).label("aprovados_pos_rec"),
+        )
+        .join(Aluno)
+        .filter(Nota.recuperacao.isnot(None), Nota.recuperacao > 0, Aluno.status.is_(None))
+    )
+    query = _apply_common_filters(query, turno, serie, turma, disciplina)
+    query = query.group_by(Nota.disciplina).order_by(func.count(Nota.id).desc())
+
+    return [
+        {
+            "disciplina": _normalize_disciplina(r.disciplina),
+            "fizeram_rec": int(r.fizeram_rec),
+            "aprovados": int(r.aprovados_pos_rec),
+            "reprovados": int(r.fizeram_rec) - int(r.aprovados_pos_rec),
+            "taxa": round(100 * int(r.aprovados_pos_rec) / max(1, int(r.fizeram_rec))),
+        }
+        for r in query.all()
+    ]
+
+
 # ── Registro de todos os builders ────────────────────────────────────────────
 
 GRAPH_BUILDERS: dict[str, GraphBuilder] = {
@@ -702,5 +807,8 @@ GRAPH_BUILDERS: dict[str, GraphBuilder] = {
     "aprovacao-por-turma":    _aprovacao_por_turma,
     "abaixo-por-disciplina":  _abaixo_por_disciplina,
     "abaixo-por-turma":       _abaixo_por_turma,
-    "deficit-ranking":        _deficit_ranking,
+    "deficit-ranking":              _deficit_ranking,
+    "ocorrencias-por-tipo":         _ocorrencias_por_tipo,
+    "ocorrencias-evolucao-mensal":  _ocorrencias_evolucao_mensal,
+    "recuperacao-efetividade":      _recuperacao_efetividade,
 }

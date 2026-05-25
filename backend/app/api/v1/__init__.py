@@ -15,7 +15,6 @@ def before_v1_request():
         "api_v1.auth.list_public_tenants_legacy",
         "api_v1.auth.forgot_password",
         "api_v1.auth.reset_password",
-        "api_v1.usuarios.serve_photo",
         "api_v1.billing.stripe_webhook",
     }
     if request.blueprint == "api_v1.super_admin" or request.endpoint in PUBLIC_ENDPOINTS:

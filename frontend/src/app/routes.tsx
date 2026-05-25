@@ -57,9 +57,14 @@ const requireAuth = async () => {
     // Não há mais refreshToken no estado Redux (inacessível ao JS por design).
     try {
       const base = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api/v1";
+      const tenantHeaders =
+        state.app.tenantId != null
+          ? { "X-Tenant-ID": String(state.app.tenantId) }
+          : undefined;
       const res = await fetch(`${base}/auth/refresh`, {
         method: "POST",
         credentials: "include", // envia o cookie rt automaticamente
+        headers: tenantHeaders,
       });
       if (res.ok) {
         const data = await res.json() as {
