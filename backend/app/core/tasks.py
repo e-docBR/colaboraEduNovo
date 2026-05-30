@@ -23,6 +23,20 @@ GRAVIDADE_LABELS = {
     "GRAVISSIMA": "Gravíssima"
 }
 
+def _mask_name(name: str) -> str:
+    if not name:
+        return name
+    parts = name.split()
+    if not parts:
+        return name
+    masked_parts = []
+    for i, part in enumerate(parts):
+        if i == 0:
+            masked_parts.append(part)
+        else:
+            masked_parts.append(part[0] + "*" * (len(part) - 1) if part else "")
+    return " ".join(masked_parts)
+
 def notify_occurrence_task(ocorrencia_id: int):
     """Background task to send occurrence notifications via Email and WhatsApp.
 
@@ -57,7 +71,7 @@ def notify_occurrence_task(ocorrencia_id: int):
         gravidade_label = GRAVIDADE_LABELS.get(occurrence.gravidade or "LEVE", "Leve")
         data_str = occurrence.data_registro.strftime("%d/%m/%Y")
 
-        subject = f"🔔 Comunicado Escolar — {tipo_label}: {aluno.nome}"
+        subject = f"🔔 Comunicado Escolar — {tipo_label}: {_mask_name(aluno.nome)}"
 
         message_body = (
             f"Prezados Pais/Responsáveis,\n\n"
@@ -94,9 +108,9 @@ def notify_occurrence_task(ocorrencia_id: int):
             )
         else:
             if email_destino:
-                logger.warning(f"Aluno {aluno.id} ({aluno.nome}) email inválido: {email_destino!r}")
+                logger.warning(f"Aluno {aluno.id} ({_mask_name(aluno.nome)}) email inválido: {CommunicationService._mask_email(email_destino)!r}")
             else:
-                logger.warning(f"Aluno {aluno.id} ({aluno.nome}) sem email cadastrado — email não enviado")
+                logger.warning(f"Aluno {aluno.id} ({_mask_name(aluno.nome)}) sem email cadastrado — email não enviado")
 
         # Send WhatsApp (validate phone format before attempting)
         if telefone_destino and _PHONE_RE.match(telefone_destino.strip()):
@@ -106,9 +120,9 @@ def notify_occurrence_task(ocorrencia_id: int):
             )
         else:
             if telefone_destino:
-                logger.warning(f"Aluno {aluno.id} ({aluno.nome}) telefone inválido: {telefone_destino!r}")
+                logger.warning(f"Aluno {aluno.id} ({_mask_name(aluno.nome)}) telefone inválido: {CommunicationService._mask_phone(telefone_destino)!r}")
             else:
-                logger.warning(f"Aluno {aluno.id} ({aluno.nome}) sem telefone cadastrado — WhatsApp não enviado")
+                logger.warning(f"Aluno {aluno.id} ({_mask_name(aluno.nome)}) sem telefone cadastrado — WhatsApp não enviado")
 
         # Update status distinguindo "não tentado" de "falha"
         email_attempted = bool(email_destino)

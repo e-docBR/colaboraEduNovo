@@ -172,7 +172,7 @@ services:
       - "traefik.http.routers.backend.rule=Host(`${DOMAIN}`) && (PathPrefix(`/api`) || Path(`/health`))"
       - "traefik.http.routers.backend.entrypoints=websecure"
       - "traefik.http.routers.backend.tls.certresolver=myresolver"
-      - "traefik.http.routers.backend.middlewares=security-headers"
+      - "traefik.http.routers.backend.middlewares=security-headers,api-ratelimit,limit-upload"
       - "traefik.http.services.backend.loadbalancer.server.port=5000"
       # Security headers at the edge
       - "traefik.http.middlewares.security-headers.headers.stsSeconds=31536000"
@@ -180,6 +180,10 @@ services:
       - "traefik.http.middlewares.security-headers.headers.stsPreload=true"
       - "traefik.http.middlewares.security-headers.headers.contentTypeNosniff=true"
       - "traefik.http.middlewares.security-headers.headers.referrerPolicy=strict-origin-when-cross-origin"
+      # Rate Limit and Upload Size Middlewares
+      - "traefik.http.middlewares.api-ratelimit.ratelimit.average=100"
+      - "traefik.http.middlewares.api-ratelimit.ratelimit.burst=200"
+      - "traefik.http.middlewares.limit-upload.buffering.maxRequestBodyBytes=157286400"
       # HTTP → HTTPS redirect
       - "traefik.http.routers.backend-http.rule=Host(`${DOMAIN}`) && (PathPrefix(`/api`) || Path(`/health`))"
       - "traefik.http.routers.backend-http.entrypoints=web"

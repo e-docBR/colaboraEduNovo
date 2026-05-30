@@ -79,7 +79,7 @@ def enqueue_pdf(filepath: Path, *, turno: str | None = None, turma: str | None =
         tenant_id=tenant_id,
         academic_year_id=academic_year_id,
         job_timeout=600,
-        retry=Retry(max=2, interval=[60, 300]),
+        retry=Retry(max=3, interval=[10, 30, 60]),
     )
     job.meta["tenant_id"] = tenant_id
     job.meta["academic_year_id"] = academic_year_id
@@ -89,48 +89,52 @@ def enqueue_pdf(filepath: Path, *, turno: str | None = None, turma: str | None =
 
 
 def process_pdf(filepath: Path, *, turno: str | None = None, turma: str | None = None, tenant_id: int | None = None, academic_year_id: int | None = None) -> dict[str, any]:
-    errors: list[str] = []
-    records, extracted_year = parse_pdf(filepath, errors, turno=turno, turma=turma)
-    
-    final_year_label = "Desconhecido"
+    try:
+        errors: list[str] = []
+        records, extracted_year = parse_pdf(filepath, errors, turno=turno, turma=turma)
+        
+        final_year_label = "Desconhecido"
 
-    # Resolve academic year: explicit parameter takes priority over PDF-extracted year.
-    # The PDF year is only used as fallback when no academic_year_id is provided.
-    if academic_year_id:
-        with session_scope() as session:
-            year_obj = session.get(AcademicYear, academic_year_id)
-            if year_obj:
-                final_year_label = year_obj.label
-    elif extracted_year and tenant_id:
-        with session_scope() as session:
-            from sqlalchemy.dialects.postgresql import insert as pg_insert
-            # Upsert atômico para evitar race condition em uploads simultâneos
-            stmt = (
-                pg_insert(AcademicYear)
-                .values(tenant_id=tenant_id, label=str(extracted_year), is_current=False)
-                .on_conflict_do_nothing(constraint="uq_academic_year_tenant_label")
-            )
-            session.execute(stmt)
-            session.flush()
-            year_obj = session.query(AcademicYear).filter_by(
-                tenant_id=tenant_id, label=str(extracted_year)
-            ).first()
-            if year_obj:
-                academic_year_id = year_obj.id
-                final_year_label = year_obj.label
-                logger.info("Resolved AcademicYear {} for tenant {}", extracted_year, tenant_id)
-            else:
-                logger.error("Failed to resolve AcademicYear {} for tenant {}", extracted_year, tenant_id)
+        # Resolve academic year: explicit parameter takes priority over PDF-extracted year.
+        # The PDF year is only used as fallback when no academic_year_id is provided.
+        if academic_year_id:
+            with session_scope() as session:
+                year_obj = session.get(AcademicYear, academic_year_id)
+                if year_obj:
+                    final_year_label = year_obj.label
+        elif extracted_year and tenant_id:
+            with session_scope() as session:
+                from sqlalchemy.dialects.postgresql import insert as pg_insert
+                # Upsert atômico para evitar race condition em uploads simultâneos
+                stmt = (
+                    pg_insert(AcademicYear)
+                    .values(tenant_id=tenant_id, label=str(extracted_year), is_current=False)
+                    .on_conflict_do_nothing(constraint="uq_academic_year_tenant_label")
+                )
+                session.execute(stmt)
+                session.flush()
+                year_obj = session.query(AcademicYear).filter_by(
+                    tenant_id=tenant_id, label=str(extracted_year)
+                ).first()
+                if year_obj:
+                    academic_year_id = year_obj.id
+                    final_year_label = year_obj.label
+                    logger.info("Resolved AcademicYear {} for tenant {}", extracted_year, tenant_id)
+                else:
+                    logger.error("Failed to resolve AcademicYear {} for tenant {}", extracted_year, tenant_id)
 
-    count = 0
-    if not records:
-        msg = f"Nenhum registro encontrado no boletim {filepath.name}. Verifique se o PDF contém 'Aluno(a): ... Matrícula: ...'"
-        logger.warning(msg)
-        errors.append(msg)
-    else:
-        count = apply_records(records, tenant_id=tenant_id, academic_year_id=academic_year_id)
-    
-    return {"count": count, "logs": errors, "year": final_year_label}
+        count = 0
+        if not records:
+            msg = f"Nenhum registro encontrado no boletim {filepath.name}. Verifique se o PDF contém 'Aluno(a): ... Matrícula: ...'"
+            logger.warning(msg)
+            errors.append(msg)
+        else:
+            count = apply_records(records, tenant_id=tenant_id, academic_year_id=academic_year_id)
+        
+        return {"count": count, "logs": errors, "year": final_year_label}
+    except Exception as e:
+        logger.error(f"[DLQ_ALERT] Ingestion process failed for file {filepath.name} (Tenant: {tenant_id}): {e}", exc_info=True)
+        raise e
 
 
 def apply_records(records: Sequence[ParsedAlunoRecord], tenant_id: int | None = None, academic_year_id: int | None = None) -> int:
