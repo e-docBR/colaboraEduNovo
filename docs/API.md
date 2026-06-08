@@ -8,6 +8,9 @@ https://{seu-dominio}/api/v1
 
 Em desenvolvimento: `http://localhost:5000/api/v1`
 
+Endpoint de observabilidade fora do prefixo versionado:
+- `GET /metrics` expõe métricas Prometheus e requer JWT com papel `super_admin`.
+
 ---
 
 ## Autenticação
@@ -18,7 +21,7 @@ A API usa JWT Bearer tokens. Inclua o header em todas as requisições autentica
 Authorization: Bearer {access_token}
 ```
 
-O `access_token` expira em 30 minutos. Use `POST /auth/refresh` para renová-lo silenciosamente.
+O `access_token` expira em 30 minutos. Use `POST /auth/refresh` para renová-lo silenciosamente. No cliente web, o refresh token fica em cookie HttpOnly `rt`; no cliente mobile/nativo, ele é retornado no body e pode ser enviado no body ou em `Authorization`.
 
 ---
 
@@ -43,7 +46,23 @@ Autentica um usuário e retorna tokens JWT.
 
 > `tenant_slug` é opcional para super-admin (login sem tenant).
 
-**Resposta 200:**
+**Resposta 200 — web:**
+```json
+{
+  "access_token": "eyJ...",
+  "user": {
+    "id": 1,
+    "username": "admin",
+    "role": "admin",
+    "tenant_id": 1,
+    "must_change_password": false
+  }
+}
+```
+
+> No web, o backend também define o cookie HttpOnly `rt` em `/api/v1/auth`.
+
+**Resposta 200 — mobile/nativo (`X-Client-Platform: mobile`):**
 ```json
 {
   "access_token": "eyJ...",
@@ -51,10 +70,8 @@ Autentica um usuário e retorna tokens JWT.
   "user": {
     "id": 1,
     "username": "admin",
-    "email": "admin@escola.com.br",
     "role": "admin",
     "tenant_id": 1,
-    "academic_year_id": 1,
     "must_change_password": false
   }
 }
@@ -66,16 +83,25 @@ Autentica um usuário e retorna tokens JWT.
 
 #### `POST /auth/refresh`
 
-Renova o access token usando o refresh token.
+Renova o access token usando o refresh token e rotaciona o refresh token usado.
 
-**Header:** `Authorization: Bearer {refresh_token}`
+**Web:** envie a requisição com credenciais/cookies para que o cookie HttpOnly `rt` seja usado.
+
+**Mobile/nativo:** envie `{ "refresh_token": "eyJ..." }` no body ou `Authorization: Bearer {refresh_token}` com o header `X-Client-Platform: mobile`.
 
 **Resposta 200:**
 ```json
 {
-  "access_token": "eyJ..."
+  "access_token": "eyJ...",
+  "user": {
+    "id": 1,
+    "username": "admin",
+    "role": "admin"
+  }
 }
 ```
+
+> No web, a resposta também atualiza o cookie HttpOnly `rt`. No mobile/nativo, a resposta inclui um novo `refresh_token`.
 
 **Erros:** `401` token inválido ou revogado
 
@@ -87,10 +113,7 @@ Revoga os tokens do usuário atual (adiciona ao blocklist Redis).
 
 **Autenticado**
 
-**Resposta 200:**
-```json
-{"message": "Logout realizado com sucesso"}
-```
+**Resposta:** `204 No Content`
 
 ---
 
@@ -108,12 +131,9 @@ Altera a senha do usuário autenticado.
 }
 ```
 
-> Nova senha: mínimo 8 chars, 1 maiúscula, 1 número.
+> Nova senha: mínimo 8 chars, 1 maiúscula, 1 número e 1 caractere especial.
 
-**Resposta 200:**
-```json
-{"message": "Senha alterada com sucesso"}
-```
+**Resposta:** `204 No Content`
 
 ---
 
@@ -126,13 +146,16 @@ Envia e-mail de recuperação de senha.
 **Body:**
 ```json
 {
-  "email": "usuario@escola.com.br"
+  "email": "usuario@escola.com.br",
+  "tenant_slug": "escola-central"
 }
 ```
 
+> `tenant_slug` é obrigatório para evitar redefinir a conta errada quando o mesmo e-mail existe em mais de uma escola.
+
 **Resposta 200** (sempre, sem revelar se o e-mail existe):
 ```json
-{"message": "Se o e-mail estiver cadastrado, você receberá as instruções em breve."}
+{"message": "Se o e-mail estiver cadastrado, você receberá um link em breve."}
 ```
 
 ---
@@ -153,7 +176,7 @@ Redefine a senha usando o token recebido por e-mail.
 
 **Resposta 200:**
 ```json
-{"message": "Senha redefinida com sucesso"}
+{"message": "Senha redefinida com sucesso. Faça login com a nova senha."}
 ```
 
 **Erros:** `400` token inválido ou expirado
@@ -169,8 +192,8 @@ Lista escolas disponíveis para o seletor de login.
 **Resposta 200:**
 ```json
 [
-  {"slug": "escola-central", "name": "Escola Central"},
-  {"slug": "escola-norte", "name": "Escola Norte"}
+  {"id": 1, "slug": "escola-central", "name": "Escola Central"},
+  {"id": 2, "slug": "escola-norte", "name": "Escola Norte"}
 ]
 ```
 

@@ -53,6 +53,7 @@ read -rp "Remetente SMTP (ex: noreply@${DOMAIN}): " SMTP_FROM
 # Gera chaves secretas automaticamente
 SECRET_KEY=$(openssl rand -hex 32)
 JWT_SECRET_KEY=$(openssl rand -hex 32)
+BACKUP_ENCRYPTION_KEY=$(openssl rand -hex 32)
 MONITOR_BASICAUTH=$(htpasswd -nb admin "$MONITOR_PASSWORD" | sed 's/\$/\$\$/g')
 SMTP_FROM=${SMTP_FROM:-noreply@${DOMAIN}}
 
@@ -94,7 +95,10 @@ WHATSAPP_API_URL=
 WHATSAPP_API_TOKEN=
 WHATSAPP_INSTANCE=
 
-# === Backup (opcional — S3/Hetzner Object Storage) ===
+# === Backup ===
+BACKUP_ENCRYPTION_KEY=${BACKUP_ENCRYPTION_KEY}
+
+# === Backup externo (opcional — S3/Hetzner Object Storage) ===
 S3_BACKUP_BUCKET=
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=

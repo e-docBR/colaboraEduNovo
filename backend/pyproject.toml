@@ -42,7 +42,8 @@ dependencies = [
     "sentry-sdk[flask]>=2.0.0",
     "litellm>=1.0.0",
     "stripe>=10.0.0",
-    "cryptography>=42.0.0"
+    "cryptography>=42.0.0",
+    "prometheus-client>=0.20.0"
 ]
 
 [project.optional-dependencies]
@@ -62,14 +63,14 @@ target-version = "py312"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q --disable-warnings --cov=app --cov-report=term-missing --cov-fail-under=40"
+addopts = "-q --disable-warnings --cov=app --cov-report=term-missing --cov-fail-under=45"
 
 [tool.coverage.run]
 source = ["app"]
 omit = ["*/tests/*", "*/migrations/*", "*/alembic/*"]
 
 [tool.coverage.report]
-fail_under = 40
+fail_under = 45
 show_missing = true
 exclude_lines = [
     "pragma: no cover",

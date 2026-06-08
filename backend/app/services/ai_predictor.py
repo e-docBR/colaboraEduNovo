@@ -80,7 +80,10 @@ def predict_risk(aluno_id: int, session: Session) -> dict:
     from flask import g
     tenant_id = getattr(g, "tenant_id", None)
     year_id = getattr(g, "academic_year_id", None)
+
+    # Tenant obrigatório — retornar erro explícito para evitar vazamento cross-tenant
     if not tenant_id:
+        logger.error("predict_risk chamado sem tenant_id no contexto Flask g (aluno_id={})", aluno_id)
         return {"score": 0.0, "status": "ERRO", "error": "tenant indisponível"}
 
     model_path = _model_path(tenant_id)

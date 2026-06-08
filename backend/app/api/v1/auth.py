@@ -99,8 +99,23 @@ def register(parent: Blueprint) -> None:
     def list_public_tenants_legacy():
         return list_public_tenants()
 
+    def _login_rate_key() -> str:
+        """Chave de rate limit por username tentado + IP.
+
+        Limitar por username previne brute-force em contas específicas mesmo quando
+        o atacante usa IPs diferentes. Limitar por IP como fallback protege contra
+        enumeração de contas sem username fixo.
+        """
+        from flask_limiter.util import get_remote_address
+        body = request.get_json(silent=True) or {}
+        username = (body.get("username") or "").strip().lower()
+        ip = request.headers.get("X-Real-IP") or get_remote_address()
+        if username:
+            return f"login:user:{username}"
+        return f"login:ip:{ip}"
+
     @bp.post("/auth/login")
-    @limiter.limit("10 per minute")
+    @limiter.limit("10 per minute", key_func=_login_rate_key)
     def login():
         from flask import make_response
 

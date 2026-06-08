@@ -41,7 +41,7 @@ Plataforma SaaS multi-tenant para gestão escolar com backend Flask, frontend Re
 
 ### Segurança
 
-- JWT com refresh token silencioso (access 30min, refresh 30 dias)
+- JWT com refresh token silencioso (access 30min, refresh 7 dias)
 - RBAC com roles: `super_admin`, `admin`, `coordenador`, `diretor`, `orientador`, `professor`, `aluno`
 - Redis blocklist fail-closed para tokens revogados
 - Rate limiting em endpoints sensíveis
@@ -156,6 +156,7 @@ Variáveis obrigatórias para produção:
 | `SMTP_USER` | Usuário SMTP |
 | `SMTP_PASSWORD` | Senha SMTP |
 | `ACME_EMAIL` | E-mail para certificado Let's Encrypt |
+| `BACKUP_ENCRYPTION_KEY` | Chave para criptografar backups locais do PostgreSQL |
 
 Veja `.env.example` para a lista completa com descrições.
 
@@ -165,6 +166,7 @@ Veja `.env.example` para a lista completa com descrições.
 
 - **[Guia de Deployment](docs/DEPLOYMENT.md)** — instalação, produção, variáveis de ambiente, SSL
 - **[Production Readiness](docs/PRODUCTION_READINESS.md)** — estado real do stack, gates de go-live e segredos do GitHub
+- **[Plano de Go-Live](docs/PRODUCTION_GO_LIVE_PLAN.md)** — bloqueadores, fases, gates e sequência para colocar em produção
 - **[Arquitetura do Sistema](docs/ARCHITECTURE.md)** — stack, multi-tenancy, segurança, modelos de dados
 - **[Referência da API](docs/API.md)** — endpoints, autenticação, exemplos de request/response
 - **[CHANGELOG](CHANGELOG.md)** — histórico de versões

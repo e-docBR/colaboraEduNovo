@@ -235,7 +235,7 @@ export const LandingPage = () => {
             <img
               src="/colaboraedu-logo.png"
               alt="colaboraEDU"
-              style={{ height: isMobile ? 36 : 44, width: 'auto', objectFit: 'contain' }}
+              style={{ height: isMobile ? 70 : 100, width: 'auto', objectFit: 'contain' }}
             />
           </Box>
 
@@ -895,9 +895,9 @@ export const LandingPage = () => {
           <Grid size={{ xs: 12, md: 5 }}>
             <Box sx={{ mb: 2 }}>
               <img
-                src="/colaboraedu-logo.png"
+                src="/colaboraedu-logo-dark.png"
                 alt="colaboraEDU"
-                style={{ height: 36, width: 'auto', objectFit: 'contain', filter: 'brightness(0) invert(1)' }}
+                style={{ height: 75, width: 'auto', objectFit: 'contain' }}
               />
             </Box>
             <Typography variant="body2" sx={{ color: alpha(brand.branco, 0.6), maxWidth: 320, lineHeight: 1.6, fontSize: '0.85rem' }}>

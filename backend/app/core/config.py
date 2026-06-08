@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     stripe_webhook_secret: str = Field(default="", alias="STRIPE_WEBHOOK_SECRET")
     stripe_price_id: str = Field(default="", alias="STRIPE_PRICE_ID")
 
+    # Encryption key for secrets stored in the database (AI API keys, tokens).
+    # Must be different from SECRET_KEY so that rotating SECRET_KEY (e.g. after a
+    # security incident) does not silently break decryption of stored secrets.
+    # In development, falls back to a deterministic derive from SECRET_KEY so no
+    # extra config is needed locally.
+    encryption_key: str = Field(default="", alias="ENCRYPTION_KEY")
+
     # Commercial Settings
     commercial_mode: str = Field(default="saas", alias="COMMERCIAL_MODE") # saas or dedicated
     enable_registration: bool = Field(default=True, alias="ENABLE_REGISTRATION")
@@ -88,7 +95,24 @@ class Settings(BaseSettings):
                 raise ValueError("SMTP_SERVER e SMTP_FROM são obrigatórios em produção")
             if not self.smtp_user or not self.smtp_password:
                 raise ValueError("SMTP_USER e SMTP_PASSWORD são obrigatórios em produção")
+            if not self.encryption_key or len(self.encryption_key) < 32:
+                raise ValueError("ENCRYPTION_KEY deve ter pelo menos 32 caracteres em produção")
+            if self.encryption_key == self.secret_key:
+                raise ValueError("ENCRYPTION_KEY deve ser diferente de SECRET_KEY em produção")
         return self
+
+    def get_effective_encryption_key(self) -> str:
+        """Retorna a chave de criptografia efetiva.
+
+        Em produção: ENCRYPTION_KEY (obrigatória e validada).
+        Em desenvolvimento: fallback determinístico derivado do SECRET_KEY para não
+        exigir configuração extra em ambiente local.
+        """
+        if self.encryption_key:
+            return self.encryption_key
+        # Dev fallback: prefixar com "enc-fallback:" para que a chave derivada seja
+        # diferente da usada diretamente pelo Flask (JWT, sessões).
+        return f"enc-fallback:{self.secret_key}"
 
 
 @lru_cache

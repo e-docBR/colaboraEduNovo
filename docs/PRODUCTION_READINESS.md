@@ -24,11 +24,12 @@ Os principais gaps operacionais identificados na auditoria foram fechados neste 
 - validação de email/telefone adicionada antes do envio de notificações;
 - assertion anti-dev-mode impede localhost em ALLOWED_ORIGINS em produção;
 - Dockerfile convertido para multi-stage build (menor imagem runtime);
-- backups opcionalmente encriptados com GPG/AES256 via BACKUP_ENCRYPTION_KEY;
+- backups obrigatoriamente encriptados com GPG/AES256 via BACKUP_ENCRYPTION_KEY;
 - paginação centralizada em helper parse_pagination() (7 endpoints);
 - o CI usa `VITE_API_BASE_URL`, que é a variável realmente consumida pelo frontend;
 - o workflow de deploy usa `--scale worker=3`, compatível com `docker compose`;
 - o smoke test de deploy valida frontend, `/health` e descoberta de tenants.
+- `/metrics` agora exige JWT de `super_admin`; scrapers Prometheus precisam enviar `Authorization: Bearer <token>`.
 
 ## Modelo real de deploy
 
@@ -53,17 +54,20 @@ Além do bloco básico de domínio, SMTP, PostgreSQL, Redis e segredos Flask/JWT
 - `APP_DB_PASSWORD`
 - `FRONTEND_URL`
 - `MONITOR_BASICAUTH`
+- `BACKUP_ENCRYPTION_KEY`
 
 Regras operacionais:
 - `APP_DB_USER` deve ser diferente de `POSTGRES_USER`;
 - `FRONTEND_URL` deve ser `https://<DOMAIN>`;
+- `BACKUP_ENCRYPTION_KEY` deve ter pelo menos 32 caracteres; sem ela o serviço `pgbackup` recusa gerar dumps;
 - se `S3_BACKUP_BUCKET` for preenchido, `AWS_ACCESS_KEY_ID` e `AWS_SECRET_ACCESS_KEY` passam a ser obrigatórios;
 - se qualquer variável de Stripe for preenchida, o trio `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` e `STRIPE_PRICE_ID` deve existir por completo.
 
 ## Validação local mais recente
 
-- `cd backend && .venv/bin/python -m pytest tests -q` passou com `38` testes e cobertura `40.38%`.
+- `cd backend && .venv/bin/python -m pytest tests -q --cov-fail-under=0` passou; cobertura total reportada em torno de `46%`.
 - `cd backend && .venv/bin/python -m ruff check app tests` passou.
+- `./scripts/scan-secrets.sh` passou.
 - `bash -n scripts/smoke-rq-worker.sh` passou.
 - `bash -n scripts/restore-postgres-backup.sh` passou.
 - `frontend npm run build` passou sem aviso de chunk grande; o entrypoint `index` caiu para cerca de `25.77 kB`.
@@ -91,6 +95,8 @@ Sem esses segredos opcionais, o deploy continua validando frontend, health e ten
 
 ## Gates recomendados para go-live
 
+O plano detalhado de execução está em `docs/PRODUCTION_GO_LIVE_PLAN.md`.
+
 - `./scripts/prod-preflight.sh` precisa passar com o `.env` real.
 - `docker compose -f docker-compose.prod.yml config --quiet` precisa resolver sem placeholders.
 - o deploy precisa subir com `--scale worker=3`.
@@ -98,6 +104,7 @@ Sem esses segredos opcionais, o deploy continua validando frontend, health e ten
   - `GET /`
   - `GET /health`
   - `GET /api/v1/auth/tenants`
+  - `GET /metrics` com JWT de `super_admin`, quando houver scraper configurado
   - execução de job real no RQ
   - login real, se os segredos de smoke estiverem configurados
 

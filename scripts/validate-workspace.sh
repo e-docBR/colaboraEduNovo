@@ -84,6 +84,9 @@ case "$target" in
     run_mobile
     ;;
   all)
+    echo "==> security: secret scan"
+    ./scripts/scan-secrets.sh
+
     ./scripts/doctor.sh || true
     run_backend
     run_frontend

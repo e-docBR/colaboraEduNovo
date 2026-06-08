@@ -25,6 +25,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Secret scan
+        run: ./scripts/scan-secrets.sh
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -158,8 +161,18 @@ jobs:
               exit 1
             fi
             echo "✅ /api/v1/auth/login → 200"
+
+            ACCESS_TOKEN=$(python3 -c "import json; print(json.load(open('/tmp/colabora-login.json'))['access_token'])")
+            METRICS_STATUS=$(curl -fsS -o /dev/null -w "%{http_code}" \
+              -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+              "$BASE_URL/metrics")
+            if [ "$METRICS_STATUS" != "200" ]; then
+              echo "❌ Metrics smoke failed — HTTP $METRICS_STATUS"
+              exit 1
+            fi
+            echo "✅ /metrics → 200"
           else
-            echo "ℹ️ Login smoke skipped — SMOKE_SUPERADMIN_* secrets ausentes"
+            echo "ℹ️ Login and metrics smoke skipped — SMOKE_SUPERADMIN_* secrets ausentes"
           fi
 
           echo "✅ Deployed successfully — all smoke tests passed"

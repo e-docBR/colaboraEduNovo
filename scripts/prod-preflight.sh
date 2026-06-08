@@ -74,9 +74,13 @@ done
 
 require_secret SECRET_KEY
 require_secret JWT_SECRET_KEY
+require_secret ENCRYPTION_KEY
+require_secret BACKUP_ENCRYPTION_KEY
 
 [ "$FLASK_ENV" = "production" ] || fail "FLASK_ENV deve ser production"
 [ "$SECRET_KEY" != "$JWT_SECRET_KEY" ] || fail "SECRET_KEY e JWT_SECRET_KEY devem ser diferentes"
+[ "$SECRET_KEY" != "$ENCRYPTION_KEY" ] || fail "ENCRYPTION_KEY deve ser diferente de SECRET_KEY"
+[ "$JWT_SECRET_KEY" != "$ENCRYPTION_KEY" ] || fail "ENCRYPTION_KEY deve ser diferente de JWT_SECRET_KEY"
 [[ "$APP_DB_USER" != "$POSTGRES_USER" ]] || fail "APP_DB_USER deve ser diferente de POSTGRES_USER"
 [[ "$DOMAIN" != http://* && "$DOMAIN" != https://* ]] || fail "DOMAIN deve conter apenas o host, sem protocolo"
 [[ "$ACME_EMAIL" == *@* ]] || fail "ACME_EMAIL deve ser um e-mail válido"
@@ -111,6 +115,8 @@ env \
   REDIS_PASSWORD="$REDIS_PASSWORD" \
   SECRET_KEY="$SECRET_KEY" \
   JWT_SECRET_KEY="$JWT_SECRET_KEY" \
+  ENCRYPTION_KEY="$ENCRYPTION_KEY" \
+  BACKUP_ENCRYPTION_KEY="$BACKUP_ENCRYPTION_KEY" \
   FRONTEND_URL="$FRONTEND_URL" \
   SMTP_SERVER="$SMTP_SERVER" \
   SMTP_PORT="$SMTP_PORT" \

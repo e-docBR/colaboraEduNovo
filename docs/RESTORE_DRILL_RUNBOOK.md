@@ -6,6 +6,8 @@ Use este procedimento em um ambiente limpo de staging/drill, nunca direto no ban
 
 Validar que um backup PostgreSQL recente pode ser restaurado, migrado e servido pela aplicação com Redis/RQ funcional.
 
+Registre o resultado usando `docs/RESTORE_DRILL_EVIDENCE_TEMPLATE.md`.
+
 ## Pré-requisitos
 
 - servidor limpo com Docker e Docker Compose;

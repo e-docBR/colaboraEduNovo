@@ -65,9 +65,11 @@ def handle_webhook_event(payload: bytes, sig_header: str) -> dict:
 
     logger.info("Stripe webhook received: type={}", event_type)
 
-    if event_id and _claim_webhook_event(event_id, event_type) == "processed":
-        logger.info("Stripe webhook duplicate ignored: id={} type={}", event_id, event_type)
-        return {"action": "ignored_duplicate", "type": event_type, "event_id": event_id}
+    if event_id:
+        claim_result = _claim_webhook_event(event_id, event_type)
+        if claim_result in ("processed", "duplicate"):
+            logger.info("Stripe webhook duplicate ignored: id={} type={} reason={}", event_id, event_type, claim_result)
+            return {"action": "ignored_duplicate", "type": event_type, "event_id": event_id}
 
     try:
         if event_type in ("customer.subscription.created", "customer.subscription.updated"):
@@ -99,34 +101,65 @@ def _checkout_idempotency_key(tenant_id: int, tenant_slug: str) -> str:
 
 
 def _claim_webhook_event(event_id: str, event_type: str) -> str:
+    """Atomicamente registra o evento Stripe como 'processing'.
+
+    Em PostgreSQL usa INSERT ... ON CONFLICT DO NOTHING para garantir atomicidade
+    (sem race condition entre workers). Em outros dialetos (ex: SQLite em testes)
+    cai no caminho de check-and-insert convencional.
+
+    Retorna:
+      "processed"  — evento já foi concluído com sucesso
+      "duplicate"  — outro worker está processando (ou houve falha anterior)
+      "processing" — reivindicado com sucesso por este worker
+    """
+    from sqlalchemy.exc import IntegrityError
     from ..core.database import session_scope
     from ..models import StripeWebhookEvent
 
     with session_scope() as session:
+        dialect = session.bind.dialect.name if hasattr(session, "bind") and session.bind else "postgresql"
+
+        if dialect == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+            stmt = (
+                pg_insert(StripeWebhookEvent)
+                .values(event_id=event_id, event_type=event_type, status="processing")
+                .on_conflict_do_nothing(index_elements=["event_id"])
+            )
+            result = session.execute(stmt)
+            if result.rowcount == 0:
+                existing = (
+                    session.query(StripeWebhookEvent)
+                    .filter(StripeWebhookEvent.event_id == event_id)
+                    .first()
+                )
+                if existing and existing.status == "processed":
+                    return "processed"
+                return "duplicate"
+            return "processing"
+
+        # Fallback para dialetos não-PostgreSQL (SQLite em testes)
         existing = (
             session.query(StripeWebhookEvent)
             .filter(StripeWebhookEvent.event_id == event_id)
             .first()
         )
-        if existing and existing.status == "processed":
-            return "processed"
-
         if existing:
-            existing.event_type = event_type
-            existing.status = "processing"
-            existing.error_message = None
-            existing.processed_at = None
-            session.add(existing)
-            return existing.status
+            if existing.status == "processed":
+                return "processed"
+            return "duplicate"
 
-        session.add(
-            StripeWebhookEvent(
+        try:
+            session.add(StripeWebhookEvent(
                 event_id=event_id,
                 event_type=event_type,
                 status="processing",
-            )
-        )
-        return "processing"
+            ))
+            session.flush()
+            return "processing"
+        except IntegrityError:
+            session.rollback()
+            return "duplicate"
 
 
 def _finalize_webhook_event(event_id: str, status: str, error_message: str | None = None) -> None:

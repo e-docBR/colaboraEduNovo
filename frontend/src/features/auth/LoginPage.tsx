@@ -236,7 +236,7 @@ export const LoginPage = () => {
               <img
                 src="/colaboraedu-logo.png"
                 alt="colaboraEDU"
-                style={{ height: 36, width: 'auto', objectFit: 'contain' }}
+                style={{ height: 80, width: 'auto', objectFit: 'contain' }}
               />
             </Box>
             <Button
