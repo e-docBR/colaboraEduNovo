@@ -12,8 +12,6 @@ from unittest.mock import patch, MagicMock
 
 from app.core.security import generate_tokens
 from app.core.database import session_scope
-from app.models import Tenant, AcademicYear, Aluno, Nota, Usuario
-from app.core.security import hash_password
 
 
 # ─── Helpers ────────────────────────────────────────────────────────────────

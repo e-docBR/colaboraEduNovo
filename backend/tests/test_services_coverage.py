@@ -3,9 +3,7 @@
 Foco em billing, communication e config para elevar cobertura para 60%+.
 """
 import pytest
-from unittest.mock import patch, MagicMock, call
-from app.core.database import session_scope
-from app.models import Tenant
+from unittest.mock import patch, MagicMock
 
 
 # ─── Config validation ───────────────────────────────────────────────────────
@@ -86,7 +84,6 @@ def test_billing_handle_webhook_invalid_signature_raises(flask_app):
     from app.services.billing import handle_webhook_event
 
     with patch("app.services.billing.get_stripe") as mock_stripe_factory:
-        import stripe
         mock_stripe = MagicMock()
         mock_stripe.error = MagicMock()
         mock_stripe.Webhook.construct_event.side_effect = Exception("SignatureVerificationError")
@@ -171,7 +168,6 @@ def test_predict_risk_without_tenant_returns_error(flask_app):
 def test_predict_risk_returns_treinando_when_model_missing(flask_app, admin_user):
     """predict_risk deve retornar TREINANDO quando modelo não existe."""
     from app.services.ai_predictor import predict_risk
-    from app.core.security import generate_tokens
 
     with flask_app.app_context():
         from flask import g
