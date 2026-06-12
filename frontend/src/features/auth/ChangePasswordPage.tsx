@@ -127,23 +127,21 @@ export const ChangePasswordPage = () => {
               onChange={(e) => { setNewPassword(e.target.value); setTouched(true); }}
               error={touched && !validatePassword(newPassword)}
             />
-            {(touched || newPassword.length > 0) && (
-              <Stack gap={0.5} sx={{ pl: 0.5 }}>
-                {PASSWORD_RULES.map((rule) => {
-                  const ok = rule.test(newPassword);
-                  return (
-                    <Stack key={rule.label} direction="row" alignItems="center" gap={0.75}>
-                      {ok
-                        ? <CheckCircleIcon sx={{ fontSize: 16, color: "success.main" }} />
-                        : <RadioButtonUncheckedIcon sx={{ fontSize: 16, color: "text.disabled" }} />}
-                      <Typography variant="caption" color={ok ? "success.main" : "text.secondary"}>
-                        {rule.label}
-                      </Typography>
-                    </Stack>
-                  );
-                })}
-              </Stack>
-            )}
+            <Stack gap={0.5} sx={{ pl: 0.5 }}>
+              {PASSWORD_RULES.map((rule) => {
+                const ok = rule.test(newPassword);
+                return (
+                  <Stack key={rule.label} direction="row" alignItems="center" gap={0.75}>
+                    {ok
+                      ? <CheckCircleIcon sx={{ fontSize: 16, color: "success.main" }} />
+                      : <RadioButtonUncheckedIcon sx={{ fontSize: 16, color: "text.disabled" }} />}
+                    <Typography variant="caption" color={ok ? "success.main" : "text.secondary"}>
+                      {rule.label}
+                    </Typography>
+                  </Stack>
+                );
+              })}
+            </Stack>
             <TextField
               label="Confirmar nova senha"
               type="password"
