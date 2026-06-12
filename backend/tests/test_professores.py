@@ -1,4 +1,3 @@
-import pytest
 from app.core.database import session_scope
 from app.core.security import generate_tokens
 from app.models import Tenant, AcademicYear, Aluno, Usuario, UsuarioTurma, Nota
@@ -192,7 +191,7 @@ def test_apply_professors_username_and_idempotency(flask_app):
             UsuarioTurma.academic_year_id == year_id
         ).all()
         assert len(links) == 2
-        assert {l.turma for l in links} == {"3A", "3B"}
+        assert {link.turma for link in links} == {"3A", "3B"}
 
 def test_rename_turma_updates_professors(client, flask_app):
     with session_scope() as session:

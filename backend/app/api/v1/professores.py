@@ -37,7 +37,7 @@ def register(parent: Blueprint) -> None:
                     UsuarioTurma.tenant_id == tenant_id,
                     UsuarioTurma.academic_year_id == academic_year_id
                 ).all()
-                turma_names = [l[0] for l in links if l[0]]
+                turma_names = [link[0] for link in links if link[0]]
 
             results = []
             for t_name in turma_names:

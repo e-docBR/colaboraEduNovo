@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import re
-import secrets
 from unicodedata import normalize
 
 from loguru import logger

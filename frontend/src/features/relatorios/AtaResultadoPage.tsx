@@ -1,7 +1,6 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo } from "react";
 import { 
   Box, 
-  Card, 
   Typography, 
   MenuItem, 
   Select, 
@@ -23,7 +22,7 @@ import { useAppSelector } from "../../app/hooks";
 import { styled } from "@mui/material/styles";
 
 // Styled components for print formatting
-const PrintContainer = styled(Box)(({ theme }) => ({
+const PrintContainer = styled(Box)(() => ({
   '@media print': {
     position: 'absolute',
     top: 0,
@@ -45,7 +44,7 @@ const PrintContainer = styled(Box)(({ theme }) => ({
   }
 }));
 
-const StyledTableCell = styled(TableCell)(({ theme }) => ({
+const StyledTableCell = styled(TableCell)(() => ({
   border: '1px solid #000',
   padding: '4px 8px',
   fontSize: '11px',
