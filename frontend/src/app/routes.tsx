@@ -36,6 +36,7 @@ const TenantsPage = lazy(() => import("../features/super-admin/TenantsPage").the
 const AcademicYearsPage = lazy(() => import("../features/admin/AcademicYearsPage").then(m => ({ default: m.AcademicYearsPage })));
 const PortalResponsavelPage = lazy(() => import("../features/responsavel/PortalResponsavelPage").then(m => ({ default: m.PortalResponsavelPage })));
 const AISettingsPage = lazy(() => import("../features/ai-chat/AISettingsPage"));
+const MinhasTurmasPage = lazy(() => import("../features/professor/MinhasTurmasPage").then(m => ({ default: m.MinhasTurmasPage })));
 
 const PageLoader = () => (
   <Box display="flex" alignItems="center" justifyContent="center" minHeight={300}>
@@ -139,6 +140,7 @@ export const appRouter = createBrowserRouter([
     children: [
       { index: true, element: wrap(<DashboardPage />) },
       { path: "professor", element: wrap(<TeacherDashboard />) },
+      { path: "professor/minhas-turmas", element: wrap(<MinhasTurmasPage />) },
       { path: "alunos", element: wrap(<AlunosPage />) },
       { path: "alunos/arquivo", element: wrap(<ArchivedAlunosPage />) },
       { path: "alunos/:alunoId", element: wrap(<AlunoDetailPage />) },

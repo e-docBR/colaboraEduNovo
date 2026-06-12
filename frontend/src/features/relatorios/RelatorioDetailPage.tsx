@@ -45,7 +45,11 @@ import {
   BarChart,
   Bar,
   Cell,
-  CartesianGrid
+  CartesianGrid,
+  LineChart,
+  Line,
+  PieChart,
+  Pie
 } from "recharts";
 
 const DEFAULT_FILTERS = { turno: "", serie: "", turma: "", disciplina: "", trimestre: "" };
@@ -456,6 +460,10 @@ export const RelatorioDetailPage = () => {
             <RadarVisual data={rows} />
           ) : definition.type === "bar" ? (
             <BarVisual data={rows} />
+          ) : definition.type === "pie" ? (
+            <PieVisual data={rows} />
+          ) : definition.type === "line" ? (
+            <LineVisual data={rows} />
           ) : null}
         </CardContent>
       </Card>
@@ -585,6 +593,66 @@ const BarVisual = ({ data }: { data: any[] }) => {
           })}
         </Bar>
       </BarChart>
+    </ResponsiveContainer>
+  );
+};
+
+const PieVisual = ({ data }: { data: any[] }) => {
+  const aggregated = useMemo(() => {
+    const counts: Record<string, number> = {};
+    data.forEach((row) => {
+      const sit = row.situacao || "N/A";
+      counts[sit] = (counts[sit] || 0) + 1;
+    });
+    return Object.entries(counts).map(([name, value]) => ({ name, value }));
+  }, [data]);
+
+  const COLORS = {
+    APROVADO: "#10B981",
+    RECUPERAÇÃO: "#F59E0B",
+    REPROVADO: "#EF4444",
+  };
+
+  return (
+    <Box display="flex" flexDirection="column" alignItems="center" gap={3}>
+      <ResponsiveContainer width="100%" height={350}>
+        <PieChart>
+          <Pie
+            data={aggregated}
+            dataKey="value"
+            nameKey="name"
+            cx="50%"
+            cy="50%"
+            outerRadius={100}
+            fill="#8884d8"
+            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+          >
+            {aggregated.map((entry, index) => {
+              const color = COLORS[entry.name as keyof typeof COLORS] || "#64748B";
+              return <Cell key={`cell-${index}`} fill={color} />;
+            })}
+          </Pie>
+          <Tooltip />
+          <Legend />
+        </PieChart>
+      </ResponsiveContainer>
+    </Box>
+  );
+};
+
+const LineVisual = ({ data }: { data: any[] }) => {
+  return (
+    <ResponsiveContainer width="100%" height={400}>
+      <LineChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="turma" />
+        <YAxis domain={[0, 100]} />
+        <Tooltip />
+        <Legend />
+        <Line type="monotone" dataKey="t1" name="1º Trimestre" stroke="#06B6D4" strokeWidth={3} activeDot={{ r: 8 }} />
+        <Line type="monotone" dataKey="t2" name="2º Trimestre" stroke="#3b82f6" strokeWidth={3} />
+        <Line type="monotone" dataKey="t3" name="3º Trimestre" stroke="#10b981" strokeWidth={3} />
+      </LineChart>
     </ResponsiveContainer>
   );
 };

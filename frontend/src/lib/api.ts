@@ -255,6 +255,15 @@ export type TurmaSummary = {
   media?: number | null;
   faltas_medias?: number | null;
   slug?: string;
+  professor_ids?: number[];
+};
+
+export type ProfessorTurma = {
+  turma: string;
+  turno: string;
+  total_alunos: number;
+  media: number;
+  faltas_medias: number;
 };
 
 type ListTurmasResponse = {
@@ -634,7 +643,7 @@ export const api = createApi({
       }),
       providesTags: (result, _error, slug) => ["Turmas", { type: "Turmas", id: slug }]
     }),
-    updateTurma: builder.mutation<{ updated: number; turma: string }, { slug: string; nome: string; turno?: string }>({
+    updateTurma: builder.mutation<{ updated: number; turma: string }, { slug: string; nome: string; turno?: string; professor_ids?: number[] }>({
       query: ({ slug, ...body }) => ({
         url: `/turmas/${slug}`,
         method: "PATCH",
@@ -1022,6 +1031,10 @@ export const api = createApi({
         url: "/billing/checkout",
         method: "POST"
       })
+    }),
+    getProfessorTurmas: builder.query<ProfessorTurma[], void>({
+      query: () => "/professores/me/turmas",
+      providesTags: ["Turmas"]
     })
   })
 });
@@ -1092,5 +1105,6 @@ export const {
   useGetStudentRiskQuery,
   useGetBulkInterventionsMutation,
   useGetBillingStatusQuery,
-  useCreateBillingCheckoutMutation
+  useCreateBillingCheckoutMutation,
+  useGetProfessorTurmasQuery
 } = api;

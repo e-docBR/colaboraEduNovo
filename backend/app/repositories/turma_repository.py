@@ -63,7 +63,8 @@ class TurmaRepository(BaseRepository[Aluno]):
         if tenant_id:
              query = query.filter(Aluno.tenant_id == tenant_id)
         
-        direct_match = query.scalar()
+        row = query.first()
+        direct_match = row[0] if row else None
         if direct_match:
             return direct_match
 

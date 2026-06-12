@@ -70,6 +70,10 @@ const SidebarInner = ({ mobile }: { mobile?: boolean }) => {
       base.push({ label: "Visão Professor", icon: <InsightsIcon />, path: `${appBasePath}/professor` });
     }
 
+    if (isAdmin || user?.role === "professor") {
+      base.push({ label: "Minhas turmas", icon: <ClassIcon />, path: `${appBasePath}/professor/minhas-turmas` });
+    }
+
     if (isAdmin || user?.role === "coordenador") {
       base.push({ label: "Intervenções IA", icon: <AutoFixHighIcon />, path: `${appBasePath}/ia/intervencoes-em-lote` });
     }

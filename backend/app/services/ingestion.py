@@ -91,7 +91,7 @@ def enqueue_pdf(filepath: Path, *, turno: str | None = None, turma: str | None =
 def process_pdf(filepath: Path, *, turno: str | None = None, turma: str | None = None, tenant_id: int | None = None, academic_year_id: int | None = None) -> dict[str, any]:
     try:
         errors: list[str] = []
-        records, extracted_year = parse_pdf(filepath, errors, turno=turno, turma=turma)
+        records, extracted_year, extracted_professors = parse_pdf(filepath, errors, turno=turno, turma=turma)
         
         final_year_label = "Desconhecido"
 
@@ -130,6 +130,14 @@ def process_pdf(filepath: Path, *, turno: str | None = None, turma: str | None =
             errors.append(msg)
         else:
             count = apply_records(records, tenant_id=tenant_id, academic_year_id=academic_year_id)
+            
+            # Apply professors if any
+            if extracted_professors and tenant_id and academic_year_id:
+                turma_name = records[0].turma if records else turma
+                if turma_name:
+                    turno_name = records[0].turno if records else turno
+                    normalized_turma = _normalize_turma_name(turma_name, turno_name) or turma_name
+                    apply_professors(extracted_professors, normalized_turma, tenant_id, academic_year_id)
         
         return {"count": count, "logs": errors, "year": final_year_label}
     except Exception as e:
@@ -148,9 +156,88 @@ def apply_records(records: Sequence[ParsedAlunoRecord], tenant_id: int | None = 
     return len(records)
 
 
-def parse_pdf(filepath: Path, errors: list[str], *, turno: str | None = None, turma: str | None = None) -> tuple[list[ParsedAlunoRecord], int | None]:
+def apply_professors(professors: list[str], turma_nome: str, tenant_id: int, academic_year_id: int) -> None:
+    from unicodedata import normalize as u_normalize
+    from ..core.security import hash_password
+    from ..models import Usuario, UsuarioTurma
+    from ..core.database import session_scope as _scope
+    
+    with _scope() as session:
+        for prof_name in professors:
+            prof_name = prof_name.strip()
+            if not prof_name:
+                continue
+            
+            # Generate username: alcianecastro (first + last name)
+            normalized = u_normalize("NFKD", prof_name).encode("ascii", "ignore").decode("ascii")
+            clean_name = re.sub(r"[^a-zA-Z\s]", "", normalized).lower()
+            tokens = clean_name.split()
+            if not tokens:
+                continue
+            
+            if len(tokens) >= 2:
+                base_username = tokens[0] + tokens[-1]
+            else:
+                base_username = tokens[0]
+            username = base_username
+            
+            # Check for collision and append numbers if needed
+            suffix = 1
+            existing = None
+            while True:
+                existing_user = session.query(Usuario).filter(
+                    Usuario.username == username,
+                    Usuario.tenant_id == tenant_id
+                ).first()
+                if not existing_user:
+                    break
+                
+                # If name matches base_username and the role is professor, we assume it's the same professor
+                if existing_user.role == "professor":
+                    existing = existing_user
+                    break
+                else:
+                    username = f"{base_username}{suffix}"
+                    suffix += 1
+            
+            if not existing:
+                initial_password = "Professor123!"
+                usuario = Usuario(
+                    username=username,
+                    password_hash=hash_password(initial_password),
+                    role="professor",
+                    tenant_id=tenant_id,
+                    must_change_password=True,
+                )
+                session.add(usuario)
+                session.flush()
+                logger.info("Created professor user: {} for tenant {}", username, tenant_id)
+            else:
+                usuario = existing
+            
+            # Link professor to turma
+            link_stmt = select(UsuarioTurma).where(
+                UsuarioTurma.usuario_id == usuario.id,
+                UsuarioTurma.turma == turma_nome,
+                UsuarioTurma.tenant_id == tenant_id,
+                UsuarioTurma.academic_year_id == academic_year_id
+            )
+            link = session.execute(link_stmt).scalar_one_or_none()
+            if not link:
+                link = UsuarioTurma(
+                    usuario_id=usuario.id,
+                    turma=turma_nome,
+                    tenant_id=tenant_id,
+                    academic_year_id=academic_year_id
+                )
+                session.add(link)
+                logger.info("Linked professor {} to class {}", username, turma_nome)
+
+
+def parse_pdf(filepath: Path, errors: list[str], *, turno: str | None = None, turma: str | None = None) -> tuple[list[ParsedAlunoRecord], int | None, list[str]]:
     parsed: dict[str, ParsedAlunoRecord] = {}
     extracted_year = None
+    extracted_professors = []
     
     with pdfplumber.open(str(filepath)) as pdf:
         first_page_text = (pdf.pages[0].extract_text() or "").upper()
@@ -232,12 +319,13 @@ def parse_pdf(filepath: Path, errors: list[str], *, turno: str | None = None, tu
                             situacao=_clean_text(row.get("situacao")),
                         )
                     )
-    return list(parsed.values()), extracted_year
+    return list(parsed.values()), extracted_year, extracted_professors
 
 
-def _parse_matricula_inicial(pdf: pdfplumber.PDF, _errors: list[str], *, turno: str | None = None, turma: str | None = None) -> tuple[list[ParsedAlunoRecord], int | None]:
+def _parse_matricula_inicial(pdf: pdfplumber.PDF, _errors: list[str], *, turno: str | None = None, turma: str | None = None) -> tuple[list[ParsedAlunoRecord], int | None, list[str]]:
     parsed_alunos: dict[str, ParsedAlunoRecord] = {}
     extracted_year = None
+    extracted_professors: list[str] = []
     
     file_turma = turma
     file_turno = turno
@@ -251,6 +339,19 @@ def _parse_matricula_inicial(pdf: pdfplumber.PDF, _errors: list[str], *, turno: 
             if year_match:
                 extracted_year = int(year_match.group("year"))
         
+        # Extract professors list (typically on first page)
+        if not extracted_professors:
+            prof_match = re.search(r"Professor(?:es)?:\s*(?P<content>.*?)(?=Munic[ií]pio|Diretor|Nº\s+Nome|$)", text, re.IGNORECASE | re.DOTALL)
+            if prof_match:
+                prof_content = prof_match.group("content").strip()
+                # Clean content: remove "Ano: \d{4}" and handle spacing/newlines
+                prof_content = re.sub(r"Ano:\s*\d{4}", "", prof_content, flags=re.IGNORECASE)
+                prof_content = re.sub(r"\s+", " ", prof_content)
+                for p in prof_content.split("-"):
+                    p_clean = " ".join(p.strip().split())
+                    if p_clean and p_clean not in extracted_professors:
+                        extracted_professors.append(p_clean)
+
         if file_turma is None:
             tm = MI_TURMA_PATTERN.search(text)
             if tm:
@@ -308,7 +409,7 @@ def _parse_matricula_inicial(pdf: pdfplumber.PDF, _errors: list[str], *, turno: 
                     situacao_anterior=(row[12] or "").strip(),
                 )
     
-    return list(parsed_alunos.values()), extracted_year
+    return list(parsed_alunos.values()), extracted_year, extracted_professors
 
 
 def _extract_student_meta(text: str) -> list[dict[str, str | None]]:

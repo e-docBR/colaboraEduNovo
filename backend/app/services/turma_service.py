@@ -29,6 +29,23 @@ class TurmaService:
         return "-".join(filter(None, ascii_value.split("-")))
 
     def list_turmas(self) -> TurmaListResponse:
+        from flask import g
+        from app.models import UsuarioTurma
+        from collections import defaultdict
+        
+        tenant_id = getattr(g, "tenant_id", None)
+        academic_year_id = getattr(g, "academic_year_id", None)
+        
+        # Pull linkages
+        links = self.repository.session.query(UsuarioTurma.turma, UsuarioTurma.usuario_id).filter(
+            UsuarioTurma.tenant_id == tenant_id,
+            UsuarioTurma.academic_year_id == academic_year_id
+        ).all()
+        
+        turma_prof_ids = defaultdict(list)
+        for t_name, u_id in links:
+            turma_prof_ids[t_name].append(u_id)
+
         rows = self.repository.get_summaries()
         
         items = [
@@ -38,7 +55,8 @@ class TurmaService:
                 total_alunos=total,
                 media=round(float(media), 2) if media is not None else None,
                 faltas_medias=round(float(faltas), 1) if faltas is not None else 0.0,
-                slug=self._slugify(turma)
+                slug=self._slugify(turma),
+                professor_ids=turma_prof_ids.get(turma, [])
             )
             for turma, turno, total, media, faltas in rows
         ]

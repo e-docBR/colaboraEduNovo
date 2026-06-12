@@ -10,5 +10,6 @@ from .tenant import Tenant
 from .academic_year import AcademicYear
 from .ai_configuration import AIConfiguration
 from .stripe_webhook_event import StripeWebhookEvent
+from .usuario_turma import UsuarioTurma
 
-__all__ = ["Aluno", "Nota", "Usuario", "Comunicado", "ComunicadoLeitura", "Ocorrencia", "AuditLog", "Tenant", "AcademicYear", "AIConfiguration", "StripeWebhookEvent"]
+__all__ = ["Aluno", "Nota", "Usuario", "Comunicado", "ComunicadoLeitura", "Ocorrencia", "AuditLog", "Tenant", "AcademicYear", "AIConfiguration", "StripeWebhookEvent", "UsuarioTurma"]

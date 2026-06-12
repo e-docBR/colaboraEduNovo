@@ -73,24 +73,184 @@ def build_turmas_mais_faltas(
     disciplina: str | None = None,
     trimestre: str | None = None,
 ):
-    query = session.query(Aluno.turma, func.sum(Nota.faltas).label("faltas")).join(Nota)
+    query = session.query(
+        Aluno.turma,
+        func.sum(Nota.faltas).label("total_faltas"),
+        func.count(func.distinct(Aluno.id)).label("qtd_alunos")
+    ).join(Nota)
     query = _apply_aluno_filters(query, turno, serie, turma, disciplina)
-    query = query.group_by(Aluno.turma).order_by(func.sum(Nota.faltas).desc()).limit(10)
+    query = query.group_by(Aluno.turma)
     
     results = query.all()
-    total_faltas = sum(int(r.faltas or 0) for r in results)
-    turma_critica = results[0].turma if results else "-"
+    processed = []
+    for t, total, count in results:
+        count = count or 1
+        avg_faltas = round(float(total or 0) / count, 1)
+        processed.append({"turma": t, "faltas": avg_faltas})
+        
+    processed.sort(key=lambda x: x["faltas"], reverse=True)
+    processed = processed[:10]
+    
+    total_avg = round(sum(p["faltas"] for p in processed) / len(processed), 1) if processed else 0
+    turma_critica = processed[0]["turma"] if processed else "-"
 
     return {
         "summary": {
-            "main": {"label": "Total de Faltas", "value": total_faltas, "color": "error"},
+            "main": {"label": "Média Geral de Faltas", "value": total_avg, "color": "error"},
             "secondary": {"label": "Turma Crítica", "value": turma_critica, "color": "warning"}
         },
-        "data": [
-            {"turma": t, "faltas": int(f or 0)}
-            for t, f in results
-        ]
+        "data": processed
     }
+
+
+def build_faltas_por_disciplina(
+    session,
+    turno: str | None = None,
+    serie: str | None = None,
+    turma: str | None = None,
+    disciplina: str | None = None,
+    trimestre: str | None = None,
+):
+    query = session.query(
+        Nota.disciplina,
+        func.sum(Nota.faltas).label("total_faltas"),
+        func.count(func.distinct(Aluno.id)).label("qtd_alunos")
+    ).join(Aluno)
+    query = _apply_aluno_filters(query, turno, serie, turma, disciplina)
+    query = query.group_by(Nota.disciplina)
+    
+    results = query.all()
+    processed = []
+    for d_nome, total, count in results:
+        if not d_nome:
+            continue
+        count = count or 1
+        avg_faltas = round(float(total or 0) / count, 1)
+        processed.append({"disciplina": d_nome.upper(), "faltas": avg_faltas})
+        
+    processed.sort(key=lambda x: x["faltas"], reverse=True)
+    
+    critica = processed[0]["disciplina"] if processed else "-"
+    media_geral = round(sum(p["faltas"] for p in processed) / len(processed), 1) if processed else 0
+    
+    return {
+        "summary": {
+            "main": {"label": "Matéria com Mais Faltas", "value": critica, "color": "error"},
+            "secondary": {"label": "Média Geral de Faltas", "value": media_geral, "color": "warning"}
+        },
+        "data": processed
+    }
+
+
+def build_distribuicao_situacao(
+    session,
+    turno: str | None = None,
+    serie: str | None = None,
+    turma: str | None = None,
+    disciplina: str | None = None,
+    trimestre: str | None = None,
+):
+    query = session.query(
+        Aluno.id,
+        Aluno.nome,
+        Aluno.turma,
+        func.avg(Nota.total).label("media")
+    ).join(Nota).group_by(Aluno.id, Aluno.nome, Aluno.turma)
+    query = _apply_aluno_filters(query, turno, serie, turma, disciplina)
+    results = query.all()
+    
+    aprovados = 0
+    recuperacao = 0
+    reprovados = 0
+    
+    for r in results:
+        media = float(r.media or 0)
+        if media >= 60.0:
+            aprovados += 1
+        elif media >= 40.0:
+            recuperacao += 1
+        else:
+            reprovados += 1
+            
+    total = len(results) or 1
+    pct_aprovados = round((aprovados / total) * 100, 1)
+    
+    data = []
+    for r in results:
+        media = float(r.media or 0)
+        if media >= 60.0:
+            sit = "APROVADO"
+        elif media >= 40.0:
+            sit = "RECUPERAÇÃO"
+        else:
+            sit = "REPROVADO"
+        data.append({
+            "nome": r.nome,
+            "turma": r.turma,
+            "media": round(media, 1),
+            "situacao": sit
+        })
+        
+    return {
+        "summary": {
+            "main": {"label": "Taxa de Aprovação", "value": f"{pct_aprovados}%", "color": "success"},
+            "secondary": {"label": "Em Recuperação", "value": recuperacao, "color": "warning"},
+            "extra": {"label": "Reprovados", "value": reprovados, "color": "danger"}
+        },
+        "data": data
+    }
+
+
+def build_evolucao_trimestres(
+    session,
+    turno: str | None = None,
+    serie: str | None = None,
+    turma: str | None = None,
+    disciplina: str | None = None,
+    trimestre: str | None = None,
+):
+    query = session.query(
+        func.avg(Nota.trimestre1).label("t1"),
+        func.avg(Nota.trimestre2).label("t2"),
+        func.avg(Nota.trimestre3).label("t3")
+    ).join(Aluno)
+    query = _apply_aluno_filters(query, turno, serie, turma, disciplina)
+    
+    first_res = query.first()
+    t1, t2, t3 = first_res if first_res else (0, 0, 0)
+    t1_val = round(float(t1 or 0), 1)
+    t2_val = round(float(t2 or 0), 1)
+    t3_val = round(float(t3 or 0), 1)
+    
+    query_turmas = session.query(
+        Aluno.turma,
+        func.avg(Nota.trimestre1).label("t1"),
+        func.avg(Nota.trimestre2).label("t2"),
+        func.avg(Nota.trimestre3).label("t3")
+    ).join(Nota).group_by(Aluno.turma)
+    query_turmas = _apply_aluno_filters(query_turmas, turno, serie, turma, disciplina)
+    results = query_turmas.all()
+    
+    data = []
+    for t, vt1, vt2, vt3 in results:
+        data.append({
+            "turma": t,
+            "t1": round(float(vt1 or 0), 1),
+            "t2": round(float(vt2 or 0), 1),
+            "t3": round(float(vt3 or 0), 1)
+        })
+        
+    data.sort(key=lambda x: x["turma"])
+    
+    return {
+        "summary": {
+            "main": {"label": "Média T1", "value": t1_val, "color": "info"},
+            "secondary": {"label": "Média T2", "value": t2_val, "color": "primary"},
+            "extra": {"label": "Média T3", "value": t3_val, "color": "success"}
+        },
+        "data": data
+    }
+
 
 
 def build_melhores_medias(
@@ -770,6 +930,9 @@ REPORT_BUILDERS = {
     "alunos-abaixo-trimestre":     build_alunos_abaixo_trimestre,
     "ocorrencias-reincidentes":    build_ocorrencias_reincidentes,
     "comunicados-engajamento":     build_comunicados_engajamento,
+    "faltas-por-disciplina":       build_faltas_por_disciplina,
+    "distribuicao-situacao":       build_distribuicao_situacao,
+    "evolucao-trimestres":         build_evolucao_trimestres,
 }
 
 

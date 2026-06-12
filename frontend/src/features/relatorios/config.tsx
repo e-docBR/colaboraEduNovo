@@ -14,6 +14,9 @@ import {
   QueryStats,
   Gavel,
   MarkEmailRead,
+  Timeline,
+  BarChart as BarChartIcon,
+  PieChart as PieChartIcon,
 } from "@mui/icons-material";
 import { Chip } from "@mui/material";
 
@@ -31,7 +34,10 @@ export type RelatorioSlug =
   | "top-movers"
   | "alunos-abaixo-trimestre"
   | "ocorrencias-reincidentes"
-  | "comunicados-engajamento";
+  | "comunicados-engajamento"
+  | "faltas-por-disciplina"
+  | "distribuicao-situacao"
+  | "evolucao-trimestres";
 
 export type RelatorioColumn = {
   key: string;
@@ -52,12 +58,13 @@ export type RelatorioDefinition = {
   slug: RelatorioSlug;
   title: string;
   description: string;
-  type?: "table" | "heatmap" | "scatter" | "radar" | "bar";
+  type?: "table" | "heatmap" | "scatter" | "radar" | "bar" | "pie" | "line";
   columns: RelatorioColumn[];
   icon: ElementType;
   span?: 1 | 2 | 3;
   variant: "primary" | "secondary" | "success" | "warning" | "danger" | "info";
   filters?: RelatorioFilters;
+  category: "alertas" | "desempenho" | "estatisticas";
 };
 
 const asNumber = (value: unknown, digits = 1) => {
@@ -79,13 +86,14 @@ export const RELATORIOS: RelatorioDefinition[] = [
     span: 1,
     variant: "danger",
     filters: { turno: true, serie: true, disciplina: true },
+    category: "alertas",
     columns: [
       { key: "turma", label: "Turma", render: (row) => row.turma as ReactNode },
       {
         key: "faltas",
-        label: "Total de faltas",
+        label: "Média de faltas por Aluno",
         align: "right",
-        render: (row) => Number(row.faltas ?? 0).toLocaleString(),
+        render: (row) => asNumber(row.faltas, 1),
       },
     ],
   },
@@ -98,6 +106,7 @@ export const RELATORIOS: RelatorioDefinition[] = [
     span: 1,
     variant: "warning",
     filters: { turno: true, serie: true, turma: true, disciplina: true },
+    category: "alertas",
     columns: [
       { key: "nome", label: "Aluno", render: (row) => row.nome as ReactNode },
       { key: "turma", label: "Turma", render: (row) => row.turma as ReactNode },
@@ -124,6 +133,7 @@ export const RELATORIOS: RelatorioDefinition[] = [
     span: 1,
     variant: "warning",
     filters: { turno: true, serie: true, turma: true, disciplina: true },
+    category: "alertas",
     columns: [
       { key: "disciplina", label: "Disciplina", render: (row) => row.disciplina as ReactNode },
       {
@@ -143,6 +153,7 @@ export const RELATORIOS: RelatorioDefinition[] = [
     span: 2,
     variant: "primary",
     filters: { turno: true, serie: true, disciplina: true },
+    category: "desempenho",
     columns: [
       { key: "turma", label: "Turma", render: (row) => row.turma as ReactNode },
       { key: "turno", label: "Turno", render: (row) => row.turno as ReactNode },
@@ -163,6 +174,7 @@ export const RELATORIOS: RelatorioDefinition[] = [
     span: 1,
     variant: "success",
     filters: { turno: true, serie: true, turma: true, disciplina: true },
+    category: "desempenho",
     columns: [
       { key: "nome", label: "Aluno", render: (row) => row.nome as ReactNode },
       { key: "turma", label: "Turma", render: (row) => row.turma as ReactNode },
@@ -184,7 +196,8 @@ export const RELATORIOS: RelatorioDefinition[] = [
     span: 1,
     variant: "info",
     filters: { turno: true, serie: true, turma: true, disciplina: true },
-    columns: [], // Visual only
+    category: "estatisticas",
+    columns: [],
   },
   {
     slug: "attendance-correlation",
@@ -195,6 +208,7 @@ export const RELATORIOS: RelatorioDefinition[] = [
     span: 1,
     variant: "secondary",
     filters: { turno: true, serie: true, turma: true, disciplina: true },
+    category: "estatisticas",
     columns: [],
   },
   {
@@ -206,6 +220,7 @@ export const RELATORIOS: RelatorioDefinition[] = [
     span: 1,
     variant: "primary",
     filters: { turno: true, serie: true, disciplina: true },
+    category: "estatisticas",
     columns: [],
   },
   {
@@ -217,6 +232,7 @@ export const RELATORIOS: RelatorioDefinition[] = [
     span: 1,
     variant: "danger",
     filters: { turno: true, serie: true, turma: true, disciplina: true },
+    category: "alertas",
     columns: [
       { key: "nome", label: "Aluno", render: (row) => row.nome as ReactNode },
       { key: "turma", label: "Turma", render: (row) => row.turma as ReactNode },
@@ -234,6 +250,7 @@ export const RELATORIOS: RelatorioDefinition[] = [
     span: 2,
     variant: "info",
     filters: { turno: true, serie: true, turma: true, disciplina: true },
+    category: "desempenho",
     columns: [
       { key: "turma", label: "Turma", render: (row) => row.turma as ReactNode },
       { key: "media", label: "Média", align: "right", render: (row) => asNumber(row.media, 1) },
@@ -258,6 +275,7 @@ export const RELATORIOS: RelatorioDefinition[] = [
     span: 1,
     variant: "success",
     filters: { turno: true, serie: true, turma: true, disciplina: true, trimestre: true },
+    category: "desempenho",
     columns: [
       { key: "nome", label: "Aluno", render: (row) => row.nome as ReactNode },
       { key: "turma", label: "Turma", render: (row) => row.turma as ReactNode },
@@ -282,6 +300,7 @@ export const RELATORIOS: RelatorioDefinition[] = [
     span: 2,
     variant: "danger",
     filters: { trimestre: true, turno: true, turma: true, disciplina: true },
+    category: "alertas",
     columns: [
       { key: "nome",       label: "Aluno",      align: "left",  render: (row) => row.nome as ReactNode },
       { key: "turma",      label: "Turma",      align: "left",  render: (row) => row.turma as ReactNode },
@@ -322,6 +341,7 @@ export const RELATORIOS: RelatorioDefinition[] = [
     span: 2,
     variant: "danger",
     filters: { turno: true, serie: true, turma: true },
+    category: "alertas",
     columns: [
       { key: "nome", label: "Aluno", align: "left", render: (row) => row.nome as ReactNode },
       { key: "turma", label: "Turma", align: "left", render: (row) => row.turma as ReactNode },
@@ -363,6 +383,7 @@ export const RELATORIOS: RelatorioDefinition[] = [
     span: 2,
     variant: "info",
     filters: {},
+    category: "estatisticas",
     columns: [
       { key: "titulo", label: "Título", align: "left", render: (row) => row.titulo as ReactNode },
       { key: "target", label: "Destinatário", align: "left", render: (row) => row.target as ReactNode },
@@ -381,6 +402,69 @@ export const RELATORIOS: RelatorioDefinition[] = [
           />
         ),
       },
+    ],
+  },
+  {
+    slug: "faltas-por-disciplina",
+    title: "Faltas por Disciplina",
+    description: "Média de faltas por aluno agrupado por disciplina.",
+    type: "bar",
+    icon: BarChartIcon,
+    span: 1,
+    variant: "warning",
+    filters: { turno: true, serie: true, turma: true },
+    category: "estatisticas",
+    columns: [
+      { key: "disciplina", label: "Disciplina", render: (row) => row.disciplina as ReactNode },
+      {
+        key: "faltas",
+        label: "Média de faltas",
+        align: "right",
+        render: (row) => asNumber(row.faltas, 1),
+      },
+    ],
+  },
+  {
+    slug: "distribuicao-situacao",
+    title: "Distribuição de Situação",
+    description: "Percentual de alunos Aprovados, em Recuperação ou Reprovados.",
+    type: "pie",
+    icon: PieChartIcon,
+    span: 2,
+    variant: "info",
+    filters: { turno: true, serie: true, turma: true },
+    category: "desempenho",
+    columns: [
+      { key: "nome", label: "Aluno", render: (row) => row.nome as ReactNode },
+      { key: "turma", label: "Turma", render: (row) => row.turma as ReactNode },
+      { key: "media", label: "Média", align: "right", render: (row) => asNumber(row.media, 1) },
+      {
+        key: "situacao",
+        label: "Situação",
+        align: "center",
+        render: (row) => {
+          const sit = row.situacao as string;
+          const color = sit === "APROVADO" ? "success" : sit === "RECUPERAÇÃO" ? "warning" : "error";
+          return <Chip label={sit} size="small" color={color} sx={{ fontWeight: 600 }} />;
+        }
+      },
+    ],
+  },
+  {
+    slug: "evolucao-trimestres",
+    title: "Evolução Trimestral",
+    description: "Comparação do desempenho médio das turmas ao longo dos trimestres.",
+    type: "line",
+    icon: Timeline,
+    span: 2,
+    variant: "primary",
+    filters: { turno: true, serie: true, turma: true },
+    category: "desempenho",
+    columns: [
+      { key: "turma", label: "Turma", render: (row) => row.turma as ReactNode },
+      { key: "t1", label: "1º Trimestre", align: "right", render: (row) => asNumber(row.t1, 1) },
+      { key: "t2", label: "2º Trimestre", align: "right", render: (row) => asNumber(row.t2, 1) },
+      { key: "t3", label: "3º Trimestre", align: "right", render: (row) => asNumber(row.t3, 1) },
     ],
   },
 ];

@@ -22,7 +22,13 @@ import {
   Typography,
   Chip,
   Avatar,
-  useTheme
+  useTheme,
+  Select,
+  OutlinedInput,
+  Checkbox,
+  ListItemText,
+  FormControl,
+  InputLabel
 } from "@mui/material";
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -34,7 +40,7 @@ import ClassIcon from "@mui/icons-material/Class";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 
-import { TurmaSummary, useListTurmasQuery, useUpdateTurmaMutation, useDeleteTurmaMutation } from "../../lib/api";
+import { TurmaSummary, useListTurmasQuery, useUpdateTurmaMutation, useDeleteTurmaMutation, useListUsuariosQuery } from "../../lib/api";
 import { useAppSelector } from "../../app/hooks";
 
 const TURNOS = ["Matutino", "Vespertino", "Noturno"];
@@ -87,6 +93,13 @@ export const TurmasPage = () => {
   const [editingTurma, setEditingTurma] = useState<TurmaSummary | null>(null);
   const [editNome, setEditNome] = useState("");
   const [editTurno, setEditTurno] = useState("");
+  const [editProfessores, setEditProfessores] = useState<number[]>([]);
+
+  const { data: usersResponse } = useListUsuariosQuery(
+    { role: "professor", per_page: 100 },
+    { skip: !editingTurma }
+  );
+  const professorsList = useMemo(() => usersResponse?.items ?? [], [usersResponse]);
 
   const [deletingTurma, setDeletingTurma] = useState<TurmaSummary | null>(null);
 
@@ -100,6 +113,7 @@ export const TurmasPage = () => {
     e.stopPropagation();
     setEditNome(turma.turma);
     setEditTurno(turma.turno);
+    setEditProfessores(turma.professor_ids || []);
     setEditingTurma(turma);
   };
 
@@ -112,7 +126,7 @@ export const TurmasPage = () => {
     if (!editingTurma) return;
     const slug = editingTurma.slug || editingTurma.turma;
     try {
-      await updateTurma({ slug, nome: editNome, turno: editTurno }).unwrap();
+      await updateTurma({ slug, nome: editNome, turno: editTurno, professor_ids: editProfessores }).unwrap();
       setEditingTurma(null);
       setSnackbar({ open: true, message: "Turma atualizada com sucesso!", severity: "success" });
     } catch {
@@ -321,6 +335,32 @@ export const TurmasPage = () => {
                 <MenuItem key={t} value={t}>{t}</MenuItem>
               ))}
             </TextField>
+
+            <FormControl fullWidth size="small">
+              <InputLabel id="edit-professores-label">Professores da Turma</InputLabel>
+              <Select
+                labelId="edit-professores-label"
+                id="edit-professores-select"
+                multiple
+                value={editProfessores}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setEditProfessores(typeof value === "string" ? value.split(",").map(Number) : value as number[]);
+                }}
+                input={<OutlinedInput label="Professores da Turma" />}
+                renderValue={(selected) => {
+                  const selectedUsers = professorsList.filter(u => selected.includes(u.id));
+                  return selectedUsers.map(u => u.username).join(", ");
+                }}
+              >
+                {professorsList.map((prof) => (
+                  <MenuItem key={prof.id} value={prof.id}>
+                    <Checkbox checked={editProfessores.includes(prof.id)} />
+                    <ListItemText primary={prof.username} />
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
           </Stack>
         </DialogContent>
         <DialogActions sx={{ p: 2, pt: 0 }}>
