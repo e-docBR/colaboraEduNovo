@@ -32,6 +32,8 @@ class AlunoTurmaDetailSchema(BaseModel):
     media: Optional[float] = None
     situacao: str
     status: Optional[str] = None
+    sexo: Optional[str] = None
+    data_nascimento: Optional[str] = None
     notas: List[NotaSimplificadaSchema]
 
 class TurmaDetailResponse(BaseModel):

@@ -34,7 +34,8 @@ const staffNavItems = [
   { label: "Turmas", icon: <ClassIcon />, path: `${appBasePath}/turmas` },
   { label: "Notas", icon: <TableViewIcon />, path: `${appBasePath}/notas` },
   { label: "Gráficos", icon: <InsightsIcon />, path: `${appBasePath}/graficos` },
-  { label: "Relatórios", icon: <ArticleIcon />, path: `${appBasePath}/relatorios` }
+  { label: "Relatórios", icon: <ArticleIcon />, path: `${appBasePath}/relatorios` },
+  { label: "Ata de Resultado", icon: <ArticleIcon />, path: `${appBasePath}/ata-resultado` }
 ];
 
 const alunoNavItems = [{ label: "Meu Boletim", icon: <PeopleIcon />, path: `${appBasePath}/meu-boletim` }];

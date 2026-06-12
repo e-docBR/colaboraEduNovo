@@ -37,6 +37,7 @@ const AcademicYearsPage = lazy(() => import("../features/admin/AcademicYearsPage
 const PortalResponsavelPage = lazy(() => import("../features/responsavel/PortalResponsavelPage").then(m => ({ default: m.PortalResponsavelPage })));
 const AISettingsPage = lazy(() => import("../features/ai-chat/AISettingsPage"));
 const MinhasTurmasPage = lazy(() => import("../features/professor/MinhasTurmasPage").then(m => ({ default: m.MinhasTurmasPage })));
+const AtaResultadoPage = lazy(() => import("../features/relatorios/AtaResultadoPage").then(m => ({ default: m.AtaResultadoPage })));
 
 const PageLoader = () => (
   <Box display="flex" alignItems="center" justifyContent="center" minHeight={300}>
@@ -149,6 +150,7 @@ export const appRouter = createBrowserRouter([
       { path: "notas", element: wrap(<NotasPage />) },
       { path: "graficos", element: wrap(<GraficosPage />) },
       { path: "relatorios", element: wrap(<RelatoriosPage />) },
+      { path: "ata-resultado", element: wrap(<AtaResultadoPage />) },
       { path: "relatorios/:slug", element: wrap(<RelatorioDetailPage />) },
       { path: "uploads", element: wrap(<UploadsPage />) },
       { path: "usuarios", element: wrap(<UsuariosPage />) },

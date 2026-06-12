@@ -68,15 +68,25 @@ class TurmaRepository(BaseRepository[Aluno]):
         if direct_match:
             return direct_match
 
-        # Slug match
+        # Slug match with collision resolution
         query_distinct = self.session.query(Aluno.turma).distinct()
         if tenant_id:
              query_distinct = query_distinct.filter(Aluno.tenant_id == tenant_id)
              
-        turmas = query_distinct.all()
-        for (turma,) in turmas:
-            if slugify_func(turma) == slugify_func(name_or_slug):
-                return turma
+        turmas = [r[0] for r in query_distinct.all() if r[0]]
+        turmas.sort()
+        
+        seen_slugs = set()
+        for t in turmas:
+            base_slug = slugify_func(t)
+            slug = base_slug
+            counter = 2
+            while slug in seen_slugs:
+                slug = f"{base_slug}-{counter}"
+                counter += 1
+            seen_slugs.add(slug)
+            if slug == name_or_slug:
+                return t
         return None
 
     def get_alunos_by_turma(self, turma_nome: str) -> List[Aluno]:
