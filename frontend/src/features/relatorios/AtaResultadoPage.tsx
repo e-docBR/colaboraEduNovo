@@ -17,7 +17,7 @@ import {
   Paper
 } from "@mui/material";
 import PrintIcon from "@mui/icons-material/Print";
-import { useListTurmasQuery, useGetTurmaAlunosQuery } from "../../lib/api";
+import { useListTurmasQuery, useGetTurmaAlunosQuery, useGetEscolaSettingsQuery } from "../../lib/api";
 import { useAppSelector } from "../../app/hooks";
 import { styled } from "@mui/material/styles";
 
@@ -85,6 +85,9 @@ export const AtaResultadoPage = () => {
     skip: !selectedTurmaSlug,
   });
 
+  const { data: escolaSettings } = useGetEscolaSettingsQuery();
+  const passingGrade = escolaSettings?.settings?.media_aprovacao ?? 50.0;
+
   const user = useAppSelector((state) => state.auth.user);
   const tenantName = user?.tenant_name || "Prefeitura Municipal";
 
@@ -127,9 +130,9 @@ export const AtaResultadoPage = () => {
       });
 
       const mediaGeral = count > 0 ? totalSoma / count : 0;
-      // Simple approval criteria: Media >= 50 or total sum per discipline >= 50
-      // Depending on the school's specific rule. Assuming 50/100 is passing.
-      const resultadoFinal = mediaGeral >= 50 ? "AP" : "RP";
+      // Simple approval criteria: Media >= passingGrade or total sum per discipline >= passingGrade
+      // Depending on the school's specific rule.
+      const resultadoFinal = mediaGeral >= passingGrade ? "AP" : "RP";
 
       return {
         ...aluno,
@@ -137,7 +140,7 @@ export const AtaResultadoPage = () => {
         resultadoFinal
       };
     }).sort((a, b) => a.nome.localeCompare(b.nome));
-  }, [turmaAlunos, disciplines]);
+  }, [turmaAlunos, disciplines, passingGrade]);
 
   const currentDate = new Date();
   const day = currentDate.getDate();
@@ -205,10 +208,9 @@ export const AtaResultadoPage = () => {
           {/* Official Document Header */}
           <Box textAlign="center" mb={4} sx={{ fontFamily: 'Times New Roman, serif' }}>
             <Typography variant="subtitle1" fontWeight="bold" sx={{ color: '#000', fontSize: '14px', lineHeight: 1.2 }}>
-              {tenantName}
+              {escolaSettings?.name || tenantName}
               <br />
-              {/* Fallback CNPJ or omit if dynamic is needed - using a placeholder as asked to fetch dynamically but no field exists */}
-              CNPJ: --
+              CNPJ: {escolaSettings?.settings?.cnpj || "--"}
               <br />
               Secretaria Municipal de Educação
             </Typography>
@@ -216,7 +218,7 @@ export const AtaResultadoPage = () => {
             <Box my={3} borderBottom="1px solid #000" />
             
             <Typography variant="h6" fontWeight="bold" sx={{ color: '#000', fontSize: '14px' }}>
-              ATA DE RESULTADO FINAL / MÉDIA: 50,0
+              ATA DE RESULTADO FINAL / MÉDIA: {passingGrade.toFixed(1).replace('.', ',')}
               <br />
               {selectedTurmaObj.turma} - {selectedTurmaObj.turno.toUpperCase()}
             </Typography>

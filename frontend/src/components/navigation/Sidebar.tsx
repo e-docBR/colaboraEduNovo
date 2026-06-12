@@ -13,6 +13,7 @@ import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import ArchiveIcon from "@mui/icons-material/Archive";
 import EventNoteIcon from "@mui/icons-material/EventNote";
+import SettingsIcon from "@mui/icons-material/Settings";
 import { NavLink } from "react-router-dom";
 import { memo, useMemo } from "react";
 import { useAppSelector } from "../../app/hooks";
@@ -58,6 +59,7 @@ const SidebarInner = ({ mobile }: { mobile?: boolean }) => {
 
     if (user?.role === "admin" || user?.role === "super_admin") {
       base.splice(1, 0, { label: "Usuários", icon: <ManageAccountsIcon />, path: `${appBasePath}/usuarios` });
+      base.push({ label: "Configurações", icon: <SettingsIcon />, path: `${appBasePath}/configuracoes` });
     }
 
     if (isAdmin) {

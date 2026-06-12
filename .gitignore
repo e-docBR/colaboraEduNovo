@@ -58,3 +58,6 @@ landingPage/
 # Local tooling / nested worktrees
 .claude/
 colaboraEdu-produc/
+
+# PIDs
+.pids/

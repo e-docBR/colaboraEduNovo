@@ -1,7 +1,7 @@
 """Versioned API blueprint."""
 from flask import Blueprint, request
 
-from . import alunos, auth, billing, dashboard, exports, graficos, notas, relatorios, responsavel, turmas, uploads, usuarios, comunicados, ocorrencias, audit, chat, academic_years, super_admin, ai, ai_settings, professores
+from . import alunos, auth, billing, dashboard, exports, graficos, notas, relatorios, responsavel, turmas, uploads, usuarios, comunicados, ocorrencias, audit, chat, academic_years, super_admin, ai, ai_settings, professores, escola
 
 api_v1_bp = Blueprint("api_v1", __name__)
 
@@ -16,6 +16,7 @@ def before_v1_request():
         "api_v1.auth.forgot_password",
         "api_v1.auth.reset_password",
         "api_v1.billing.stripe_webhook",
+        "api_v1.escola.serve_logo",
     }
     if request.blueprint == "api_v1.super_admin" or request.endpoint in PUBLIC_ENDPOINTS:
         return None
@@ -42,3 +43,4 @@ super_admin.register(api_v1_bp)
 ai.register(api_v1_bp)
 ai_settings.register(api_v1_bp)
 professores.register(api_v1_bp)
+escola.register(api_v1_bp)

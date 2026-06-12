@@ -38,6 +38,8 @@ const PortalResponsavelPage = lazy(() => import("../features/responsavel/PortalR
 const AISettingsPage = lazy(() => import("../features/ai-chat/AISettingsPage"));
 const MinhasTurmasPage = lazy(() => import("../features/professor/MinhasTurmasPage").then(m => ({ default: m.MinhasTurmasPage })));
 const AtaResultadoPage = lazy(() => import("../features/relatorios/AtaResultadoPage").then(m => ({ default: m.AtaResultadoPage })));
+const EscolaConfigPage = lazy(() => import("../features/escola/EscolaConfigPage").then(m => ({ default: m.EscolaConfigPage })));
+
 
 const PageLoader = () => (
   <Box display="flex" alignItems="center" justifyContent="center" minHeight={300}>
@@ -162,7 +164,8 @@ export const appRouter = createBrowserRouter([
       { path: "portal-responsavel", element: wrap(<PortalResponsavelPage />) },
       { path: "admin/escolas", loader: requireAdmin, element: wrap(<TenantsPage />) },
       { path: "admin/ia", loader: requireAdmin, element: wrap(<AISettingsPage />) },
-      { path: "admin/anos-letivos", loader: requireAdmin, element: wrap(<AcademicYearsPage />) }
+      { path: "admin/anos-letivos", loader: requireAdmin, element: wrap(<AcademicYearsPage />) },
+      { path: "configuracoes", loader: requireAdmin, element: wrap(<EscolaConfigPage />) }
     ]
   },
   {

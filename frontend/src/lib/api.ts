@@ -53,6 +53,30 @@ export interface AISettings {
   provider_models: Record<string, { id: string; label: string }[]>;
 }
 
+export interface EscolaSettings {
+  cnpj?: string;
+  endereco?: string;
+  telefone?: string;
+  email?: string;
+  media_aprovacao: number;
+  logo_url?: string | null;
+  whatsapp_enabled: boolean;
+  email_enabled: boolean;
+  whatsapp_instance_url?: string | null;
+  whatsapp_instance_token?: string | null;
+}
+
+export interface EscolaDetailResponse {
+  name: string;
+  slug: string;
+  settings: EscolaSettings;
+}
+
+export interface EscolaUpdatePayload {
+  name: string;
+  settings: EscolaSettings;
+}
+
 
 type DashboardKpis = {
   total_alunos: number;
@@ -566,7 +590,7 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
 export const api = createApi({
   reducerPath: "boletinsApi",
   baseQuery: baseQueryWithReauth,
-  tagTypes: ["Dashboard", "Alunos", "Notas", "Uploads", "Turmas", "Usuarios", "Comunicados", "Ocorrencias", "Graficos", "AISettings"],
+  tagTypes: ["Dashboard", "Alunos", "Notas", "Uploads", "Turmas", "Usuarios", "Comunicados", "Ocorrencias", "Graficos", "AISettings", "Escola"],
   endpoints: (builder) => ({
     login: builder.mutation<LoginResponse, LoginRequest>({
       query: (body) => ({
@@ -1035,6 +1059,26 @@ export const api = createApi({
     getProfessorTurmas: builder.query<ProfessorTurma[], void>({
       query: () => "/professores/me/turmas",
       providesTags: ["Turmas"]
+    }),
+    getEscolaSettings: builder.query<EscolaDetailResponse, void>({
+      query: () => "/escola",
+      providesTags: ["Escola"]
+    }),
+    updateEscolaSettings: builder.mutation<{ message: string; name: string; settings: EscolaSettings }, EscolaUpdatePayload>({
+      query: (body) => ({
+        url: "/escola",
+        method: "PUT",
+        body
+      }),
+      invalidatesTags: ["Escola"]
+    }),
+    uploadEscolaLogo: builder.mutation<{ logo_url: string }, FormData>({
+      query: (body) => ({
+        url: "/escola/logo",
+        method: "POST",
+        body
+      }),
+      invalidatesTags: ["Escola"]
     })
   })
 });
@@ -1106,5 +1150,8 @@ export const {
   useGetBulkInterventionsMutation,
   useGetBillingStatusQuery,
   useCreateBillingCheckoutMutation,
-  useGetProfessorTurmasQuery
+  useGetProfessorTurmasQuery,
+  useGetEscolaSettingsQuery,
+  useUpdateEscolaSettingsMutation,
+  useUploadEscolaLogoMutation
 } = api;
