@@ -8,6 +8,15 @@ ou restaurar qualquer release via `git checkout vX.Y.Z` ou pelo GitHub → *Rele
 
 ---
 
+## [1.8.2] - 2026-06-12
+
+### Relatórios / Ata de Resultado
+- **Ata de Resultado Final**: Integrou e exibiu com sucesso os dados de **Data de Nascimento** (formatada no padrão brasileiro `DD/MM/YYYY`) e **Sexo** (com fallback para `-` se ausente) para cada aluno.
+- **Resolução de Colisão de Slugs**: Corrigiu o problema onde turmas com nomes semelhantes (como `6º A` e `6º A -`) colidiam no mesmo slug, resultando em dados incorretos no frontend. Agora, os slugs são gerados de forma determinística e única (ex: `6o-a` e `6o-a-2`).
+- **Navegação**: Adicionou a página de "Ata de Resultado Final" ao roteador e ao menu lateral do frontend para fácil acesso pela equipe pedagógica.
+
+---
+
 ## [1.8.1] - 2026-05-22
 
 ### Auditoria / Operação
