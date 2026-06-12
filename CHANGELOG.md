@@ -15,6 +15,9 @@ ou restaurar qualquer release via `git checkout vX.Y.Z` ou pelo GitHub → *Rele
 - **Resolução de Colisão de Slugs**: Corrigiu o problema onde turmas com nomes semelhantes (como `6º A` e `6º A -`) colidiam no mesmo slug, resultando em dados incorretos no frontend. Agora, os slugs são gerados de forma determinística e única (ex: `6o-a` e `6o-a-2`).
 - **Navegação**: Adicionou a página de "Ata de Resultado Final" ao roteador e ao menu lateral do frontend para fácil acesso pela equipe pedagógica.
 
+### Qualidade / Code Style
+- **Ajustes de Linter e Avisos**: Removeu imports e componentes não utilizados no backend e no frontend, limpando todos os avisos de linter do Ruff e ESLint para manter o build e as validações 100% livres de alertas.
+
 ---
 
 ## [1.8.1] - 2026-05-22
