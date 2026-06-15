@@ -7,14 +7,14 @@ from __future__ import annotations
 import os
 import uuid
 from pathlib import Path
-from flask import Blueprint, jsonify, request, send_from_directory, current_app, g
+from flask import Blueprint, jsonify, request, send_from_directory, g
 from flask_jwt_extended import jwt_required
 
 from ...core.config import settings
 from ...core.database import session_scope
 from ...core.decorators import require_roles
 from ...models import Tenant
-from ...schemas.escola import EscolaDetailResponse, EscolaUpdatePayload
+from ...schemas.escola import EscolaUpdatePayload
 
 
 def register(parent: Blueprint) -> None:

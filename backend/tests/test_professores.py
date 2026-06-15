@@ -71,6 +71,7 @@ def test_professores_me_turmas_success(client, flask_app):
     assert turma_3a["turno"] == "Matutino"
     assert turma_3a["media"] == 70.0 # (80+60)/2
     assert turma_3a["faltas_medias"] == 3.0 # (2+4)/2
+    assert turma_3a["max_pts"] == 30
 
     # Verify 3B details
     turma_3b = [t for t in data if t["turma"] == "3B"][0]
@@ -78,6 +79,7 @@ def test_professores_me_turmas_success(client, flask_app):
     assert turma_3b["turno"] == "Vespertino"
     assert turma_3b["media"] == 90.0
     assert turma_3b["faltas_medias"] == 0.0
+    assert turma_3b["max_pts"] == 30
 
 def test_professores_me_turmas_admin_sees_all(client, flask_app):
     with session_scope() as session:
@@ -114,6 +116,8 @@ def test_professores_me_turmas_admin_sees_all(client, flask_app):
     # Admins see all classes even if they are not explicitly linked via UsuarioTurma
     assert len(data) == 2
     assert {t["turma"] for t in data} == {"3A", "3B"}
+    for t in data:
+        assert t["max_pts"] == 30
 
 def test_professores_me_turmas_forbidden_for_other_roles(client, flask_app):
     with session_scope() as session:
@@ -274,3 +278,215 @@ def test_rename_turma_updates_professors(client, flask_app):
             UsuarioTurma.academic_year_id == year_id
         ).first()
         assert link is None
+
+
+def test_teacher_dashboard_scoped_to_linked_classes(client, flask_app):
+    with session_scope() as session:
+        tenant = Tenant(name="Escola Dashboard Teste", slug="escola-dash-test", is_active=True)
+        session.add(tenant)
+        session.flush()
+        tenant_id = tenant.id
+
+        year = AcademicYear(tenant_id=tenant_id, label="2026", is_current=True)
+        session.add(year)
+        session.flush()
+        year_id = year.id
+
+        professor = Usuario(
+            username="prof.dash",
+            password_hash="hash",
+            role="professor",
+            tenant_id=tenant_id,
+            must_change_password=False
+        )
+        session.add(professor)
+        session.flush()
+        prof_id = professor.id
+
+        # Setup Alunos in multiple classes
+        aluno1 = Aluno(nome="Aluno A", matricula="MAT-A01", turma="3A", turno="Matutino", tenant_id=tenant_id, academic_year_id=year_id)
+        aluno2 = Aluno(nome="Aluno B", matricula="MAT-A02", turma="3B", turno="Matutino", tenant_id=tenant_id, academic_year_id=year_id)
+        aluno3 = Aluno(nome="Aluno C", matricula="MAT-A03", turma="4A", turno="Matutino", tenant_id=tenant_id, academic_year_id=year_id)
+        session.add_all([aluno1, aluno2, aluno3])
+        session.flush()
+
+        # Add Grades (total)
+        nota1 = Nota(aluno_id=aluno1.id, disciplina="Matematica", disciplina_normalizada="MATEMATICA", total=80, tenant_id=tenant_id, academic_year_id=year_id)
+        nota2 = Nota(aluno_id=aluno2.id, disciplina="Matematica", disciplina_normalizada="MATEMATICA", total=45, tenant_id=tenant_id, academic_year_id=year_id) # risky (< 60)
+        nota3 = Nota(aluno_id=aluno3.id, disciplina="Matematica", disciplina_normalizada="MATEMATICA", total=30, tenant_id=tenant_id, academic_year_id=year_id) # risky, but not in linked class
+        session.add_all([nota1, nota2, nota3])
+        session.flush()
+
+        # Link Professor to 3A and 3B
+        link1 = UsuarioTurma(usuario_id=prof_id, turma="3A", tenant_id=tenant_id, academic_year_id=year_id)
+        link2 = UsuarioTurma(usuario_id=prof_id, turma="3B", tenant_id=tenant_id, academic_year_id=year_id)
+        session.add_all([link1, link2])
+        session.flush()
+
+    headers = _headers_for(flask_app, prof_id, "professor", tenant_id=tenant_id, academic_year_id=year_id)
+
+    # 1. Fetch entire dashboard for the professor
+    response = client.get("/api/v1/dashboard/professor", headers=headers)
+    assert response.status_code == 200
+    data = response.json
+    assert data["classes_count"] == 2
+    assert data["total_students"] == 2
+    assert data["global_average"] == 62.5
+    assert len(data["alerts"]) == 1
+    assert data["alerts"][0]["nome"] == "Aluno B"
+
+    # 2. Filter by linked class (3A)
+    response = client.get("/api/v1/dashboard/professor?turma=3A", headers=headers)
+    assert response.status_code == 200
+    data = response.json
+    assert data["classes_count"] == 1
+    assert data["total_students"] == 1
+    assert data["global_average"] == 80.0
+    assert len(data["alerts"]) == 0
+
+    # 3. Filter by class not linked (4A)
+    response = client.get("/api/v1/dashboard/professor?turma=4A", headers=headers)
+    assert response.status_code == 200
+    data = response.json
+    assert data["classes_count"] == 0
+    assert data["total_students"] == 0
+    assert data["global_average"] == 0.0
+    assert len(data["alerts"]) == 0
+
+
+def test_teacher_dashboard_no_linked_classes(client, flask_app):
+    with session_scope() as session:
+        tenant = Tenant(name="Escola Dashboard Teste 2", slug="escola-dash-test-2", is_active=True)
+        session.add(tenant)
+        session.flush()
+        tenant_id = tenant.id
+
+        year = AcademicYear(tenant_id=tenant_id, label="2026", is_current=True)
+        session.add(year)
+        session.flush()
+        year_id = year.id
+
+        professor = Usuario(
+            username="prof.dash2",
+            password_hash="hash",
+            role="professor",
+            tenant_id=tenant_id,
+            must_change_password=False
+        )
+        session.add(professor)
+        session.flush()
+        prof_id = professor.id
+
+        aluno1 = Aluno(nome="Aluno A", matricula="MAT-B01", turma="3A", turno="Matutino", tenant_id=tenant_id, academic_year_id=year_id)
+        session.add(aluno1)
+        session.flush()
+
+    headers = _headers_for(flask_app, prof_id, "professor", tenant_id=tenant_id, academic_year_id=year_id)
+
+    response = client.get("/api/v1/dashboard/professor", headers=headers)
+    assert response.status_code == 200
+    data = response.json
+    assert data["classes_count"] == 0
+    assert data["total_students"] == 0
+    assert data["global_average"] == 0.0
+    assert len(data["alerts"]) == 0
+    assert data["distribution"] == {
+        "0-20": 0,
+        "20-40": 0,
+        "40-60": 0,
+        "60-80": 0,
+        "80-100": 0
+    }
+
+
+def test_list_turmas_endpoint_includes_max_pts(client, flask_app):
+    with session_scope() as session:
+        tenant = Tenant(name="Escola List Turmas Test", slug="escola-list-turmas", is_active=True)
+        session.add(tenant)
+        session.flush()
+        tenant_id = tenant.id
+
+        year = AcademicYear(tenant_id=tenant_id, label="2026", is_current=True)
+        session.add(year)
+        session.flush()
+        year_id = year.id
+
+        admin = Usuario(
+            username="admin.list_turmas",
+            password_hash="hash",
+            role="admin",
+            tenant_id=tenant_id,
+            must_change_password=False
+        )
+        session.add(admin)
+        session.flush()
+        admin_id = admin.id
+
+        aluno = Aluno(nome="Aluno X", matricula="MAT-X01", turma="8A", turno="Matutino", tenant_id=tenant_id, academic_year_id=year_id)
+        session.add(aluno)
+        session.flush()
+
+    headers = _headers_for(flask_app, admin_id, "admin", tenant_id=tenant_id, academic_year_id=year_id)
+    response = client.get("/api/v1/turmas", headers=headers)
+    assert response.status_code == 200
+    data = response.json
+    assert data["total"] == 1
+    assert data["items"][0]["turma"] == "8A"
+    assert data["items"][0]["max_pts"] == 30
+
+
+def test_alunos_endpoints_include_max_pts(client, flask_app):
+    with session_scope() as session:
+        tenant = Tenant(name="Escola Alunos Max Pts", slug="escola-alunos-max-pts", is_active=True)
+        session.add(tenant)
+        session.flush()
+        tenant_id = tenant.id
+
+        year = AcademicYear(tenant_id=tenant_id, label="2026", is_current=True)
+        session.add(year)
+        session.flush()
+        year_id = year.id
+
+        admin = Usuario(
+            username="admin.alunos_max_pts",
+            password_hash="hash",
+            role="admin",
+            tenant_id=tenant_id,
+            must_change_password=False
+        )
+        session.add(admin)
+        session.flush()
+        admin_id = admin.id
+
+        aluno = Aluno(nome="Aluno Y", matricula="MAT-Y01", turma="8A", turno="Matutino", tenant_id=tenant_id, academic_year_id=year_id)
+        session.add(aluno)
+        session.flush()
+        aluno_id = aluno.id
+
+        nota = Nota(
+            aluno_id=aluno_id,
+            disciplina="Matemática",
+            disciplina_normalizada="matematica",
+            trimestre1=10.0,
+            total=10.0,
+            tenant_id=tenant_id,
+            academic_year_id=year_id
+        )
+        session.add(nota)
+        session.flush()
+
+    headers = _headers_for(flask_app, admin_id, "admin", tenant_id=tenant_id, academic_year_id=year_id)
+
+    # Test list endpoint
+    response = client.get("/api/v1/alunos", headers=headers)
+    assert response.status_code == 200
+    data = response.json
+    print("DEBUG ALUNOS LIST DATA:", data)
+    assert data["meta"]["total"] == 1
+    assert data["items"][0]["max_pts"] == 30
+
+    # Test detail endpoint
+    response = client.get(f"/api/v1/alunos/{aluno_id}", headers=headers)
+    assert response.status_code == 200
+    data = response.json
+    assert data["max_pts"] == 30

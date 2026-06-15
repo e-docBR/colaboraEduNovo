@@ -231,7 +231,19 @@ def register(parent: Blueprint) -> None:
                 if year:
                     year_label = year.label
 
-            html = DocumentService.render_bulletin_html(aluno_data, school_name, year_label)
+            tenant_settings = tenant.settings or {} if tenant else {}
+            logo_url = tenant_settings.get("logo_url")
+            passing_grade = float(tenant_settings.get("media_aprovacao", 50.0))
+            primary_color = tenant_settings.get("primary_color", "#3f2a74")
+
+            html = DocumentService.render_bulletin_html(
+                aluno_data,
+                school_name,
+                year_label,
+                logo_url=logo_url,
+                passing_grade=passing_grade,
+                primary_color=primary_color
+            )
             pdf_bytes = DocumentService.generate_pdf_from_html(html)
             
             filename = secure_filename(f"Boletim_{aluno_data['nome']}.pdf").replace("..", "_") or f"Boletim_{aluno_id}.pdf"

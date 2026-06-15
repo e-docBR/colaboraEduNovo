@@ -32,10 +32,14 @@ class TurmaService:
         from flask import g
         from app.models import UsuarioTurma, Aluno
         from collections import defaultdict
+        from app.services.analytics import get_grading_stage
         
         tenant_id = getattr(g, "tenant_id", None)
         academic_year_id = getattr(g, "academic_year_id", None)
         
+        stage = get_grading_stage(self.repository.session, tenant_id, academic_year_id)
+        max_pts = stage["max_pts"]
+
         # Pull linkages
         links = self.repository.session.query(UsuarioTurma.turma, UsuarioTurma.usuario_id).filter(
             UsuarioTurma.tenant_id == tenant_id,
@@ -76,7 +80,8 @@ class TurmaService:
                 media=round(float(media), 2) if media is not None else None,
                 faltas_medias=round(float(faltas), 1) if faltas is not None else 0.0,
                 slug=slug_map.get(turma, self._slugify(turma)),
-                professor_ids=turma_prof_ids.get(turma, [])
+                professor_ids=turma_prof_ids.get(turma, []),
+                max_pts=max_pts
             )
             for turma, turno, total, media, faltas in rows
         ]

@@ -1,6 +1,4 @@
 import io
-import os
-import pytest
 from app.core.database import session_scope
 from app.core.security import generate_tokens
 from app.models import Tenant, Usuario

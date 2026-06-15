@@ -36,6 +36,14 @@ import { useGetMyAlunoQuery, useListComunicadosQuery, useListOcorrenciasQuery, u
 
 const formatNota = (value?: number | null) => (typeof value === "number" ? value.toFixed(1) : "-");
 
+const getNotaColor = (value: number | null | undefined, scale: number) => {
+  if (value === null || value === undefined) return "text.primary";
+  const ratio = value / scale;
+  if (ratio < 0.50) return "error.main";
+  if (ratio < 0.57) return "warning.main";
+  return "success.main";
+};
+
 const formatSituacao = (value?: string | null) => {
   if (!value) return { label: "-", color: "default" as const };
   const normalized = value.toUpperCase();
@@ -156,15 +164,7 @@ export const MeuBoletimPage = () => {
               <Typography variant="body2" color="text.secondary">
                 Média geral
               </Typography>
-              <Typography fontWeight={600} color={
-                data.media === null || data.media === undefined
-                  ? "text.primary"
-                  : data.media < 50
-                    ? "error.main"
-                    : data.media < 60
-                      ? "warning.main"
-                      : "success.main"
-              }>
+              <Typography fontWeight={600} color={getNotaColor(data.media, data.max_pts ?? 100)}>
                 {typeof data.media === "number" ? data.media.toFixed(1) : "-"}
               </Typography>
             </Box>
@@ -219,10 +219,10 @@ export const MeuBoletimPage = () => {
                 return (
                   <TableRow key={nota.id} hover>
                     <TableCell>{nota.disciplina}</TableCell>
-                    <TableCell>{formatNota(nota.trimestre1)}</TableCell>
-                    <TableCell>{formatNota(nota.trimestre2)}</TableCell>
-                    <TableCell>{formatNota(nota.trimestre3)}</TableCell>
-                    <TableCell>{formatNota(nota.total)}</TableCell>
+                    <TableCell sx={{ color: getNotaColor(nota.trimestre1, 30), fontWeight: 500 }}>{formatNota(nota.trimestre1)}</TableCell>
+                    <TableCell sx={{ color: getNotaColor(nota.trimestre2, 30), fontWeight: 500 }}>{formatNota(nota.trimestre2)}</TableCell>
+                    <TableCell sx={{ color: getNotaColor(nota.trimestre3, 40), fontWeight: 500 }}>{formatNota(nota.trimestre3)}</TableCell>
+                    <TableCell sx={{ color: getNotaColor(nota.total, data.max_pts ?? 100), fontWeight: 700 }}>{formatNota(nota.total)}</TableCell>
                     <TableCell>{nota.faltas ?? "-"}</TableCell>
                     <TableCell>
                       <Chip label={situacao.label} color={situacao.color} size="small" variant="outlined" />

@@ -184,6 +184,25 @@ def test_predict_risk_returns_treinando_when_model_missing(flask_app, admin_user
                 assert result["status"] == "TREINANDO"
 
 
+def test_predict_risk_degrades_when_training_queue_unavailable(flask_app, admin_user):
+    """Falha ao enfileirar treino não deve derrubar endpoints de leitura."""
+    from app.services.ai_predictor import predict_risk
+
+    with flask_app.app_context():
+        from flask import g
+        g.tenant_id = 1
+        g.academic_year_id = 1
+
+        mock_session = MagicMock()
+
+        with patch("app.services.ai_predictor._model_path") as mock_path:
+            mock_path.return_value.exists.return_value = False
+
+            with patch("app.services.ai_predictor.enqueue_training", return_value=False):
+                result = predict_risk(1, mock_session)
+                assert result["status"] == "INDISPONIVEL"
+
+
 # ─── Validators ──────────────────────────────────────────────────────────────
 
 def test_validate_password_strength_all_rules():
@@ -260,3 +279,34 @@ def test_decrypt_bad_fernet_token_returns_ciphertext():
     bad = "enc:not_a_valid_fernet_token"
     result = decrypt_secret(bad)
     assert result == bad
+
+
+# ─── LLM provider deepseek and minimax ──────────────────────────────────────
+
+def test_llm_connection_deepseek_and_minimax():
+    """test_llm_connection deve funcionar para deepseek e minimax."""
+    from app.services.llm_provider import test_llm_connection
+
+    with patch("requests.post") as mock_post:
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "OK"}}]
+        }
+        mock_response.raise_for_status.return_value = None
+        mock_post.return_value = mock_response
+
+        # Test DeepSeek
+        res_ds = test_llm_connection("deepseek", "fake-key", "deepseek-chat")
+        assert res_ds["ok"] is True
+        assert "OK" in res_ds["message"]
+        # Assert base url was correct
+        args, kwargs = mock_post.call_args_list[-1]
+        assert args[0] == "https://api.deepseek.com/chat/completions"
+
+        # Test MiniMax
+        res_mm = test_llm_connection("minimax", "fake-key", "MiniMax-M3")
+        assert res_mm["ok"] is True
+        assert "OK" in res_mm["message"]
+        # Assert base url was correct
+        args, kwargs = mock_post.call_args_list[-1]
+        assert args[0] == "https://api.minimax.io/v1/chat/completions"

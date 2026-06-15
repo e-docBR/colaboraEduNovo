@@ -127,6 +127,8 @@ def register(parent: Blueprint) -> None:
         if not COMUNICADO_WRITE_ROLES.intersection(roles):
             return jsonify({"error": "Acesso negado"}), 403
 
+        is_professor = "professor" in roles
+
         data = request.json or {}
         titulo = data.get("titulo")
         conteudo = data.get("conteudo")
@@ -148,6 +150,13 @@ def register(parent: Blueprint) -> None:
         _VALID_TYPES = {"TODOS", "TURMA", "ALUNO", "PROFESSOR"}
         if target_type not in _VALID_TYPES:
             return jsonify({"error": f"target_type inválido. Valores aceitos: {sorted(_VALID_TYPES)}"}), 400
+
+        # Professor role constraints
+        if is_professor:
+            if target_type != "TURMA":
+                return jsonify({"error": "Professores só podem enviar comunicados para turmas"}), 403
+            if data.get("notificar_responsaveis"):
+                return jsonify({"error": "Professores não têm permissão para enviar e-mails aos responsáveis"}), 403
 
         # target_value obrigatório quando target_type exige segmentação
         if target_type in {"TURMA", "ALUNO"}:
@@ -176,6 +185,18 @@ def register(parent: Blueprint) -> None:
 
         comunicado_id = None
         with session_scope() as session:
+            # Enforce UsuarioTurma validation for professors
+            if is_professor:
+                from ...models import UsuarioTurma
+                link_exists = session.query(UsuarioTurma).filter(
+                    UsuarioTurma.usuario_id == user_id,
+                    UsuarioTurma.turma == target_value,
+                    UsuarioTurma.tenant_id == g.tenant_id,
+                    UsuarioTurma.academic_year_id == g.academic_year_id
+                ).first()
+                if not link_exists:
+                    return jsonify({"error": "Você não tem permissão para enviar comunicados para esta turma"}), 403
+
             # Validar existência do aluno para comunicados direcionados
             if target_type == "ALUNO":
                 from ...models import Aluno
@@ -310,6 +331,7 @@ def register(parent: Blueprint) -> None:
         from ...models import Usuario
         claims = get_jwt()
         roles = claims.get("roles", [])
+        user_id = int(get_jwt_identity())
 
         if not COMUNICADO_WRITE_ROLES.intersection(roles):
             return jsonify({"error": "Acesso negado"}), 403
@@ -322,6 +344,11 @@ def register(parent: Blueprint) -> None:
             )
             if not comunicado:
                 return jsonify({"error": "Comunicado não encontrado"}), 404
+
+            # Non-managers (e.g. professors) can only view read receipts of their own announcements
+            is_manager = bool(MANAGER_ROLES.intersection(roles))
+            if not is_manager and comunicado.autor_id != user_id:
+                return jsonify({"error": "Você não tem permissão para visualizar as leituras deste comunicado"}), 403
 
             leituras = (
                 session.query(ComunicadoLeitura, Usuario.username)

@@ -23,6 +23,8 @@ def register(parent: Blueprint) -> None:
         tenant_id = getattr(g, "tenant_id", None)
         academic_year_id = getattr(g, "academic_year_id", None)
 
+        from app.services.analytics import get_grading_stage
+
         with session_scope() as session:
             # If admin or super_admin, they see ALL classes
             if "admin" in roles or "super_admin" in roles:
@@ -38,6 +40,9 @@ def register(parent: Blueprint) -> None:
                     UsuarioTurma.academic_year_id == academic_year_id
                 ).all()
                 turma_names = [link[0] for link in links if link[0]]
+
+            stage = get_grading_stage(session, tenant_id, academic_year_id)
+            max_pts = stage["max_pts"]
 
             results = []
             for t_name in turma_names:
@@ -70,7 +75,8 @@ def register(parent: Blueprint) -> None:
                     "turno": turno,
                     "total_alunos": total_alunos,
                     "media": float(media),
-                    "faltas_medias": float(faltas_medias)
+                    "faltas_medias": float(faltas_medias),
+                    "max_pts": max_pts
                 })
 
             # Sort by turma name

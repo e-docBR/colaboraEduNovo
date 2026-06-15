@@ -93,12 +93,14 @@ class AlunoListSchema(AlunoBase):
     senha_inicial: Optional[str] = None
     is_archived: bool = False
     deleted_at: Optional[datetime] = None
+    max_pts: Optional[int] = None
 
 
 class AlunoDetailSchema(AlunoBase):
     id: int
     notas: List[NotaSchema] = []
     media: Optional[float] = None
+    max_pts: Optional[int] = None
 
 class PaginationMeta(BaseModel):
     page: int

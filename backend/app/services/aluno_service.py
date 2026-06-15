@@ -36,6 +36,22 @@ class AlunoService:
             include_archived=include_archived,
         )
 
+        from app.services.analytics import get_grading_stage
+        tenant_id = None
+        academic_year_id = None
+        try:
+            from flask import g
+            tenant_id = getattr(g, "tenant_id", None)
+            academic_year_id = getattr(g, "academic_year_id", None)
+        except Exception:
+            pass
+
+        try:
+            stage = get_grading_stage(self.repository.session, tenant_id, academic_year_id)
+            max_pts = stage["max_pts"]
+        except Exception:
+            max_pts = 30
+
         items = []
         for aluno, media, faltas, media_faltas in results:
             items.append(
@@ -51,6 +67,7 @@ class AlunoService:
                     media_faltas=round(float(media_faltas), 1) if media_faltas is not None else None,
                     is_archived=aluno.is_archived,
                     deleted_at=aluno.deleted_at,
+                    max_pts=max_pts,
                 )
             )
 
@@ -72,6 +89,22 @@ class AlunoService:
             return None
 
         notas_schema = [NotaSchema.model_validate(nota) for nota in notas]
+
+        from app.services.analytics import get_grading_stage
+        tenant_id = None
+        academic_year_id = None
+        try:
+            from flask import g
+            tenant_id = getattr(g, "tenant_id", None)
+            academic_year_id = getattr(g, "academic_year_id", None)
+        except Exception:
+            pass
+
+        try:
+            stage = get_grading_stage(self.repository.session, tenant_id, academic_year_id)
+            max_pts = stage["max_pts"]
+        except Exception:
+            max_pts = 30
 
         return AlunoDetailSchema(
             id=aluno.id,
@@ -98,6 +131,7 @@ class AlunoService:
             # Contato do responsável
             email_responsavel=aluno.email_responsavel,
             telefone_responsavel=aluno.telefone_responsavel,
+            max_pts=max_pts,
         )
 
     def get_aluno_by_matricula(self, matricula: str) -> tuple:

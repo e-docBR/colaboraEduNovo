@@ -5,7 +5,7 @@
 O projeto está em estado de `staging forte / piloto controlado`.
 
 O baseline técnico está funcional:
-- backend validado com `ruff` limpo e `38` testes, incluindo regressões de hardening para alunos, notas e comunicados;
+- backend validado com `ruff` limpo e `39` testes, incluindo regressões de hardening para alunos, notas, comunicados e degradação segura de IA/RQ;
 - frontend com `eslint`, `tsc` e `vite build`;
 - mobile com `tsc --noEmit`;
 - compose de produção com Traefik, PostgreSQL, Redis, worker RQ e backup diário.
@@ -30,6 +30,7 @@ Os principais gaps operacionais identificados na auditoria foram fechados neste 
 - o workflow de deploy usa `--scale worker=3`, compatível com `docker compose`;
 - o smoke test de deploy valida frontend, `/health` e descoberta de tenants.
 - `/metrics` agora exige JWT de `super_admin`; scrapers Prometheus precisam enviar `Authorization: Bearer <token>`.
+- endpoints de leitura que calculam risco de IA agora degradam para `TREINANDO` ou `INDISPONIVEL` quando o modelo precisa ser treinado e Redis/RQ não aceita enqueue, em vez de retornar 500.
 
 ## Modelo real de deploy
 
@@ -65,15 +66,21 @@ Regras operacionais:
 
 ## Validação local mais recente
 
-- `cd backend && .venv/bin/python -m pytest tests -q --cov-fail-under=0` passou; cobertura total reportada em torno de `46%`.
-- `cd backend && .venv/bin/python -m ruff check app tests` passou.
+- `cd backend && ../.venv/bin/python -m pytest tests -q --cov-fail-under=0` passou; cobertura total reportada em torno de `53%`.
+- `cd backend && ../.venv/bin/python -m ruff check app tests` passou.
 - `./scripts/scan-secrets.sh` passou.
 - `bash -n scripts/smoke-rq-worker.sh` passou.
 - `bash -n scripts/restore-postgres-backup.sh` passou.
-- `frontend npm run build` passou sem aviso de chunk grande; o entrypoint `index` caiu para cerca de `25.77 kB`.
+- `cd frontend && npm run build` passou.
+- `cd frontend && npm audit --audit-level=moderate` passou após `npm audit fix`, com 0 vulnerabilidades reportadas.
 - `frontend npm run lint` passou.
-- `mobile npm run typecheck` passou.
+- `cd mobile && npm run typecheck` passou.
+- `cd mobile && npm audit fix` removeu vulnerabilidades corrigíveis sem `--force`, mas `npm audit --audit-level=moderate` ainda reporta vulnerabilidades moderadas transitivas em `js-yaml` e `uuid` que exigem upgrades quebradores (`react-native@0.86.0` e/ou downgrade/alteração de `expo`) para resolução automática.
+- `pip-audit` não está instalado no ambiente local usado nesta validação; executar em CI/servidor antes do go-live.
 - `docker compose -f docker-compose.prod.yml config --quiet` passou; sem `.env` real, o Docker Compose ainda exibe avisos de variáveis vazias, o que é esperado fora do servidor.
+- `scripts/release-candidate-check.sh` consolida os gates de RC.
+- `scripts/production-http-smoke.sh` consolida o smoke HTTP de staging/produção.
+- `scripts/setup-hetzner.sh` gera `ENCRYPTION_KEY`, além de `SECRET_KEY`, `JWT_SECRET_KEY` e `BACKUP_ENCRYPTION_KEY`, ficando compatível com `prod-preflight`.
 
 ## GitHub Actions e segredos
 
@@ -95,10 +102,11 @@ Sem esses segredos opcionais, o deploy continua validando frontend, health e ten
 
 ## Gates recomendados para go-live
 
-O plano detalhado de execução está em `docs/PRODUCTION_GO_LIVE_PLAN.md`.
+O plano detalhado de execução está em `docs/PRODUCTION_GO_LIVE_PLAN.md` e o runbook executável está em `docs/PRODUCTION_PILOT_RUNBOOK.md`.
 
 - `./scripts/prod-preflight.sh` precisa passar com o `.env` real.
 - `docker compose -f docker-compose.prod.yml config --quiet` precisa resolver sem placeholders.
+- `./scripts/release-candidate-check.sh` precisa passar na branch/tag do RC.
 - o deploy precisa subir com `--scale worker=3`.
 - o smoke test precisa validar:
   - `GET /`
@@ -111,4 +119,6 @@ O plano detalhado de execução está em `docs/PRODUCTION_GO_LIVE_PLAN.md`.
 ## Pendências restantes antes de produção ampla
 
 - executar e registrar um restore drill real de backup em ambiente limpo seguindo `docs/RESTORE_DRILL_RUNBOOK.md`;
+- executar auditoria Python com `pip-audit` no CI/servidor;
+- decidir tratamento das vulnerabilidades moderadas restantes do mobile: aceitar formalmente para piloto controlado ou planejar upgrade testado de Expo/React Native antes da ampliação;
 - revisar se a equipe vai manter `docker compose` ou migrar para um orquestrador que honre `deploy.resources`.

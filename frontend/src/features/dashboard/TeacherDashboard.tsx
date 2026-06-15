@@ -30,8 +30,9 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import PersonIcon from "@mui/icons-material/Person";
 import { Link } from "react-router-dom";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts";
-import { useGetTeacherDashboardQuery, useListTurmasQuery } from "../../lib/api";
+import { useGetTeacherDashboardQuery, useListTurmasQuery, useGetProfessorTurmasQuery } from "../../lib/api";
 import { AIInterventionBoard } from "./AIInterventionBoard";
+import { useAppSelector } from "../../app/hooks";
 
 const BAR_RANGE_COLORS = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#16a34a"];
 
@@ -46,6 +47,9 @@ export const TeacherDashboard = () => {
         return () => clearTimeout(timer);
     }, [searchInput]);
 
+    const user = useAppSelector((state) => state.auth.user);
+    const isProfessor = user?.role === "professor";
+
     const apiFilters = {
         q: filters.q || undefined,
         turno: filters.turno === "Todos" ? undefined : filters.turno,
@@ -54,6 +58,7 @@ export const TeacherDashboard = () => {
 
     const { data, isLoading, error } = useGetTeacherDashboardQuery(apiFilters);
     const { data: turmasData } = useListTurmasQuery();
+    const { data: professorTurmasData } = useGetProfessorTurmasQuery(undefined, { skip: !isProfessor });
 
     if (isLoading) {
         return (
@@ -74,9 +79,14 @@ export const TeacherDashboard = () => {
         count: value as number,
     }));
 
-    const uniqueTurmas = (turmasData?.items ?? [])
-        .filter((t: any) => !filters.turno || filters.turno === "Todos" || t.turno === filters.turno)
-        .map((t: any) => t.turma);
+    const uniqueTurmas = isProfessor
+        ? (professorTurmasData ?? [])
+              .filter((t: any) => !filters.turno || filters.turno === "Todos" || t.turno === filters.turno)
+              .map((t: any) => t.turma)
+        : (turmasData?.items ?? [])
+              .filter((t: any) => !filters.turno || filters.turno === "Todos" || t.turno === filters.turno)
+              .map((t: any) => t.turma);
+
     const alertCount = data.alerts?.length ?? 0;
 
     const stats = [
@@ -87,6 +97,7 @@ export const TeacherDashboard = () => {
     ];
 
     const hasNoStudents = data.total_students === 0;
+    const hasNoLinkedClasses = isProfessor && professorTurmasData && professorTurmasData.length === 0;
 
     return (
         <Box>
@@ -158,11 +169,15 @@ export const TeacherDashboard = () => {
             </Card>
 
             {/* Empty state */}
-            {hasNoStudents && (
+            {hasNoLinkedClasses ? (
+                <Alert severity="info" sx={{ mb: 4, borderRadius: 2, fontSize: "1.05rem", py: 1.5 }}>
+                    Você ainda não possui turmas vinculadas para o ano letivo atual. Entre em contato com a secretaria ou coordenação para associar suas turmas.
+                </Alert>
+            ) : hasNoStudents ? (
                 <Alert severity="info" sx={{ mb: 4, borderRadius: 2 }}>
                     Nenhum aluno encontrado com os filtros selecionados.
                 </Alert>
-            )}
+            ) : null}
 
             {/* Stat Cards */}
             <Grid container spacing={3} mb={4}>

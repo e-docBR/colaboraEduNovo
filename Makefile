@@ -16,7 +16,7 @@
 # =============================================================================
 
 .DEFAULT_GOAL := help
-.PHONY: help setup infra backend worker frontend mobile dev docker test lint doctor validate validate-backend validate-frontend validate-mobile audit prod-preflight restore-backup stop clean migrate
+.PHONY: help setup infra backend worker frontend mobile dev docker test lint doctor validate validate-backend validate-frontend validate-mobile audit rc-check prod-preflight prod-smoke restore-backup stop clean migrate
 
 VENV       := .venv
 PYTHON     := $(VENV)/bin/python
@@ -44,7 +44,9 @@ help:
 	@echo "  make doctor     Verifica pré-requisitos locais de backend/frontend/mobile"
 	@echo "  make validate   Executa validações locais usando apenas toolchains do projeto"
 	@echo "  make audit      Audita dependências Python, frontend e mobile"
+	@echo "  make rc-check   Executa gates de release candidate para piloto"
 	@echo "  make prod-preflight Valida .env e docker-compose de produção"
+	@echo "  make prod-smoke BASE_URL=https://dominio  Smoke HTTP de produção"
 	@echo "  make restore-backup BACKUP=arquivo.sql.gz  Restaura backup PostgreSQL"
 	@echo "  make stop       Para containers de infra"
 	@echo "  make clean      Remove caches e temporários"
@@ -156,8 +158,15 @@ audit:
 	cd mobile && npm audit --audit-level=moderate
 
 # ── Produção ─────────────────────────────────────────────────────────────────
+rc-check:
+	./scripts/release-candidate-check.sh
+
 prod-preflight:
 	./scripts/prod-preflight.sh
+
+prod-smoke:
+	@[ -n "$(BASE_URL)" ] || (echo "Uso: make prod-smoke BASE_URL=https://dominio" && exit 1)
+	BASE_URL="$(BASE_URL)" ./scripts/production-http-smoke.sh
 
 restore-backup:
 	@[ -n "$(BACKUP)" ] || (echo "Uso: make restore-backup BACKUP=/caminho/backup.sql.gz" && exit 1)

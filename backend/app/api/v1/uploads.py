@@ -29,8 +29,8 @@ def register(parent: Blueprint) -> None:
     bp = Blueprint("uploads", __name__)
 
     @bp.post("/uploads/pdf")
+    @limiter.exempt
     @jwt_required()
-    @limiter.limit("20 per hour")
     @require_roles("admin", "super_admin")
     def upload_boletim():
         if "file" not in request.files:

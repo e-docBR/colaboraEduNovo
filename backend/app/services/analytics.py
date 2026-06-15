@@ -199,10 +199,43 @@ def build_dashboard_metrics(session: Session) -> DashboardAnalytics:
         grading_stage=stage,
     )
 
-def build_teacher_dashboard(session: Session, query: str | None = None, turno: str | None = None, turma: str | None = None) -> dict[str, any]:
+def build_teacher_dashboard(
+    session: Session,
+    query: str | None = None,
+    turno: str | None = None,
+    turma: str | None = None,
+    user_id: int | None = None,
+    is_professor: bool = False
+) -> dict[str, Any]:
     from flask import g
     tenant_id = getattr(g, 'tenant_id', None)
     year_id = getattr(g, 'academic_year_id', None)
+
+    linked_classes = []
+    if is_professor and user_id is not None:
+        from ..models import UsuarioTurma
+        turmas_query = session.query(UsuarioTurma.turma).filter(
+            UsuarioTurma.usuario_id == user_id,
+            UsuarioTurma.tenant_id == tenant_id,
+            UsuarioTurma.academic_year_id == year_id
+        ).distinct()
+        linked_classes = [t[0] for t in turmas_query.all() if t[0]]
+
+        # If the professor has no linked classes, return empty dashboard metrics immediately
+        if not linked_classes:
+            return {
+                "distribution": {
+                    "0-20": 0,
+                    "20-40": 0,
+                    "40-60": 0,
+                    "60-80": 0,
+                    "80-100": 0
+                },
+                "alerts": [],
+                "classes_count": 0,
+                "total_students": 0,
+                "global_average": 0.0
+            }
 
     # Base filter builder
     def apply_filters(stm):
@@ -212,8 +245,20 @@ def build_teacher_dashboard(session: Session, query: str | None = None, turno: s
             stm = stm.where(Aluno.academic_year_id == year_id)
         if turno and turno != 'Todos':
             stm = stm.where(Aluno.turno == turno)
-        if turma and turma != 'Todas':
-            stm = stm.where(Aluno.turma == turma)
+
+        # Scoping classes for professor
+        if is_professor and user_id is not None:
+            if turma and turma != 'Todas':
+                if turma in linked_classes:
+                    stm = stm.where(Aluno.turma == turma)
+                else:
+                    stm = stm.where(Aluno.turma == "__NO_ACCESS_CLASS__")
+            else:
+                stm = stm.where(Aluno.turma.in_(linked_classes))
+        else:
+            if turma and turma != 'Todas':
+                stm = stm.where(Aluno.turma == turma)
+
         if query:
             from ..core.helpers import escape_like
             escaped = escape_like(query)

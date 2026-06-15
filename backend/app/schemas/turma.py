@@ -9,6 +9,7 @@ class TurmaSummarySchema(BaseModel):
     faltas_medias: float = 0.0
     slug: str
     professor_ids: List[int] = []
+    max_pts: Optional[int] = None
 
 class TurmaListResponse(BaseModel):
     items: List[TurmaSummarySchema]

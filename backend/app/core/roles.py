@@ -27,7 +27,7 @@ OCORRENCIA_WRITE_ROLES: frozenset[str] = frozenset(
 
 # Roles that can send comunicados
 COMUNICADO_WRITE_ROLES: frozenset[str] = frozenset(
-    {"admin", "super_admin", "coordenador", "orientador"}
+    {"admin", "super_admin", "coordenador", "orientador", "professor"}
 )
 
 # Roles that can view full reports and charts

@@ -88,6 +88,12 @@ export const OcorrenciasPage = () => {
 
     const user = useAppSelector((state) => state.auth.user);
     const isStaff = user?.role !== "aluno";
+    const canWrite = user?.role === "admin" ||
+        user?.role === "super_admin" ||
+        user?.role === "coordenacao" ||
+        user?.role === "coordenador" ||
+        user?.role === "orientacao" ||
+        user?.role === "orientador";
 
     const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: "success" | "error" }>({
         open: false, message: "", severity: "success"
@@ -322,7 +328,7 @@ export const OcorrenciasPage = () => {
                         Registro e acompanhamento disciplinar dos alunos
                     </Typography>
                 </Box>
-                {isStaff && (
+                {canWrite && (
                     <Button
                         variant="contained"
                         onClick={() => setOpen(true)}
@@ -465,7 +471,7 @@ export const OcorrenciasPage = () => {
                                                 </Box>
                                             </Stack>
 
-                                            {isStaff && (
+                                            {canWrite && (
                                                 <IconButton onClick={(e) => handleOpenMenu(e, oc)} size="small">
                                                     <MoreVertIcon fontSize="small" />
                                                 </IconButton>

@@ -27,21 +27,21 @@ import AssignmentLateIcon from "@mui/icons-material/AssignmentLate";
 
 import { useGetProfessorTurmasQuery } from "../../lib/api";
 
-const progressFromMedia = (media?: number | null) => {
+const progressFromMedia = (media?: number | null, maxPts?: number | null) => {
   if (media === undefined || media === null) return 0;
-  const scale = media > 20 ? 100 : 20;
+  const scale = maxPts ?? (media > 20 ? 100 : 20);
   return Math.min(100, Math.max(0, (media / scale) * 100));
 };
 
-const getPerformanceColor = (media: number, theme: any) => {
-  const isLargeScale = media > 20;
-  if (isLargeScale) {
-    if (media < 50) return theme.palette.error.main;
-    if (media < 70) return theme.palette.warning.main;
-    return theme.palette.success.main;
+const getPerformanceColor = (media: number, theme: any, maxPts?: number | null) => {
+  const scale = maxPts ?? (media > 20 ? 100 : 20);
+  const ratio = media / scale;
+  if (ratio < 0.50) {
+    return theme.palette.error.main;
   }
-  if (media < 12) return theme.palette.error.main;
-  if (media < 15) return theme.palette.warning.main;
+  if (ratio < 0.57) {
+    return theme.palette.warning.main;
+  }
   return theme.palette.success.main;
 };
 
@@ -113,8 +113,8 @@ export const MinhasTurmasPage = () => {
         ) : (
           filtered.map((turma) => {
             const mediaVal = turma.media ?? 0;
-            const progress = progressFromMedia(mediaVal);
-            const performanceColor = getPerformanceColor(mediaVal, theme);
+            const progress = progressFromMedia(mediaVal, turma.max_pts);
+            const performanceColor = getPerformanceColor(mediaVal, theme, turma.max_pts);
 
             return (
               <Grid key={turma.turma} size={{ xs: 12, sm: 6, md: 4 }}>

@@ -6,6 +6,8 @@ Data de referência: 2026-06-01
 
 Levar o ColaboraEdu para produção com segurança operacional mínima: deploy reproduzível, segredos rotacionados, backups restauráveis, observabilidade protegida, CI verde e rollback praticável.
 
+Runbook executável: `docs/PRODUCTION_PILOT_RUNBOOK.md`.
+
 ## Estado atual
 
 O sistema está apto para piloto controlado, mas ainda não deve entrar em produção ampla sem concluir os gates abaixo.
@@ -17,7 +19,9 @@ Itens críticos já tratados no código:
 - preflight de produção validando segredos mínimos, CORS HTTPS e dependências opcionais;
 - documentação de autenticação alinhada ao comportamento real de refresh token web/mobile;
 - frontend sem vulnerabilidades npm conhecidas no audit moderado;
-- backend com lint e testes completos passando localmente.
+- backend com lint e testes completos passando localmente;
+- `scripts/release-candidate-check.sh` consolida os gates de RC;
+- `scripts/production-http-smoke.sh` valida frontend, health, tenant discovery, endpoints protegidos e fluxo autenticado quando credenciais de smoke existem.
 
 ## Bloqueadores antes do go-live
 
@@ -40,6 +44,7 @@ Itens críticos já tratados no código:
 
 - Confirmar GitHub Actions verde em `main`.
 - Confirmar que o job `Security — Secret Scan` passa no CI.
+- Rodar `./scripts/release-candidate-check.sh` na branch/tag de release candidate.
 - Configurar segredos do ambiente `production`: `SSH_PRIVATE_KEY`, `SERVER_HOST`, `SERVER_USER`, `SERVER_PATH` e `DOMAIN`.
 - Configurar smoke autenticado se houver conta de teste: `SMOKE_SUPERADMIN_USER`, `SMOKE_SUPERADMIN_PASSWORD`, `SMOKE_TENANT_SLUG`.
 - Validar que `./scripts/prod-preflight.sh` passa no servidor com o `.env` real.
@@ -104,7 +109,7 @@ No-go automático se:
 
 1. Subir ambiente limpo com compose de produção.
 2. Executar migrations.
-3. Rodar smoke tests.
+3. Rodar `BASE_URL=https://staging.example.com ./scripts/production-http-smoke.sh`.
 4. Criar backup criptografado.
 5. Restaurar backup em ambiente limpo.
 6. Registrar evidências do drill.
@@ -112,7 +117,7 @@ No-go automático se:
 ### Dia 2 — Produção piloto
 
 1. Executar deploy manual via GitHub Actions.
-2. Validar `/`, `/health`, tenant discovery, login e fila RQ.
+2. Validar `/`, `/health`, tenant discovery, login e fila RQ com `scripts/smoke-rq-worker.sh` e `scripts/production-http-smoke.sh`.
 3. Confirmar primeiro backup criptografado.
 4. Ativar monitoramento externo.
 5. Liberar acesso para grupo piloto.

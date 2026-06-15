@@ -25,6 +25,12 @@ def register(parent: Blueprint) -> None:
     @require_roles("admin", "super_admin", "coordenador", "diretor", "orientador", "professor")
     @cache_response(timeout=300, key_prefix="dashboard_professor")
     def fetch_teacher_dashboard():
+        from flask_jwt_extended import get_jwt_identity, get_jwt
+        user_id = int(get_jwt_identity())
+        claims = get_jwt()
+        roles = claims.get("roles") or []
+        is_professor = "professor" in roles
+
         query = (request.args.get("q") or "")[:100]  # cap search term length
         turno_raw = request.args.get("turno") or None
         turma_raw = request.args.get("turma") or None
@@ -32,7 +38,14 @@ def register(parent: Blueprint) -> None:
         turno = turno_raw if turno_raw in _VALID_TURNOS else None
         turma = (turma_raw or "")[:30] or None  # cap turma length
         with session_scope() as session:
-            data = build_teacher_dashboard(session, query or None, turno, turma)
+            data = build_teacher_dashboard(
+                session,
+                query or None,
+                turno,
+                turma,
+                user_id=user_id,
+                is_professor=is_professor
+            )
         return data
 
     parent.register_blueprint(bp)

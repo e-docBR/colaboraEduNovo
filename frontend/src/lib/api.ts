@@ -234,6 +234,7 @@ export type AlunoSummary = {
   senha_inicial?: string | null;
   is_archived?: boolean;
   deleted_at?: string | null;
+  max_pts?: number;
 };
 
 
@@ -280,6 +281,7 @@ export type TurmaSummary = {
   faltas_medias?: number | null;
   slug?: string;
   professor_ids?: number[];
+  max_pts?: number;
 };
 
 export type ProfessorTurma = {
@@ -288,6 +290,7 @@ export type ProfessorTurma = {
   total_alunos: number;
   media: number;
   faltas_medias: number;
+  max_pts?: number;
 };
 
 type ListTurmasResponse = {
@@ -489,12 +492,35 @@ export type StudentInterventionAnalysis = {
   turma?: string;
   global_risk: "ALTO" | "MEDIO" | "BAIXO";
   interventions: Intervention[];
-  stats: {
+  stats?: {
     total_faltas: number;
     disciplinas_abaixo_media: number;
   };
   status?: string;
 };
+
+export interface PedagogicalAction {
+  title: string;
+  description: string;
+  priority: "HIGH" | "MEDIUM" | "LOW";
+  type: "ACADEMIC" | "BEHAVIORAL" | "EMERGENCY";
+}
+
+export interface PedagogicalPlan {
+  id: number;
+  aluno_id: number;
+  aluno_nome: string;
+  diagnostico: string;
+  global_risk: "ALTO" | "MEDIO" | "BAIXO";
+  metas: string[];
+  acoes: PedagogicalAction[];
+  status: "PENDENTE" | "APROVADO" | "REJEITADO";
+  edited: boolean;
+  feedback_usuario?: string | null;
+  acoes_finais?: PedagogicalAction[] | null;
+  created_at: string;
+  updated_at: string;
+}
 
 const sanitizeParams = (params?: Record<string, string | number | boolean | undefined | null>) =>
   Object.fromEntries(
@@ -804,7 +830,7 @@ export const api = createApi({
       query: () => "/usuarios/me",
       providesTags: ["Usuarios"]
     }),
-    listComunicados: builder.query<{ items: { id: number; titulo: string; conteudo: string; autor: string; data_envio: string; arquivado?: boolean; target_type?: string; target_value?: string; is_read?: boolean }[]; meta: { page: number; per_page: number; total: number } }, { page?: number; per_page?: number } | void>({
+    listComunicados: builder.query<{ items: { id: number; titulo: string; conteudo: string; autor: string; autor_id?: number | null; data_envio: string; arquivado?: boolean; target_type?: string; target_value?: string; is_read?: boolean }[]; meta: { page: number; per_page: number; total: number } }, { page?: number; per_page?: number } | void>({
       query: (params) => ({
         url: "/comunicados",
         params: sanitizeParams(params ?? undefined)
@@ -895,32 +921,38 @@ export const api = createApi({
       providesTags: ["AISettings"]
     }),
 
-    getAISettings: builder.query<AISettings, void>({
-      query: () => "/ai-settings",
+    getAISettings: builder.query<AISettings, number | void>({
+      query: (tenantId) => ({
+        url: "/ai-settings",
+        headers: tenantId ? { "X-Tenant-ID": tenantId.toString() } : undefined
+      }),
       providesTags: ["AISettings"]
     }),
 
-    updateAISettings: builder.mutation<{ message: string; display_name: string; is_active: boolean }, Partial<AISettings>>({
-      query: (body) => ({
+    updateAISettings: builder.mutation<{ message: string; display_name: string; is_active: boolean }, Partial<AISettings> & { tenantId?: number }>({
+      query: ({ tenantId, ...body }) => ({
         url: "/ai-settings",
         method: "PUT",
+        headers: tenantId ? { "X-Tenant-ID": tenantId.toString() } : undefined,
         body
       }),
       invalidatesTags: ["AISettings"]
     }),
 
-    testAISettings: builder.mutation<{ ok: boolean; message: string }, { provider: string; api_key: string; model_name: string }>({
-      query: (body) => ({
+    testAISettings: builder.mutation<{ ok: boolean; message: string }, { provider: string; api_key: string; model_name: string; tenantId?: number }>({
+      query: ({ tenantId, ...body }) => ({
         url: "/ai-settings/test",
         method: "POST",
+        headers: tenantId ? { "X-Tenant-ID": tenantId.toString() } : undefined,
         body
       })
     }),
 
-    clearAIKey: builder.mutation<{ message: string }, void>({
-      query: () => ({
+    clearAIKey: builder.mutation<{ message: string }, number | void>({
+      query: (tenantId) => ({
         url: "/ai-settings/key",
-        method: "DELETE"
+        method: "DELETE",
+        headers: tenantId ? { "X-Tenant-ID": tenantId.toString() } : undefined
       }),
       invalidatesTags: ["AISettings"]
     }),
@@ -1046,6 +1078,25 @@ export const api = createApi({
         body
       })
     }),
+    generatePedagogicalPlan: builder.mutation<PedagogicalPlan, { aluno_id: number }>({
+      query: (body) => ({
+        url: "/ai/interventions/generate",
+        method: "POST",
+        body
+      }),
+      invalidatesTags: ["Dashboard"]
+    }),
+    savePedagogicalPlanFeedback: builder.mutation<PedagogicalPlan, { id: number; status: "APROVADO" | "REJEITADO"; feedback_usuario?: string; acoes_finais?: PedagogicalAction[] }>({
+      query: (body) => ({
+        url: "/ai/interventions/save-feedback",
+        method: "POST",
+        body
+      }),
+      invalidatesTags: ["Dashboard"]
+    }),
+    getPedagogicalPlanHistory: builder.query<PedagogicalPlan[], number | string>({
+      query: (alunoId) => `/ai/interventions/history/${alunoId}`
+    }),
     getBillingStatus: builder.query<BillingStatusResponse, void>({
       query: () => "/billing/status",
       providesTags: ["Dashboard"]
@@ -1148,6 +1199,9 @@ export const {
   useGetInterventionsQuery,
   useGetStudentRiskQuery,
   useGetBulkInterventionsMutation,
+  useGeneratePedagogicalPlanMutation,
+  useSavePedagogicalPlanFeedbackMutation,
+  useGetPedagogicalPlanHistoryQuery,
   useGetBillingStatusQuery,
   useCreateBillingCheckoutMutation,
   useGetProfessorTurmasQuery,

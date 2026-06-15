@@ -69,10 +69,19 @@ def train_risk_model(tenant_id: int) -> None:
         logger.error("Training failed for tenant {}: {}", tenant_id, e)
 
 
-def enqueue_training(tenant_id: int) -> None:
-    """Enqueues model training as a background RQ task (A-05)."""
+def enqueue_training(tenant_id: int) -> bool:
+    """Enqueue model training as a background RQ task.
+
+    Prediction endpoints are read paths. If Redis/RQ is unavailable, the caller
+    should degrade gracefully instead of turning a dashboard read into a 500.
+    """
     from ..core.queue import queue
-    queue.enqueue(train_risk_model, tenant_id)
+    try:
+        queue.enqueue(train_risk_model, tenant_id)
+        return True
+    except Exception as exc:
+        logger.warning("Could not enqueue risk model training for tenant {}: {}", tenant_id, exc)
+        return False
 
 
 def predict_risk(aluno_id: int, session: Session) -> dict:
@@ -86,31 +95,31 @@ def predict_risk(aluno_id: int, session: Session) -> dict:
         logger.error("predict_risk chamado sem tenant_id no contexto Flask g (aluno_id={})", aluno_id)
         return {"score": 0.0, "status": "ERRO", "error": "tenant indisponível"}
 
+    aluno_query = session.query(Aluno).filter(Aluno.id == aluno_id, Aluno.tenant_id == tenant_id)
+    if year_id:
+        aluno_query = aluno_query.filter(Aluno.academic_year_id == year_id)
+    aluno = aluno_query.first()
+    if not aluno:
+        return {"score": 0.0, "status": "INEXISTENTE"}
+
     model_path = _model_path(tenant_id)
     hash_path = _hash_path(tenant_id)
 
     if not model_path.exists():
         logger.info("Model not found for tenant {}, scheduling training.", tenant_id)
-        enqueue_training(tenant_id)
-        return {"score": 0.0, "status": "TREINANDO"}
+        status = "TREINANDO" if enqueue_training(tenant_id) else "INDISPONIVEL"
+        return {"score": 0.0, "status": status}
 
     if hash_path.exists():
         stored = hash_path.read_text().strip()
         actual = hashlib.sha256(model_path.read_bytes()).hexdigest()
         if stored != actual:
             logger.error("Model integrity check failed for tenant {} — retraining.", tenant_id)
-            enqueue_training(tenant_id)
-            return {"score": 0.0, "status": "TREINANDO"}
+            status = "TREINANDO" if enqueue_training(tenant_id) else "INDISPONIVEL"
+            return {"score": 0.0, "status": status}
 
     try:
         model = joblib.load(model_path)
-
-        aluno_query = session.query(Aluno).filter(Aluno.id == aluno_id, Aluno.tenant_id == tenant_id)
-        if year_id:
-            aluno_query = aluno_query.filter(Aluno.academic_year_id == year_id)
-        aluno = aluno_query.first()
-        if not aluno:
-            return {"score": 0.0, "status": "INEXISTENTE"}
 
         # Single aggregation query instead of N+1 loop (A-08 fix)
         notas_query = select(

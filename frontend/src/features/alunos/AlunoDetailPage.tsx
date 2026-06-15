@@ -95,6 +95,14 @@ const formatSituacao = (value?: string | null, status?: string | null) => {
 
 const formatNota = (value?: number | null) => (typeof value === "number" ? value.toFixed(1) : "-");
 
+const getNotaColor = (value: number | null | undefined, scale: number) => {
+  if (value === null || value === undefined) return "text.primary";
+  const ratio = value / scale;
+  if (ratio < 0.50) return "error.main";
+  if (ratio < 0.57) return "warning.main";
+  return "success.main";
+};
+
 export const AlunoDetailPage = () => {
   const { alunoId } = useParams();
   const navigate = useNavigate();
@@ -265,7 +273,7 @@ export const AlunoDetailPage = () => {
               <Typography variant="body2" color="text.secondary">
                 Média geral
               </Typography>
-              <Typography fontWeight={600} color={data.status ? "text.secondary" : (data.media && data.media < 50 ? "error.main" : "success.main")}>
+              <Typography fontWeight={600} color={data.status ? "text.secondary" : getNotaColor(data.media, data.max_pts ?? 100)}>
                 {data.status ? "Inativo" : (typeof data.media === "number" ? data.media.toFixed(1) : "-")}
               </Typography>
             </Box>
@@ -305,10 +313,18 @@ export const AlunoDetailPage = () => {
                 return (
                   <TableRow key={nota.id} hover>
                     <TableCell>{nota.disciplina}</TableCell>
-                    <TableCell align="center">{formatNota(nota.trimestre1)}</TableCell>
-                    <TableCell align="center">{formatNota(nota.trimestre2)}</TableCell>
-                    <TableCell align="center">{formatNota(nota.trimestre3)}</TableCell>
-                    <TableCell align="center" sx={{ fontWeight: 700 }}>{formatNota(nota.total)}</TableCell>
+                    <TableCell align="center" sx={{ color: getNotaColor(nota.trimestre1, 30), fontWeight: 500 }}>
+                      {formatNota(nota.trimestre1)}
+                    </TableCell>
+                    <TableCell align="center" sx={{ color: getNotaColor(nota.trimestre2, 30), fontWeight: 500 }}>
+                      {formatNota(nota.trimestre2)}
+                    </TableCell>
+                    <TableCell align="center" sx={{ color: getNotaColor(nota.trimestre3, 40), fontWeight: 500 }}>
+                      {formatNota(nota.trimestre3)}
+                    </TableCell>
+                    <TableCell align="center" sx={{ color: getNotaColor(nota.total, data.max_pts ?? 100), fontWeight: 700 }}>
+                      {formatNota(nota.total)}
+                    </TableCell>
                     <TableCell align="center" sx={{ color: "text.secondary" }}>
                       {nota.recuperacao != null ? formatNota(nota.recuperacao) : "--"}
                     </TableCell>

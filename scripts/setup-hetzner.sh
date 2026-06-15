@@ -53,6 +53,7 @@ read -rp "Remetente SMTP (ex: noreply@${DOMAIN}): " SMTP_FROM
 # Gera chaves secretas automaticamente
 SECRET_KEY=$(openssl rand -hex 32)
 JWT_SECRET_KEY=$(openssl rand -hex 32)
+ENCRYPTION_KEY=$(openssl rand -hex 32)
 BACKUP_ENCRYPTION_KEY=$(openssl rand -hex 32)
 MONITOR_BASICAUTH=$(htpasswd -nb admin "$MONITOR_PASSWORD" | sed 's/\$/\$\$/g')
 SMTP_FROM=${SMTP_FROM:-noreply@${DOMAIN}}
@@ -76,6 +77,7 @@ REDIS_PASSWORD=${REDIS_PASSWORD}
 FLASK_ENV=production
 SECRET_KEY=${SECRET_KEY}
 JWT_SECRET_KEY=${JWT_SECRET_KEY}
+ENCRYPTION_KEY=${ENCRYPTION_KEY}
 FRONTEND_URL=https://${DOMAIN}
 ALLOWED_ORIGINS=["https://${DOMAIN}"]
 BRAND_NAME=ColaboraEdu

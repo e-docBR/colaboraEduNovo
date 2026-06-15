@@ -78,6 +78,15 @@ def cache_response(timeout=300, key_prefix="cache"):
                 f":{role}:{request.path}:{request.query_string.decode()}"
             )
 
+            if role in ("professor", "aluno"):
+                try:
+                    from flask_jwt_extended import get_jwt_identity
+                    uid = get_jwt_identity()
+                    if uid:
+                        cache_key += f":u{uid}"
+                except Exception:
+                    pass
+
             try:
                 cached_data = redis_client.get(cache_key)
                 if cached_data:
