@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-import fakeredis
 import pytest
 from sqlalchemy import create_engine
 from app import create_app
@@ -8,6 +7,49 @@ from app.core.database import Base, SessionLocal, session_scope
 import app.core.database
 from app.models import AcademicYear, Tenant, Usuario
 from app.core.security import hash_password
+
+try:
+    import fakeredis  # type: ignore
+except ImportError:  # pragma: no cover - test fallback for constrained envs
+    fakeredis = None
+
+
+class _FallbackFakeRedis:
+    def __init__(self):
+        self._store: dict[str, bytes] = {}
+
+    def _encode(self, value):
+        if isinstance(value, bytes):
+            return value
+        return str(value).encode()
+
+    def setex(self, key, _ttl, value):
+        self._store[key] = self._encode(value)
+        return True
+
+    def get(self, key):
+        return self._store.get(key)
+
+    def getdel(self, key):
+        return self._store.pop(key, None)
+
+    def exists(self, key):
+        return 1 if key in self._store else 0
+
+    def incr(self, key):
+        current = int((self._store.get(key) or b"0").decode())
+        current += 1
+        self._store[key] = str(current).encode()
+        return current
+
+    def ping(self):
+        return True
+
+
+def _make_fake_redis():
+    if fakeredis is not None:
+        return fakeredis.FakeRedis()
+    return _FallbackFakeRedis()
 
 
 @pytest.fixture(scope="session")
@@ -17,6 +59,14 @@ def db_engine():
     
     # Create test engine
     test_engine = create_engine(db_url, connect_args={"check_same_thread": False})
+    
+    # Enable foreign key cascade constraints in SQLite during tests
+    from sqlalchemy import event
+    @event.listens_for(test_engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
     
     # Patch the global engine and SessionLocal
     app.core.database.engine = test_engine
@@ -47,7 +97,7 @@ def flask_app(db_engine):
     })
     config_module.settings.redis_url = original_redis_url
     import app.core.cache as cache_module
-    cache_module.redis_client = fakeredis.FakeRedis()
+    cache_module.redis_client = _make_fake_redis()
     from app.core.extensions import limiter
     limiter.enabled = False
     yield app

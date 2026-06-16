@@ -106,30 +106,38 @@ def resolve_tenant_context():
             except (NoAuthorizationError, RuntimeError):
                 pass
 
+        from app.models.academic_year import AcademicYear as AcademicYearModel
+
         if year_id:
             # Validate the year actually belongs to this tenant before trusting it
-            from app.models.academic_year import AcademicYear as AcademicYearModel
             valid_year = session.query(AcademicYearModel).filter(
                 AcademicYearModel.id == year_id,
                 AcademicYearModel.tenant_id == tenant.id,
             ).first()
             if valid_year:
                 g.academic_year_id = valid_year.id
+                g.academic_year_closed = valid_year.is_closed
             else:
                 # Invalid or cross-tenant year — fall through to current year
                 year_id = None
 
         if not year_id:
-            # Logic to find the current active academic year for this tenant
-            from app.models.academic_year import AcademicYear
-            current_year = session.query(AcademicYear).filter(
-                AcademicYear.tenant_id == tenant.id,
-                AcademicYear.is_current.is_(True)
+            current_year = session.query(AcademicYearModel).filter(
+                AcademicYearModel.tenant_id == tenant.id,
+                AcademicYearModel.is_current.is_(True)
             ).first()
             if current_year:
                 g.academic_year_id = current_year.id
+                g.academic_year_closed = current_year.is_closed
             else:
                 g.academic_year_id = None
+                g.academic_year_closed = False
+
+        # Bloqueia mutações em anos encerrados (super_admin tem acesso irrestrito para correções)
+        if g.get("academic_year_closed") and request.method in ("POST", "PUT", "PATCH", "DELETE"):
+            if not is_super_admin:
+                return jsonify({"error": "Ano letivo encerrado. Os dados são somente leitura."}), 403
+
     return None
 
 def tenant_required():

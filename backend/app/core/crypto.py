@@ -1,6 +1,8 @@
 """Criptografia simétrica para segredos armazenados no banco (API keys, tokens).
 
-Usa Fernet (AES-128-CBC + HMAC-SHA256) com chave derivada do SECRET_KEY da aplicação.
+Usa Fernet (AES-128-CBC + HMAC-SHA256) com chave derivada de ENCRYPTION_KEY.
+ENCRYPTION_KEY é independente de SECRET_KEY para que rotacionar um não quebre o outro.
+
 Valores antigos sem o prefixo "enc:" são tratados como texto plano e passam transparentemente
 até a próxima gravação, quando serão criptografados automaticamente.
 """
@@ -8,7 +10,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-from typing import TYPE_CHECKING
 
 from sqlalchemy import Text
 from sqlalchemy.types import TypeDecorator
@@ -18,13 +19,17 @@ _FERNET_KEY_CACHE: bytes | None = None
 
 
 def _get_fernet():
-    """Retorna instância Fernet com chave derivada do SECRET_KEY (lazy + cached)."""
+    """Retorna instância Fernet com chave derivada de ENCRYPTION_KEY (lazy + cached).
+
+    Usa settings.get_effective_encryption_key() que em desenvolvimento faz fallback
+    determinístico para não exigir ENCRYPTION_KEY no .env local.
+    """
     from cryptography.fernet import Fernet
 
     global _FERNET_KEY_CACHE
     if _FERNET_KEY_CACHE is None:
         from .config import settings
-        raw = hashlib.sha256(settings.secret_key.encode()).digest()
+        raw = hashlib.sha256(settings.get_effective_encryption_key().encode()).digest()
         _FERNET_KEY_CACHE = base64.urlsafe_b64encode(raw)
     return Fernet(_FERNET_KEY_CACHE)
 

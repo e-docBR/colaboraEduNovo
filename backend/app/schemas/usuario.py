@@ -1,6 +1,11 @@
+import re
 from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.core.validators import validate_password_strength, validate_username
+
+# Aceita apenas URLs https:// ou caminhos relativos (/uploads/...) para evitar
+# que valores como javascript:... sejam armazenados como photo_url.
+_SAFE_URL_RE = re.compile(r'^(https://[^\s"<>]+|/[^\s"<>]*)$')
 
 class AlunoSimpleSchema(BaseModel):
     id: int
@@ -24,6 +29,15 @@ class UsuarioSchema(BaseModel):
     aluno: Optional[AlunoSimpleSchema] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("photo_url", mode="before")
+    @classmethod
+    def validate_photo_url(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == "":
+            return None
+        if not _SAFE_URL_RE.match(v):
+            raise ValueError("photo_url deve ser uma URL https:// ou caminho relativo /uploads/...")
+        return v
 
 def _validate_password_strength(v: str) -> str:
     return validate_password_strength(v)

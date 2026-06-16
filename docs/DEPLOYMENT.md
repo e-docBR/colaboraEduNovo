@@ -95,6 +95,8 @@ O arquivo `docker-compose.prod.yml` provisiona:
 - **Worker** — RQ worker para processamento assíncrono
 - **Frontend** — build Nginx otimizado
 
+Observação importante: este projeto sobe produção com `docker compose`, não com Docker Swarm. Nesse modo, `deploy.replicas` não escala containers automaticamente. Para manter `3` workers RQ, use explicitamente `--scale worker=3` no comando de deploy.
+
 ### Passos de Deploy
 
 ```bash
@@ -109,7 +111,7 @@ nano .env  # preencha TODAS as variáveis (veja seção abaixo)
 # (A record: seu-dominio.com → IP do servidor)
 
 # 4. Inicie os containers
-docker-compose -f docker-compose.prod.yml up -d --build
+docker-compose -f docker-compose.prod.yml up -d --build --scale worker=3
 
 # 5. Aguarde o Traefik obter o certificado SSL (1-2 minutos)
 docker-compose -f docker-compose.prod.yml logs -f traefik
@@ -132,9 +134,12 @@ curl https://seu-dominio.com/health
 ### Atualização em Produção
 
 ```bash
-# 1. Backup preventivo
+# 1. Backup preventivo criptografado
 docker-compose -f docker-compose.prod.yml exec -T postgres \
-  pg_dump -U ${POSTGRES_USER} ${POSTGRES_DB} | gzip > backup_pre_update_$(date +%Y%m%d).sql.gz
+  pg_dump -U ${POSTGRES_USER} ${POSTGRES_DB} \
+  | gzip \
+  | gpg --batch --symmetric --cipher-algo AES256 --passphrase "${BACKUP_ENCRYPTION_KEY}" \
+  > backup_pre_update_$(date +%Y%m%d).sql.gz.gpg
 
 # 2. Atualizar código
 git pull origin main
@@ -143,7 +148,7 @@ git pull origin main
 ./scripts/prod-preflight.sh
 
 # 4. Rebuild e restart
-docker-compose -f docker-compose.prod.yml up -d --build
+docker-compose -f docker-compose.prod.yml up -d --build --scale worker=3
 
 # 5. Executar migrações (se houver)
 docker-compose -f docker-compose.prod.yml exec backend flask --app app db upgrade
@@ -172,12 +177,25 @@ Copie `.env.example` para `.env` e preencha os valores. Abaixo estão as variáv
 | `POSTGRES_USER` | Sim | Usuário do banco (ex: `colabora_user`) |
 | `POSTGRES_PASSWORD` | Sim | Senha forte — `openssl rand -hex 32` |
 | `POSTGRES_DB` | Sim | Nome do banco (ex: `colabora_edu`) |
+| `APP_DB_USER` | Sim | Usuário limitado usado pela aplicação em runtime |
+| `APP_DB_PASSWORD` | Sim | Senha do usuário limitado da aplicação |
 
 ### Redis
 
 | Variável | Obrigatória | Descrição |
 |----------|-------------|-----------|
 | `REDIS_PASSWORD` | Sim | Senha do Redis — `openssl rand -hex 24` |
+
+### Backup
+
+| Variável | Obrigatória | Descrição |
+|----------|-------------|-----------|
+| `BACKUP_ENCRYPTION_KEY` | Sim | Chave para criptografar backups locais — mín. 32 chars, `openssl rand -hex 32` |
+| `S3_BACKUP_BUCKET` | Não | Bucket/pasta S3-compatible para cópia externa dos backups |
+| `AWS_ACCESS_KEY_ID` | Se `S3_BACKUP_BUCKET` | Access key do object storage |
+| `AWS_SECRET_ACCESS_KEY` | Se `S3_BACKUP_BUCKET` | Secret key do object storage |
+| `AWS_DEFAULT_REGION` | Não | Região S3-compatible |
+| `S3_ENDPOINT` | Não | Endpoint customizado para Backblaze, MinIO, Hetzner, etc. |
 
 ### Flask / Backend
 
@@ -290,18 +308,20 @@ docker-compose exec backend flask --app app shell
 ### Backup do Banco de Dados
 
 ```bash
-# Backup manual
+# Backup manual criptografado
 docker-compose -f docker-compose.prod.yml exec postgres \
   pg_dump -U ${POSTGRES_USER} ${POSTGRES_DB} \
-  > backup_$(date +%Y%m%d_%H%M%S).sql
+  | gzip \
+  | gpg --batch --symmetric --cipher-algo AES256 --passphrase "${BACKUP_ENCRYPTION_KEY}" \
+  > backup_$(date +%Y%m%d_%H%M%S).sql.gz.gpg
 
-# Restaurar dump gzipado com confirmação explícita
-scripts/restore-postgres-backup.sh backup_20260410_120000.sql.gz
+# Restaurar dump criptografado com confirmação explícita
+scripts/restore-postgres-backup.sh backup_20260410_120000.sql.gz.gpg
 ```
 
 ### Backup Automático
 
-O `docker-compose.prod.yml` já inclui o serviço `pgbackup`, que executa backup diário às 02:00, valida tamanho mínimo do dump e mantém retenção local de 7 dias.
+O `docker-compose.prod.yml` já inclui o serviço `pgbackup`, que executa backup diário às 02:00, criptografa com `BACKUP_ENCRYPTION_KEY`, valida tamanho mínimo do dump e mantém retenção local de 30 dias. Sem `BACKUP_ENCRYPTION_KEY`, o serviço recusa criar backup sem criptografia.
 
 ```bash
 docker-compose -f docker-compose.prod.yml logs pgbackup
@@ -428,6 +448,8 @@ docker-compose -f docker-compose.prod.yml exec backend \
 - [ ] Backup automático do banco configurado
 - [ ] Restore testado com `scripts/restore-postgres-backup.sh`
 - [ ] `./scripts/prod-preflight.sh` passando no servidor
+- [ ] `./scripts/scan-secrets.sh` passando antes do deploy
+- [ ] Scraper de `/metrics` configurado com JWT de `super_admin`
 - [ ] GitHub Actions CI passando antes do deploy
 - [ ] `.env` não versionado no git (verificar `.gitignore`)
 - [ ] Firewall: apenas portas 80 e 443 abertas externamente

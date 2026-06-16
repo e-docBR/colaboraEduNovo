@@ -240,10 +240,11 @@ export const NotasPage = () => {
     faltas: nota.faltas ?? null
   }));
 
-  const turmaOptions = useMemo(
-    () => turmasData?.items.map((t) => t.turma).sort() ?? [],
-    [turmasData]
-  );
+  const turmaOptions = useMemo(() => {
+    const items = turmasData?.items ?? [];
+    const filtered = turno ? items.filter((t) => t.turno === turno) : items;
+    return filtered.map((t) => t.turma).sort();
+  }, [turmasData, turno]);
   const disciplinaOptions = useMemo(
     () => filtrosData?.disciplinas ?? [],
     [filtrosData]
@@ -252,6 +253,11 @@ export const NotasPage = () => {
     () => Array.from(new Set(turmasData?.items.map((t) => t.turno) ?? [])).sort(),
     [turmasData]
   );
+
+  // Reset turma when turno changes (cascading filter)
+  useEffect(() => {
+    setTurma("");
+  }, [turno]);
 
   const handleReset = () => {
     setSearch("");

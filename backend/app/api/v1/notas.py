@@ -5,8 +5,23 @@ from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from sqlalchemy.orm import joinedload
 
 from ...core.database import session_scope
+from ...core.helpers import parse_pagination
 from ...models import Aluno, Nota
 from ...services import log_action
+
+_VALID_SITUACOES = frozenset({
+    "APR", "REP", "REC", "APCC", "AR",
+    "EMC", "EMR", "AFC", "DPC", "TRN", "ABA",
+})
+
+_GRADE_LIMITS = {
+    "trimestre1": (0.0, 30.0),
+    "trimestre2": (0.0, 30.0),
+    "trimestre3": (0.0, 40.0),
+    "total": (0.0, 100.0),
+    "recuperacao": (0.0, 100.0),
+    "conselho_de_classe": (0.0, 100.0),
+}
 
 
 def serialize_nota_row(nota: Nota, aluno: Aluno | None = None) -> dict:
@@ -17,6 +32,8 @@ def serialize_nota_row(nota: Nota, aluno: Aluno | None = None) -> dict:
         "trimestre2": float(nota.trimestre2) if nota.trimestre2 is not None else None,
         "trimestre3": float(nota.trimestre3) if nota.trimestre3 is not None else None,
         "total": float(nota.total) if nota.total is not None else None,
+        "recuperacao": float(nota.recuperacao) if nota.recuperacao is not None else None,
+        "conselho_de_classe": float(nota.conselho_de_classe) if nota.conselho_de_classe is not None else None,
         "faltas": nota.faltas,
         "situacao": nota.situacao,
     }
@@ -83,8 +100,7 @@ def register(parent: Blueprint) -> None:
         turma = request.args.get("turma")
         turno = request.args.get("turno")
         disciplina = request.args.get("disciplina")
-        page = max(1, int(request.args.get("page", 1)))
-        per_page = min(100, int(request.args.get("per_page", 20)))
+        page, per_page = parse_pagination()
 
         from flask import g
         tenant_id = getattr(g, "tenant_id", None)
@@ -131,8 +147,8 @@ def register(parent: Blueprint) -> None:
              return jsonify({"error": "Acesso negado. Apenas administradores podem editar notas."}), 403
 
         payload = request.get_json() or {}
-        allowed_fields = {"trimestre1", "trimestre2", "trimestre3", "total", "faltas", "situacao"}
-        _grade_fields = {"trimestre1", "trimestre2", "trimestre3", "total"}
+        allowed_fields = {"trimestre1", "trimestre2", "trimestre3", "total", "recuperacao", "conselho_de_classe", "faltas", "situacao"}
+        _grade_fields = {"trimestre1", "trimestre2", "trimestre3", "total", "recuperacao", "conselho_de_classe"}
         updates = {}
         for k, v in payload.items():
             if k not in allowed_fields:
@@ -140,21 +156,35 @@ def register(parent: Blueprint) -> None:
             if k in _grade_fields:
                 if v is not None:
                     try:
-                        updates[k] = float(v)
+                        numeric_value = float(v)
                     except (ValueError, TypeError):
                         return jsonify({"error": f"'{k}' deve ser um número"}), 400
+                    min_value, max_value = _GRADE_LIMITS[k]
+                    if numeric_value < min_value or numeric_value > max_value:
+                        return jsonify({
+                            "error": f"'{k}' deve estar entre {min_value:g} e {max_value:g}"
+                        }), 400
+                    updates[k] = round(numeric_value, 2)
                 else:
                     updates[k] = None
             elif k == "faltas":
                 if v is not None:
                     try:
-                        updates[k] = int(v)
+                        faltas = int(v)
                     except (ValueError, TypeError):
                         return jsonify({"error": "'faltas' deve ser um inteiro"}), 400
+                    if faltas < 0 or faltas > 999:
+                        return jsonify({"error": "'faltas' deve estar entre 0 e 999"}), 400
+                    updates[k] = faltas
                 else:
                     updates[k] = 0
             else:
-                updates[k] = v
+                situacao = str(v or "").strip().upper()
+                if situacao and situacao not in _VALID_SITUACOES:
+                    return jsonify({
+                        "error": f"'situacao' inválida. Valores aceitos: {sorted(_VALID_SITUACOES)}"
+                    }), 400
+                updates[k] = situacao or None
         if not updates:
             return jsonify({"error": "Nenhum campo válido informado"}), 400
 
@@ -182,15 +212,38 @@ def register(parent: Blueprint) -> None:
             for key, value in updates.items():
                 setattr(nota, key, value)
             
-            # Recalculate total whenever any trimester changes, unless caller sent total explicitly.
-            # Only non-None values count — a missing grade is not treated as zero.
+            # Recalcula total como SOMA dos trimestres disponíveis (T1+T2+T3 = 100 pts).
+            # Cada trimestre tem escala própria: T1 ∈ [0,30], T2 ∈ [0,30], T3 ∈ [0,40].
+            # Apenas trimestres não-nulos são somados — nota ausente não é tratada como zero.
             if "total" not in updates and any(k in updates for k in ["trimestre1", "trimestre2", "trimestre3"]):
                 values = [
                     float(v)
                     for v in [nota.trimestre1, nota.trimestre2, nota.trimestre3]
                     if v is not None
                 ]
-                nota.total = round(sum(values) / len(values), 2) if values else None
+                nota.total = round(sum(values), 2) if values else None
+
+            # Auto-situacao após recuperação ou conselho:
+            # Só recalcula se o usuário não mandou situacao explicitamente e
+            # todos os 3 trimestres já estão preenchidos (ano completo).
+            if "situacao" not in updates and all(
+                v is not None for v in [nota.trimestre1, nota.trimestre2, nota.trimestre3]
+            ):
+                total = float(nota.total) if nota.total is not None else 0.0
+                rec = float(nota.recuperacao) if nota.recuperacao is not None else None
+                cdc = float(nota.conselho_de_classe) if nota.conselho_de_classe is not None else None
+
+                if total >= 50.0:
+                    nota.situacao = "APR"
+                elif rec is not None:
+                    media_rec = round((total + rec) / 2, 2)
+                    if media_rec >= 50.0:
+                        nota.situacao = "APR"
+                    elif cdc is not None and cdc >= 50.0:
+                        nota.situacao = "APCC"
+                    else:
+                        nota.situacao = "REP"
+                # Se total < 50 mas não há nota de recuperação ainda: mantém situação atual
 
             session.add(nota)
             session.flush()

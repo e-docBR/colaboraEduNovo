@@ -1,11 +1,51 @@
+import re
+
 from flask import Blueprint, jsonify, request, g
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from sqlalchemy import desc, or_
 from sqlalchemy.orm import selectinload
 
 from ...core.database import session_scope
+from ...core.helpers import parse_pagination
 from ...core.roles import STAFF_ROLES, MANAGER_ROLES, COMUNICADO_WRITE_ROLES
 from ...models import Comunicado, Aluno, ComunicadoLeitura
+
+_STRIP_TAGS_RE = re.compile(r"<[^>]+>")
+
+
+def _sanitize_text(value: str) -> str:
+    """Strip HTML tags from text to prevent stored XSS."""
+    return _STRIP_TAGS_RE.sub("", value)
+
+
+def _can_user_read_comunicado(session, comunicado: Comunicado, roles: list[str], claims: dict) -> bool:
+    """Return True only when the comunicado is visible to the current user."""
+    if STAFF_ROLES.intersection(roles):
+        return True
+
+    aluno_id = claims.get("aluno_id")
+    if comunicado.target_type == "TODOS":
+        return True
+
+    if not aluno_id:
+        return False
+    try:
+        aluno_id_int = int(aluno_id)
+    except (TypeError, ValueError):
+        return False
+
+    if comunicado.target_type == "ALUNO":
+        return comunicado.target_value == str(aluno_id_int)
+
+    if comunicado.target_type == "TURMA":
+        aluno = (
+            session.query(Aluno)
+            .filter(Aluno.id == aluno_id_int, Aluno.tenant_id == g.tenant_id)
+            .first()
+        )
+        return bool(aluno and aluno.turma == comunicado.target_value)
+
+    return False
 
 def register(parent: Blueprint) -> None:
     bp = Blueprint("comunicados", __name__)
@@ -17,11 +57,7 @@ def register(parent: Blueprint) -> None:
         claims = get_jwt()
         roles = claims.get("roles", [])
 
-        try:
-            page = max(1, int(request.args.get("page", 1)))
-            per_page = min(100, int(request.args.get("per_page", 20)))
-        except (ValueError, TypeError):
-            page, per_page = 1, 20
+        page, per_page = parse_pagination()
         offset = (page - 1) * per_page
 
         with session_scope() as session:
@@ -91,12 +127,18 @@ def register(parent: Blueprint) -> None:
         if not COMUNICADO_WRITE_ROLES.intersection(roles):
             return jsonify({"error": "Acesso negado"}), 403
 
+        is_professor = "professor" in roles
+
         data = request.json or {}
         titulo = data.get("titulo")
         conteudo = data.get("conteudo")
         if not titulo or not conteudo:
             return jsonify({"error": "Campos obrigatórios: titulo, conteudo"}), 400
-            
+
+        # Sanitize inputs to prevent stored XSS
+        titulo = _sanitize_text(str(titulo).strip())
+        conteudo = _sanitize_text(str(conteudo).strip())
+
         if len(titulo) > 200:
             return jsonify({"error": "Título muito longo (máx 200 caracteres)"}), 400
         if len(conteudo) > 50000:
@@ -108,6 +150,13 @@ def register(parent: Blueprint) -> None:
         _VALID_TYPES = {"TODOS", "TURMA", "ALUNO", "PROFESSOR"}
         if target_type not in _VALID_TYPES:
             return jsonify({"error": f"target_type inválido. Valores aceitos: {sorted(_VALID_TYPES)}"}), 400
+
+        # Professor role constraints
+        if is_professor:
+            if target_type != "TURMA":
+                return jsonify({"error": "Professores só podem enviar comunicados para turmas"}), 403
+            if data.get("notificar_responsaveis"):
+                return jsonify({"error": "Professores não têm permissão para enviar e-mails aos responsáveis"}), 403
 
         # target_value obrigatório quando target_type exige segmentação
         if target_type in {"TURMA", "ALUNO"}:
@@ -136,6 +185,18 @@ def register(parent: Blueprint) -> None:
 
         comunicado_id = None
         with session_scope() as session:
+            # Enforce UsuarioTurma validation for professors
+            if is_professor:
+                from ...models import UsuarioTurma
+                link_exists = session.query(UsuarioTurma).filter(
+                    UsuarioTurma.usuario_id == user_id,
+                    UsuarioTurma.turma == target_value,
+                    UsuarioTurma.tenant_id == g.tenant_id,
+                    UsuarioTurma.academic_year_id == g.academic_year_id
+                ).first()
+                if not link_exists:
+                    return jsonify({"error": "Você não tem permissão para enviar comunicados para esta turma"}), 403
+
             # Validar existência do aluno para comunicados direcionados
             if target_type == "ALUNO":
                 from ...models import Aluno
@@ -146,8 +207,8 @@ def register(parent: Blueprint) -> None:
                     return jsonify({"error": f"Aluno com ID {target_value} não encontrado nesta escola"}), 400
 
             novo = Comunicado(
-                titulo=data["titulo"],
-                conteudo=data["conteudo"],
+                titulo=titulo,
+                conteudo=conteudo,
                 autor_id=user_id,
                 target_type=target_type,
                 target_value=target_value,
@@ -197,13 +258,15 @@ def register(parent: Blueprint) -> None:
                 return jsonify({"error": "Você só pode editar seus próprios comunicados"}), 403
 
             if "titulo" in data:
-                if len(str(data["titulo"])) > 200:
+                sanitized_titulo = _sanitize_text(str(data["titulo"]).strip())
+                if len(sanitized_titulo) > 200:
                     return jsonify({"error": "Título muito longo (máx 200 caracteres)"}), 400
-                comunicado.titulo = data["titulo"]
+                comunicado.titulo = sanitized_titulo
             if "conteudo" in data:
-                if len(str(data["conteudo"])) > 50000:
+                sanitized_conteudo = _sanitize_text(str(data["conteudo"]).strip())
+                if len(sanitized_conteudo) > 50000:
                     return jsonify({"error": "Conteúdo muito longo (máx 50000 caracteres)"}), 400
-                comunicado.conteudo = data["conteudo"]
+                comunicado.conteudo = sanitized_conteudo
             if "arquivado" in data:
                 comunicado.arquivado = bool(data["arquivado"])
 
@@ -242,6 +305,8 @@ def register(parent: Blueprint) -> None:
     @jwt_required()
     def mark_read(comunicado_id: int):
         user_id = int(get_jwt_identity())
+        claims = get_jwt()
+        roles = claims.get("roles", [])
         with session_scope() as session:
             # Verify comunicado belongs to the user's tenant before recording read status.
             # The ORM auto-filter only applies to SELECT queries, not MERGE/INSERT, so
@@ -252,6 +317,8 @@ def register(parent: Blueprint) -> None:
                 .first()
             )
             if not comunicado:
+                return jsonify({"error": "Comunicado não encontrado"}), 404
+            if not _can_user_read_comunicado(session, comunicado, roles, claims):
                 return jsonify({"error": "Comunicado não encontrado"}), 404
             leitura = ComunicadoLeitura(comunicado_id=comunicado_id, usuario_id=user_id)
             session.merge(leitura)
@@ -264,6 +331,7 @@ def register(parent: Blueprint) -> None:
         from ...models import Usuario
         claims = get_jwt()
         roles = claims.get("roles", [])
+        user_id = int(get_jwt_identity())
 
         if not COMUNICADO_WRITE_ROLES.intersection(roles):
             return jsonify({"error": "Acesso negado"}), 403
@@ -276,6 +344,11 @@ def register(parent: Blueprint) -> None:
             )
             if not comunicado:
                 return jsonify({"error": "Comunicado não encontrado"}), 404
+
+            # Non-managers (e.g. professors) can only view read receipts of their own announcements
+            is_manager = bool(MANAGER_ROLES.intersection(roles))
+            if not is_manager and comunicado.autor_id != user_id:
+                return jsonify({"error": "Você não tem permissão para visualizar as leituras deste comunicado"}), 403
 
             leituras = (
                 session.query(ComunicadoLeitura, Usuario.username)

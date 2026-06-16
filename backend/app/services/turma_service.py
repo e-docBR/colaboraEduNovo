@@ -29,7 +29,48 @@ class TurmaService:
         return "-".join(filter(None, ascii_value.split("-")))
 
     def list_turmas(self) -> TurmaListResponse:
+        from flask import g
+        from app.models import UsuarioTurma, Aluno
+        from collections import defaultdict
+        from app.services.analytics import get_grading_stage
+        
+        tenant_id = getattr(g, "tenant_id", None)
+        academic_year_id = getattr(g, "academic_year_id", None)
+        
+        stage = get_grading_stage(self.repository.session, tenant_id, academic_year_id)
+        max_pts = stage["max_pts"]
+
+        # Pull linkages
+        links = self.repository.session.query(UsuarioTurma.turma, UsuarioTurma.usuario_id).filter(
+            UsuarioTurma.tenant_id == tenant_id,
+            UsuarioTurma.academic_year_id == academic_year_id
+        ).all()
+        
+        turma_prof_ids = defaultdict(list)
+        for t_name, u_id in links:
+            turma_prof_ids[t_name].append(u_id)
+
         rows = self.repository.get_summaries()
+        
+        # Build deterministic slug map
+        query_distinct = self.repository.session.query(Aluno.turma).distinct()
+        if tenant_id:
+             query_distinct = query_distinct.filter(Aluno.tenant_id == tenant_id)
+             
+        turmas = [r[0] for r in query_distinct.all() if r[0]]
+        turmas.sort()
+        
+        slug_map = {}
+        seen_slugs = set()
+        for t in turmas:
+            base_slug = self._slugify(t)
+            slug = base_slug
+            counter = 2
+            while slug in seen_slugs:
+                slug = f"{base_slug}-{counter}"
+                counter += 1
+            seen_slugs.add(slug)
+            slug_map[t] = slug
         
         items = [
             TurmaSummarySchema(
@@ -38,7 +79,9 @@ class TurmaService:
                 total_alunos=total,
                 media=round(float(media), 2) if media is not None else None,
                 faltas_medias=round(float(faltas), 1) if faltas is not None else 0.0,
-                slug=self._slugify(turma)
+                slug=slug_map.get(turma, self._slugify(turma)),
+                professor_ids=turma_prof_ids.get(turma, []),
+                max_pts=max_pts
             )
             for turma, turno, total, media, faltas in rows
         ]
@@ -90,6 +133,8 @@ class TurmaService:
                     media=media_total,
                     situacao=situacao,
                     status=aluno.status,
+                    sexo=aluno.sexo,
+                    data_nascimento=aluno.data_nascimento,
                     notas=notas_schema
                 )
             )

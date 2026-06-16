@@ -26,7 +26,7 @@ import {
   Fade,
   Menu
 } from "@mui/material";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import type { RootState } from "../../app/store";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
@@ -60,6 +60,8 @@ import {
 } from "recharts";
 import ScatterPlotIcon from "@mui/icons-material/ScatterPlot";
 import InsightsIcon from "@mui/icons-material/Insights";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import TrendingDownIcon from "@mui/icons-material/TrendingDown";
 import {
   useGetGraficoQuery,
   useGetNotasFiltrosQuery,
@@ -87,15 +89,22 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const CHART_ICONS: Record<string, React.ElementType> = {
-  "disciplinas-medias": BarChartIcon,
-  "medias-por-trimestre": EqualizerIcon,
-  "turmas-trimestre": TimelineIcon,
-  "situacao-distribuicao": PieChartIcon,
-  "faltas-por-turma": BarChartIcon,
-  "heatmap-disciplinas": GridOnIcon,
-  "gauss-escola": InsightsIcon,
-  "correlacao-frequencia": ScatterPlotIcon,
-  "evolucao-turnos": TimelineIcon,
+  "disciplinas-medias":          BarChartIcon,
+  "medias-por-trimestre":        EqualizerIcon,
+  "turmas-trimestre":            TimelineIcon,
+  "situacao-distribuicao":       PieChartIcon,
+  "faltas-por-turma":            BarChartIcon,
+  "heatmap-disciplinas":         GridOnIcon,
+  "gauss-escola":                InsightsIcon,
+  "correlacao-frequencia":       ScatterPlotIcon,
+  "evolucao-turnos":             TimelineIcon,
+  "abaixo-por-disciplina":       WarningAmberIcon,
+  "abaixo-por-turma":            BarChartIcon,
+  "deficit-ranking":             TrendingDownIcon,
+  "aprovacao-por-turma":         EqualizerIcon,
+  "ocorrencias-por-tipo":        WarningAmberIcon,
+  "ocorrencias-evolucao-mensal": TimelineIcon,
+  "recuperacao-efetividade":     InsightsIcon,
 };
 
 export const GraficosPage = () => {
@@ -161,11 +170,18 @@ export const GraficosPage = () => {
   };
 
   const { data: turmasData } = useListTurmasQuery();
-  const turmaOptions = useMemo(() => turmasData?.items ?? [], [turmasData]);
-  const serieOptions = useMemo(() => {
+
+  // Filter turmas by selected turno
+  const turmasByTurno = useMemo(() => {
     const items = turmasData?.items ?? [];
+    if (!turno) return items;
+    return items.filter((item) => item.turno === turno);
+  }, [turmasData, turno]);
+
+  // Filter series from turmas already filtered by turno
+  const serieOptions = useMemo(() => {
     const series = new Set<string>();
-    items.forEach((item) => {
+    turmasByTurno.forEach((item) => {
       const parts = (item.turma ?? "").split(" ");
       const prefix = parts.length >= 2 ? `${parts[0]} ${parts[1]}` : item.turma;
       if (prefix) {
@@ -173,7 +189,23 @@ export const GraficosPage = () => {
       }
     });
     return Array.from(series).sort();
-  }, [turmasData]);
+  }, [turmasByTurno]);
+
+  // Filter turma options by turno + serie
+  const turmaOptions = useMemo(() => {
+    if (!serie) return turmasByTurno;
+    return turmasByTurno.filter((item) => (item.turma ?? "").startsWith(serie));
+  }, [turmasByTurno, serie]);
+
+  // Reset dependent filters when parent changes
+  useEffect(() => {
+    setSerie("");
+    setTurma("");
+  }, [turno]);
+
+  useEffect(() => {
+    setTurma("");
+  }, [serie]);
 
   const { data: notasFiltrosData } = useGetNotasFiltrosQuery();
   const disciplinaOptions = useMemo(() => {
@@ -296,10 +328,21 @@ export const GraficosPage = () => {
             />
             <Tooltip content={<CustomChartTooltip />} cursor={{ stroke: theme.palette.divider, strokeWidth: 1 }} />
             {chart.slug === "evolucao-turnos" ? (
-              // Hardcoded assumption for this specific chart based on data structure
               <>
-                <Line type="monotone" dataKey="matutino" name="Matutino" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="vespertino" name="Vespertino" stroke="#6366f1" strokeWidth={3} dot={{ r: 4 }} />
+                {rawData.length > 0 &&
+                  Object.keys(rawData[0])
+                    .filter((k) => k !== "periodo")
+                    .map((turnoKey, idx) => (
+                      <Line
+                        key={turnoKey}
+                        type="monotone"
+                        dataKey={turnoKey}
+                        name={turnoKey}
+                        stroke={COLORS[idx % COLORS.length]}
+                        strokeWidth={3}
+                        dot={{ r: 4 }}
+                      />
+                    ))}
                 <Legend />
               </>
             ) : (
@@ -361,9 +404,8 @@ export const GraficosPage = () => {
             <XAxis
               type="number"
               dataKey={chart.xKey}
-              name="Frequência"
-              unit="%"
-              domain={[0, 100]}
+              name="Faltas"
+              domain={[0, "auto"]}
               tick={{ fill: theme.palette.text.secondary, fontSize: 12 }}
               axisLine={false}
               tickLine={false}
@@ -372,7 +414,7 @@ export const GraficosPage = () => {
               type="number"
               dataKey={chart.yKey}
               name="Média"
-              domain={[0, 20]}
+              domain={[0, 100]}
               tick={{ fill: theme.palette.text.secondary, fontSize: 12 }}
               axisLine={false}
               tickLine={false}
@@ -437,6 +479,114 @@ export const GraficosPage = () => {
             </TableBody>
           </Table>
         </TableContainer>
+      );
+    }
+
+    if (chart.horizontal) {
+      return (
+        <ResponsiveContainer width="100%" height={Math.max(300, rawData.length * 36 + 60)}>
+          <BarChart
+            data={rawData}
+            layout="vertical"
+            margin={{ top: 5, right: 50, left: 10, bottom: 5 }}
+            barSize={18}
+          >
+            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={theme.palette.divider} />
+            <XAxis
+              type="number"
+              domain={[0, "auto"]}
+              tick={{ fill: theme.palette.text.secondary, fontSize: 12 }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <YAxis
+              type="category"
+              dataKey="nome"
+              width={150}
+              tick={{ fill: theme.palette.text.secondary, fontSize: 11 }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <Tooltip
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                const d = payload[0].payload;
+                return (
+                  <Card sx={{ p: 1.5, boxShadow: theme.shadows[4] }}>
+                    <Typography variant="subtitle2" fontWeight={600}>{d.nome}</Typography>
+                    <Typography variant="body2" color="text.secondary">{d.turma}</Typography>
+                    <Typography variant="body2">
+                      Déficit: <b style={{ color: "#ef4444" }}>{d.deficit_total} pts</b>
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {d.disciplinas} disciplina{d.disciplinas !== 1 ? "s" : ""}
+                    </Typography>
+                  </Card>
+                );
+              }}
+            />
+            <Bar dataKey="deficit_total" name="Déficit (pts)" radius={[0, 4, 4, 0]}>
+              {rawData.map((_: unknown, index: number) => (
+                <Cell key={index} fill={COLORS[index % 2 === 0 ? 4 : 6]} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      );
+    }
+
+    if (chart.stacked) {
+      const stacks = chart.stackConfig ?? [
+        { key: "abaixo", name: "Abaixo do mínimo", color: "#ef4444" },
+        { key: "acima", name: "Acima do mínimo", color: "#10b981" },
+      ];
+      return (
+        <ResponsiveContainer width="100%" height={400}>
+          <BarChart data={rawData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }} barGap={4} barCategoryGap="20%">
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.palette.divider} />
+            <XAxis
+              dataKey={chart.xKey ?? "turma"}
+              tick={{ fill: theme.palette.text.secondary, fontSize: 11 }}
+              interval={0}
+              angle={-30}
+              textAnchor="end"
+              height={60}
+              axisLine={false}
+              tickLine={false}
+            />
+            <YAxis
+              tick={{ fill: theme.palette.text.secondary, fontSize: 12 }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <Tooltip
+              content={({ active, payload, label }) => {
+                if (!active || !payload?.length) return null;
+                const d = payload[0]?.payload;
+                return (
+                  <Card sx={{ p: 1.5, boxShadow: theme.shadows[4] }}>
+                    <Typography variant="subtitle2" fontWeight={600}>{label}</Typography>
+                    {stacks.map((s) => (
+                      <Box key={s.key} display="flex" alignItems="center" gap={1} mt={0.5}>
+                        <Box width={8} height={8} borderRadius="50%" bgcolor={s.color} />
+                        <Typography variant="body2">{s.name}: <b>{d?.[s.key] ?? 0}</b></Typography>
+                      </Box>
+                    ))}
+                    {d?.percentual !== undefined && (
+                      <Typography variant="caption" color="text.secondary">
+                        {d.percentual}% em risco
+                      </Typography>
+                    )}
+                  </Card>
+                );
+              }}
+            />
+            <Legend />
+            {stacks.map((s) => (
+              <Bar key={s.key} dataKey={s.key} name={s.name} fill={s.color} radius={[4, 4, 0, 0]} />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
       );
     }
 

@@ -63,19 +63,30 @@ class TurmaRepository(BaseRepository[Aluno]):
         if tenant_id:
              query = query.filter(Aluno.tenant_id == tenant_id)
         
-        direct_match = query.scalar()
+        row = query.first()
+        direct_match = row[0] if row else None
         if direct_match:
             return direct_match
 
-        # Slug match
+        # Slug match with collision resolution
         query_distinct = self.session.query(Aluno.turma).distinct()
         if tenant_id:
              query_distinct = query_distinct.filter(Aluno.tenant_id == tenant_id)
              
-        turmas = query_distinct.all()
-        for (turma,) in turmas:
-            if slugify_func(turma) == slugify_func(name_or_slug):
-                return turma
+        turmas = [r[0] for r in query_distinct.all() if r[0]]
+        turmas.sort()
+        
+        seen_slugs = set()
+        for t in turmas:
+            base_slug = slugify_func(t)
+            slug = base_slug
+            counter = 2
+            while slug in seen_slugs:
+                slug = f"{base_slug}-{counter}"
+                counter += 1
+            seen_slugs.add(slug)
+            if slug == name_or_slug:
+                return t
         return None
 
     def get_alunos_by_turma(self, turma_nome: str) -> List[Aluno]:
@@ -119,7 +130,10 @@ class TurmaRepository(BaseRepository[Aluno]):
         return len(alunos)
 
     def delete_turma(self, turma_nome: str) -> int:
+        from datetime import datetime, timezone
         from flask import g
+        from app.models.usuario import Usuario
+
         tenant_id = getattr(g, "tenant_id", None)
         academic_year_id = getattr(g, "academic_year_id", None)
 
@@ -127,6 +141,13 @@ class TurmaRepository(BaseRepository[Aluno]):
         aluno_ids = [a.id for a in alunos]
 
         if aluno_ids:
+            # Soft-delete user accounts linked to these students
+            now = datetime.now(timezone.utc)
+            self.session.query(Usuario).filter(
+                Usuario.aluno_id.in_(aluno_ids)
+            ).update({"deleted_at": now, "is_active": False}, synchronize_session=False)
+
+            # Delete grades then students
             self.session.query(Nota).filter(Nota.aluno_id.in_(aluno_ids)).delete(synchronize_session=False)
             query = self.session.query(Aluno).filter(Aluno.turma == turma_nome)
             if tenant_id:

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import re
-import secrets
 from unicodedata import normalize
 
 from loguru import logger
@@ -64,8 +63,8 @@ def ensure_aluno_user(session: Session, aluno: Aluno) -> tuple[Usuario, str | No
         usuario.matricula = aluno.matricula  # backfill
         return usuario, None
 
-    # 3. Create new account with cryptographically random initial password
-    initial_password = secrets.token_urlsafe(16)
+    # 3. Create new account with initial password equal to the student's matricula
+    initial_password = aluno.matricula
     try:
         usuario = Usuario(
             username=username,
@@ -128,7 +127,7 @@ def ensure_responsavel_user(session: Session, aluno: Aluno) -> tuple[Usuario, st
         usuario.matricula = aluno.matricula
         return usuario, None
 
-    initial_password = secrets.token_urlsafe(16)
+    initial_password = aluno.matricula
     try:
         usuario = Usuario(
             username=username,

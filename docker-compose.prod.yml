@@ -1,4 +1,27 @@
 services:
+  # ─── Docker Socket Proxy (security: isolates Docker socket from Traefik) ────
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.2
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 64m
+          cpus: "0.25"
+    environment:
+      CONTAINERS: 1
+      SERVICES: 0
+      TASKS: 0
+      NETWORKS: 0
+      VOLUMES: 0
+      IMAGES: 0
+      INFO: 0
+      POST: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - socket_network
+
   traefik:
     image: traefik:v2.10
     restart: unless-stopped
@@ -10,6 +33,7 @@ services:
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.endpoint=tcp://socket-proxy:2375"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
       - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
@@ -22,10 +46,12 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - "letsencrypt:/letsencrypt"
     networks:
       - app_network
+      - socket_network
+    depends_on:
+      - socket-proxy
 
   postgres:
     image: postgres:15-alpine
@@ -76,6 +102,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
+    user: "1001:1001"
     deploy:
       resources:
         limits:
@@ -92,6 +119,9 @@ services:
       FLASK_DEBUG: "0"
       SECRET_KEY: ${SECRET_KEY}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      # prometheus_client multiprocess mode — shared dir mounted in volume
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_metrics
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       APP_DATABASE_URL: postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
       PGHOST: postgres
@@ -104,12 +134,20 @@ services:
       # SMTP — obrigatório para recuperação de senha
       SMTP_SERVER: ${SMTP_SERVER}
       SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      SMTP_USE_SSL: ${SMTP_USE_SSL:-false}
       SMTP_USER: ${SMTP_USER}
       SMTP_PASSWORD: ${SMTP_PASSWORD}
       SMTP_FROM: ${SMTP_FROM}
       # WhatsApp (opcional)
       WHATSAPP_API_URL: ${WHATSAPP_API_URL:-}
       WHATSAPP_API_TOKEN: ${WHATSAPP_API_TOKEN:-}
+      WHATSAPP_INSTANCE: ${WHATSAPP_INSTANCE:-}
+      # Monitoramento e faturamento (opcionais)
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRICE_ID: ${STRIPE_PRICE_ID:-}
     volumes:
       - ./data:/data
     command:
@@ -137,7 +175,7 @@ services:
       - "traefik.http.routers.backend.rule=Host(`${DOMAIN}`) && (PathPrefix(`/api`) || Path(`/health`))"
       - "traefik.http.routers.backend.entrypoints=websecure"
       - "traefik.http.routers.backend.tls.certresolver=myresolver"
-      - "traefik.http.routers.backend.middlewares=security-headers"
+      - "traefik.http.routers.backend.middlewares=security-headers,api-ratelimit,limit-upload"
       - "traefik.http.services.backend.loadbalancer.server.port=5000"
       # Security headers at the edge
       - "traefik.http.middlewares.security-headers.headers.stsSeconds=31536000"
@@ -145,6 +183,10 @@ services:
       - "traefik.http.middlewares.security-headers.headers.stsPreload=true"
       - "traefik.http.middlewares.security-headers.headers.contentTypeNosniff=true"
       - "traefik.http.middlewares.security-headers.headers.referrerPolicy=strict-origin-when-cross-origin"
+      # Rate Limit and Upload Size Middlewares
+      - "traefik.http.middlewares.api-ratelimit.ratelimit.average=100"
+      - "traefik.http.middlewares.api-ratelimit.ratelimit.burst=200"
+      - "traefik.http.middlewares.limit-upload.buffering.maxRequestBodyBytes=157286400"
       # HTTP → HTTPS redirect
       - "traefik.http.routers.backend-http.rule=Host(`${DOMAIN}`) && (PathPrefix(`/api`) || Path(`/health`))"
       - "traefik.http.routers.backend-http.entrypoints=web"
@@ -163,6 +205,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
+    user: "1001:1001"
     logging:
       driver: "json-file"
       options:
@@ -186,6 +229,7 @@ services:
       FLASK_ENV: production
       SECRET_KEY: ${SECRET_KEY}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       # Worker usa APP_DB_USER (privilégios mínimos: DML apenas, sem DDL)
       DATABASE_URL: postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
       APP_DATABASE_URL: postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
@@ -202,6 +246,7 @@ services:
       WHATSAPP_API_URL: ${WHATSAPP_API_URL:-}
       WHATSAPP_API_TOKEN: ${WHATSAPP_API_TOKEN:-}
       WHATSAPP_INSTANCE: ${WHATSAPP_INSTANCE:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
     volumes:
       - ./data:/data
     networks:
@@ -291,17 +336,27 @@ services:
           cpus: "0.50"
     entrypoint: >
       sh -c "
-        echo '[pgbackup] Installing rclone for optional S3 upload...';
-        apk add --no-cache rclone > /dev/null 2>&1 || echo '[pgbackup] rclone unavailable — S3 upload disabled';
+        echo '[pgbackup] Installing rclone and gnupg...';
+        apk add --no-cache rclone gnupg > /dev/null 2>&1 || echo '[pgbackup] optional packages unavailable';
 
         echo 'ColaboraEdu pgbackup started — scheduling daily cron at 02:00';
 
         cat > /usr/local/bin/run_backup.sh << 'SCRIPT'
         #!/bin/sh
         set -e
-        FILENAME=/backups/backup_$$(date +%Y%m%d_%H%M%S).sql.gz
-        echo \"[pgbackup] Starting backup -> $$FILENAME\"
-        if pg_dump -h postgres -U $$POSTGRES_USER $$POSTGRES_DB | gzip > \"$$FILENAME\"; then
+        TIMESTAMP=$$(date +%Y%m%d_%H%M%S)
+        # Enforce encrypted backups — refuse to create unencrypted dumps
+        if [ -z "$$BACKUP_ENCRYPTION_KEY" ]; then
+          echo \"[pgbackup] ❌ FATAL: BACKUP_ENCRYPTION_KEY not set — refusing to create unencrypted backup\"
+          exit 1
+        fi
+        FILENAME=/backups/backup_$${TIMESTAMP}.sql.gz.gpg
+        echo \"[pgbackup] Starting encrypted backup -> $$FILENAME\"
+        pg_dump -h postgres -U $$POSTGRES_USER $$POSTGRES_DB \
+          | gzip \
+          | gpg --batch --symmetric --cipher-algo AES256 --passphrase "$$BACKUP_ENCRYPTION_KEY" \
+          > \"$$FILENAME\"
+        if [ $$? -eq 0 ]; then
           SIZE=$$(stat -c%s \"$$FILENAME\" 2>/dev/null || echo 0)
           if [ \"$$SIZE\" -lt 1024 ]; then
             echo \"[pgbackup] FAILED: dump too small ($${SIZE} bytes) — removing\"
@@ -309,7 +364,7 @@ services:
             exit 1
           fi
           echo \"[pgbackup] OK: $$FILENAME ($${SIZE} bytes)\"
-          find /backups -name 'backup_*.sql.gz' -mtime +30 -delete
+          find /backups -name 'backup_*.sql.gz*' -mtime +30 -delete
           if [ -n \"$$S3_BACKUP_BUCKET\" ] && command -v rclone > /dev/null 2>&1; then
             echo \"[pgbackup] Uploading to s3:$$S3_BACKUP_BUCKET ...\"
             rclone copy \"$$FILENAME\" \":s3:$$S3_BACKUP_BUCKET\" \
@@ -337,6 +392,7 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_DB: ${POSTGRES_DB}
+      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:-}
       S3_BACKUP_BUCKET: ${S3_BACKUP_BUCKET:-}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
@@ -353,6 +409,9 @@ services:
 networks:
   app_network:
     driver: bridge
+  socket_network:
+    driver: bridge
+    internal: true
 
 volumes:
   postgres_data:

@@ -15,33 +15,42 @@ from ...models import Tenant
 from ...services.llm_provider import test_llm_connection
 
 
-ALLOWED_PROVIDERS = {"openai", "anthropic", "openrouter", "gemini"}
+ALLOWED_PROVIDERS = {"openai", "anthropic", "openrouter", "gemini", "deepseek", "minimax"}
 
 PROVIDER_MODELS: dict[str, list[dict]] = {
     "openai": [
         {"id": "gpt-4o-mini", "label": "GPT-4o Mini (rápido e econômico)"},
         {"id": "gpt-4o", "label": "GPT-4o (mais capaz)"},
-        {"id": "gpt-4-turbo", "label": "GPT-4 Turbo"},
-        {"id": "gpt-3.5-turbo", "label": "GPT-3.5 Turbo (mais barato)"},
+        {"id": "o3-mini", "label": "o3-mini (raciocínio rápido)"},
+        {"id": "o1", "label": "o1 (raciocínio avançado)"},
     ],
     "anthropic": [
-        {"id": "claude-3-5-haiku-20241022", "label": "Claude 3.5 Haiku (rápido)"},
+        {"id": "claude-3-7-sonnet-20250219", "label": "Claude 3.7 Sonnet (novo e mais capaz)"},
         {"id": "claude-3-5-sonnet-20241022", "label": "Claude 3.5 Sonnet (equilibrado)"},
-        {"id": "claude-opus-4-5", "label": "Claude Opus (mais capaz)"},
+        {"id": "claude-3-5-haiku-20241022", "label": "Claude 3.5 Haiku (rápido)"},
     ],
     "openrouter": [
         {"id": "google/gemma-3-27b-it:free", "label": "Gemma 3 27B (gratuito)"},
         {"id": "meta-llama/llama-3.3-70b-instruct:free", "label": "Llama 3.3 70B (gratuito)"},
-        {"id": "mistralai/mistral-7b-instruct:free", "label": "Mistral 7B (gratuito)"},
         {"id": "deepseek/deepseek-r1:free", "label": "DeepSeek R1 (gratuito)"},
         {"id": "openai/gpt-4o-mini", "label": "GPT-4o Mini via OpenRouter"},
-        {"id": "anthropic/claude-3-5-haiku", "label": "Claude 3.5 Haiku via OpenRouter"},
-        {"id": "google/gemini-flash-1.5", "label": "Gemini 1.5 Flash via OpenRouter"},
+        {"id": "anthropic/claude-3-7-sonnet", "label": "Claude 3.7 Sonnet via OpenRouter"},
+        {"id": "google/gemini-2.5-flash", "label": "Gemini 2.5 Flash via OpenRouter"},
     ],
     "gemini": [
-        {"id": "gemini-1.5-flash", "label": "Gemini 1.5 Flash (rápido)"},
-        {"id": "gemini-1.5-pro", "label": "Gemini 1.5 Pro (mais capaz)"},
-        {"id": "gemini-2.0-flash", "label": "Gemini 2.0 Flash"},
+        {"id": "gemini-2.0-flash", "label": "Gemini 2.0 Flash (rápido)"},
+        {"id": "gemini-2.5-flash", "label": "Gemini 2.5 Flash"},
+        {"id": "gemini-2.5-pro", "label": "Gemini 2.5 Pro (mais capaz)"},
+    ],
+    "deepseek": [
+        {"id": "deepseek-v4-flash", "label": "DeepSeek-V4 Flash (rápido)"},
+        {"id": "deepseek-v4-pro", "label": "DeepSeek-V4 Pro (mais capaz)"},
+        {"id": "deepseek-reasoner", "label": "DeepSeek-R1 (raciocínio)"},
+        {"id": "deepseek-chat", "label": "DeepSeek-V3 (legado)"},
+    ],
+    "minimax": [
+        {"id": "MiniMax-M3", "label": "MiniMax-M3 (multimodal & raciocínio)"},
+        {"id": "MiniMax-M2.7", "label": "MiniMax-M2.7 (alto desempenho)"},
     ],
 }
 
@@ -51,7 +60,7 @@ def register(parent: Blueprint) -> None:
 
     @bp.get("/ai-settings")
     @jwt_required()
-    @require_roles("super_admin")
+    @require_roles("admin", "super_admin")
     def get_ai_settings():
         """Retorna a configuração atual de IA do tenant."""
         tenant_id = g.tenant_id
@@ -98,7 +107,7 @@ def register(parent: Blueprint) -> None:
 
     @bp.put("/ai-settings")
     @jwt_required()
-    @require_roles("super_admin")
+    @require_roles("admin", "super_admin")
     def update_ai_settings():
         """Cria ou atualiza a configuração de IA do tenant."""
         tenant_id = g.tenant_id
@@ -145,7 +154,7 @@ def register(parent: Blueprint) -> None:
 
     @bp.post("/ai-settings/test")
     @jwt_required()
-    @require_roles("super_admin")
+    @require_roles("admin", "super_admin")
     def test_ai_settings():
         """Testa a conexão com o LLM configurado."""
         body = request.json or {}
@@ -176,7 +185,7 @@ def register(parent: Blueprint) -> None:
 
     @bp.delete("/ai-settings/key")
     @jwt_required()
-    @require_roles("super_admin")
+    @require_roles("admin", "super_admin")
     def clear_api_key():
         """Remove a API key salva (desativa o LLM)."""
         tenant_id = g.tenant_id

@@ -2,11 +2,21 @@
 from flask import Blueprint, g, jsonify, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from pydantic import ValidationError
+from werkzeug.utils import secure_filename
 
 from ...core.database import session_scope
 from ...core.decorators import require_roles
+from ...core.extensions import limiter
+from ...core.helpers import parse_pagination
 from ...services.aluno_service import AlunoService
 from ...schemas.aluno import AlunoCreate, AlunoUpdate
+
+
+def _apply_download_headers(response):
+    response.headers["Cache-Control"] = "no-store, no-cache, private"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 def register(parent: Blueprint) -> None:
@@ -17,11 +27,7 @@ def register(parent: Blueprint) -> None:
     @require_roles("admin", "super_admin", "coordenador", "diretor", "orientador", "professor")
     def list_alunos():
             
-        try:
-            page = max(1, int(request.args.get("page", 1)))
-            per_page = min(100, int(request.args.get("per_page", 20)))
-        except (ValueError, TypeError):
-            page, per_page = 1, 20
+        page, per_page = parse_pagination()
         turno = request.args.get("turno")
         turma = request.args.get("turma")
         query_text = request.args.get("q")
@@ -144,11 +150,7 @@ def register(parent: Blueprint) -> None:
     @jwt_required()
     @require_roles("admin", "super_admin", "coordenador", "diretor")
     def list_archived_alunos():
-        try:
-            page = max(1, int(request.args.get("page", 1)))
-            per_page = min(100, int(request.args.get("per_page", 20)))
-        except (ValueError, TypeError):
-            page, per_page = 1, 20
+        page, per_page = parse_pagination()
         query_text = request.args.get("q")
         user_id = int(get_jwt_identity())
         with session_scope() as session:
@@ -189,6 +191,7 @@ def register(parent: Blueprint) -> None:
 
     @bp.get("/alunos/<int:aluno_id>/boletim/pdf")
     @jwt_required()
+    @limiter.limit("30 per hour")
     def download_bulletin_pdf(aluno_id: int):
         from flask import send_file, g
         from ...services.document_service import DocumentService
@@ -228,15 +231,143 @@ def register(parent: Blueprint) -> None:
                 if year:
                     year_label = year.label
 
-            html = DocumentService.render_bulletin_html(aluno_data, school_name, year_label)
+            tenant_settings = tenant.settings or {} if tenant else {}
+            logo_url = tenant_settings.get("logo_url")
+            passing_grade = float(tenant_settings.get("media_aprovacao", 50.0))
+            primary_color = tenant_settings.get("primary_color", "#3f2a74")
+
+            html = DocumentService.render_bulletin_html(
+                aluno_data,
+                school_name,
+                year_label,
+                logo_url=logo_url,
+                passing_grade=passing_grade,
+                primary_color=primary_color
+            )
             pdf_bytes = DocumentService.generate_pdf_from_html(html)
             
-            filename = f"Boletim_{aluno_data['nome'].replace(' ', '_')}.pdf"
-            return send_file(
+            filename = secure_filename(f"Boletim_{aluno_data['nome']}.pdf").replace("..", "_") or f"Boletim_{aluno_id}.pdf"
+            response = send_file(
                 pdf_bytes,
                 mimetype="application/pdf",
                 as_attachment=True,
                 download_name=filename
             )
+            return _apply_download_headers(response)
+
+    @bp.get("/alunos/<int:aluno_id>/export-lgpd")
+    @jwt_required()
+    def export_lgpd(aluno_id: int):
+        from datetime import datetime, timezone
+        from sqlalchemy import select
+        
+        claims = get_jwt()
+        matricula_claim = claims.get("matricula")
+        roles = set(claims.get("roles") or [])
+        user_id = int(get_jwt_identity())
+
+        is_staff = bool(roles & {"admin", "super_admin", "coordenador", "diretor", "orientador"})
+        
+        with session_scope() as session:
+            from ...models import Aluno, Nota, Ocorrencia
+            aluno = session.get(Aluno, aluno_id)
+            if not aluno:
+                return jsonify({"error": "Aluno não encontrado"}), 404
+
+            if not is_staff:
+                if not matricula_claim or aluno.matricula != matricula_claim:
+                    return jsonify({"error": "Acesso restrito"}), 403
+
+            # Fetch related models
+            stmt_notas = select(Nota).where(Nota.aluno_id == aluno.id)
+            notas = session.execute(stmt_notas).scalars().all()
+            
+            stmt_ocorrencias = select(Ocorrencia).where(Ocorrencia.aluno_id == aluno.id)
+            ocorrencias = session.execute(stmt_ocorrencias).scalars().all()
+
+            # Build detailed export dictionary
+            export_data = {
+                "document_type": "LGPD_PORTABILITY_EXPORT",
+                "exported_at": datetime.now(timezone.utc).isoformat(),
+                "aluno": {
+                    "id": aluno.id,
+                    "matricula": aluno.matricula,
+                    "nome": aluno.nome,
+                    "turma": aluno.turma,
+                    "turno": aluno.turno,
+                    "status": aluno.status,
+                    "sexo": aluno.sexo,
+                    "data_nascimento": aluno.data_nascimento,
+                    "naturalidade": aluno.naturalidade,
+                    "zona": aluno.zona,
+                    "endereco": aluno.endereco,
+                    "filiacao": aluno.filiacao,
+                    "telefones": aluno.telefones,
+                    "cpf": aluno.cpf,
+                    "nis": aluno.nis,
+                    "inep": aluno.inep,
+                    "situacao_anterior": aluno.situacao_anterior,
+                    "email": aluno.email,
+                    "email_responsavel": aluno.email_responsavel,
+                    "telefone_responsavel": aluno.telefone_responsavel,
+                },
+                "notas": [
+                    {
+                        "disciplina": n.disciplina,
+                        "trimestre1": float(n.trimestre1) if n.trimestre1 is not None else None,
+                        "trimestre2": float(n.trimestre2) if n.trimestre2 is not None else None,
+                        "trimestre3": float(n.trimestre3) if n.trimestre3 is not None else None,
+                        "total": float(n.total) if n.total is not None else None,
+                        "recuperacao": float(n.recuperacao) if n.recuperacao is not None else None,
+                        "conselho_de_classe": float(n.conselho_de_classe) if n.conselho_de_classe is not None else None,
+                        "faltas": n.faltas,
+                        "situacao": n.situacao,
+                    } for n in notas
+                ],
+                "ocorrencias": [
+                    {
+                        "tipo": oc.tipo,
+                        "descricao": oc.descricao,
+                        "observacao_pais": oc.observacao_pais,
+                        "gravidade": oc.gravidade,
+                        "acao_tomada": oc.acao_tomada,
+                        "data_registro": oc.data_registro.isoformat(),
+                        "resolvida": oc.resolvida,
+                    } for oc in ocorrencias
+                ]
+            }
+
+            from ...services.audit import log_action
+            log_action(session, user_id, "EXPORT_LGPD", "Aluno", aluno_id, {"roles": sorted(roles)})
+
+            return jsonify(export_data)
+
+    @bp.delete("/alunos/<int:aluno_id>/purge-lgpd")
+    @jwt_required()
+    @require_roles("admin", "super_admin")
+    def purge_lgpd(aluno_id: int):
+        from sqlalchemy import select
+        user_id = int(get_jwt_identity())
+        with session_scope() as session:
+            from ...models import Aluno, Usuario
+            aluno = session.get(Aluno, aluno_id)
+            if not aluno:
+                return jsonify({"error": "Aluno não encontrado"}), 404
+
+            # Find related user if exists and delete it explicitly to prevent orphan login records
+            stmt_user = select(Usuario).where(Usuario.aluno_id == aluno.id)
+            related_user = session.execute(stmt_user).scalar_one_or_none()
+            if related_user:
+                session.delete(related_user)
+
+            # Deleting aluno will trigger ondelete CASCADE on related Nota and Ocorrencia records
+            session.delete(aluno)
+
+            from ...services.audit import log_action
+            log_action(session, user_id, "PURGE_LGPD", "Aluno", aluno_id)
+
+            from ...core.cache import invalidate_tenant_cache
+            invalidate_tenant_cache()
+            return "", 204
 
     parent.register_blueprint(bp)

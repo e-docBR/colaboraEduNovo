@@ -9,5 +9,22 @@ from .audit_log import AuditLog
 from .tenant import Tenant
 from .academic_year import AcademicYear
 from .ai_configuration import AIConfiguration
+from .stripe_webhook_event import StripeWebhookEvent
+from .usuario_turma import UsuarioTurma
+from .pedagogical_feedback import PedagogicalFeedback
 
-__all__ = ["Aluno", "Nota", "Usuario", "Comunicado", "ComunicadoLeitura", "Ocorrencia", "AuditLog", "Tenant", "AcademicYear", "AIConfiguration"]
+__all__ = [
+    "Aluno",
+    "Nota",
+    "Usuario",
+    "Comunicado",
+    "ComunicadoLeitura",
+    "Ocorrencia",
+    "AuditLog",
+    "Tenant",
+    "AcademicYear",
+    "AIConfiguration",
+    "StripeWebhookEvent",
+    "UsuarioTurma",
+    "PedagogicalFeedback",
+]

@@ -26,6 +26,8 @@ class ParsedNotaRecord:
     trimestre2: float | None = None
     trimestre3: float | None = None
     total: float | None = None
+    recuperacao: float | None = None
+    conselho_de_classe: float | None = None
     faltas: int | None = None
     situacao: str | None = None
 
@@ -77,7 +79,7 @@ def enqueue_pdf(filepath: Path, *, turno: str | None = None, turma: str | None =
         tenant_id=tenant_id,
         academic_year_id=academic_year_id,
         job_timeout=600,
-        retry=Retry(max=2, interval=[60, 300]),
+        retry=Retry(max=3, interval=[10, 30, 60]),
     )
     job.meta["tenant_id"] = tenant_id
     job.meta["academic_year_id"] = academic_year_id
@@ -87,41 +89,60 @@ def enqueue_pdf(filepath: Path, *, turno: str | None = None, turma: str | None =
 
 
 def process_pdf(filepath: Path, *, turno: str | None = None, turma: str | None = None, tenant_id: int | None = None, academic_year_id: int | None = None) -> dict[str, any]:
-    errors: list[str] = []
-    records, extracted_year = parse_pdf(filepath, errors, turno=turno, turma=turma)
-    
-    final_year_label = "Desconhecido"
+    try:
+        errors: list[str] = []
+        records, extracted_year, extracted_professors = parse_pdf(filepath, errors, turno=turno, turma=turma)
+        
+        final_year_label = "Desconhecido"
 
-    # Resolve academic year: explicit parameter takes priority over PDF-extracted year.
-    # The PDF year is only used as fallback when no academic_year_id is provided.
-    if academic_year_id:
-        with session_scope() as session:
-            year_obj = session.get(AcademicYear, academic_year_id)
-            if year_obj:
-                final_year_label = year_obj.label
-    elif extracted_year and tenant_id:
-        with session_scope() as session:
-            year_obj = session.query(AcademicYear).filter(
-                AcademicYear.tenant_id == tenant_id,
-                AcademicYear.label == str(extracted_year)
-            ).first()
-            if not year_obj:
-                year_obj = AcademicYear(tenant_id=tenant_id, label=str(extracted_year), is_current=False)
-                session.add(year_obj)
-                session.flush()  # get ID without premature commit; session_scope commits on exit
-                logger.info("Created new AcademicYear {} for tenant {}", extracted_year, tenant_id)
-            academic_year_id = year_obj.id
-            final_year_label = year_obj.label
+        # Resolve academic year: explicit parameter takes priority over PDF-extracted year.
+        # The PDF year is only used as fallback when no academic_year_id is provided.
+        if academic_year_id:
+            with session_scope() as session:
+                year_obj = session.get(AcademicYear, academic_year_id)
+                if year_obj:
+                    final_year_label = year_obj.label
+        elif extracted_year and tenant_id:
+            with session_scope() as session:
+                from sqlalchemy.dialects.postgresql import insert as pg_insert
+                # Upsert atômico para evitar race condition em uploads simultâneos
+                stmt = (
+                    pg_insert(AcademicYear)
+                    .values(tenant_id=tenant_id, label=str(extracted_year), is_current=False)
+                    .on_conflict_do_nothing(constraint="uq_academic_year_tenant_label")
+                )
+                session.execute(stmt)
+                session.flush()
+                year_obj = session.query(AcademicYear).filter_by(
+                    tenant_id=tenant_id, label=str(extracted_year)
+                ).first()
+                if year_obj:
+                    academic_year_id = year_obj.id
+                    final_year_label = year_obj.label
+                    logger.info("Resolved AcademicYear {} for tenant {}", extracted_year, tenant_id)
+                else:
+                    logger.error("Failed to resolve AcademicYear {} for tenant {}", extracted_year, tenant_id)
 
-    count = 0
-    if not records:
-        msg = f"Nenhum registro encontrado no boletim {filepath.name}. Verifique se o PDF contém 'Aluno(a): ... Matrícula: ...'"
-        logger.warning(msg)
-        errors.append(msg)
-    else:
-        count = apply_records(records, tenant_id=tenant_id, academic_year_id=academic_year_id)
-    
-    return {"count": count, "logs": errors, "year": final_year_label}
+        count = 0
+        if not records:
+            msg = f"Nenhum registro encontrado no boletim {filepath.name}. Verifique se o PDF contém 'Aluno(a): ... Matrícula: ...'"
+            logger.warning(msg)
+            errors.append(msg)
+        else:
+            count = apply_records(records, tenant_id=tenant_id, academic_year_id=academic_year_id)
+            
+            # Apply professors if any
+            if extracted_professors and tenant_id and academic_year_id:
+                turma_name = records[0].turma if records else turma
+                if turma_name:
+                    turno_name = records[0].turno if records else turno
+                    normalized_turma = _normalize_turma_name(turma_name, turno_name) or turma_name
+                    apply_professors(extracted_professors, normalized_turma, tenant_id, academic_year_id)
+        
+        return {"count": count, "logs": errors, "year": final_year_label}
+    except Exception as e:
+        logger.error(f"[DLQ_ALERT] Ingestion process failed for file {filepath.name} (Tenant: {tenant_id}): {e}", exc_info=True)
+        raise e
 
 
 def apply_records(records: Sequence[ParsedAlunoRecord], tenant_id: int | None = None, academic_year_id: int | None = None) -> int:
@@ -135,9 +156,88 @@ def apply_records(records: Sequence[ParsedAlunoRecord], tenant_id: int | None = 
     return len(records)
 
 
-def parse_pdf(filepath: Path, errors: list[str], *, turno: str | None = None, turma: str | None = None) -> tuple[list[ParsedAlunoRecord], int | None]:
+def apply_professors(professors: list[str], turma_nome: str, tenant_id: int, academic_year_id: int) -> None:
+    from unicodedata import normalize as u_normalize
+    from ..core.security import hash_password
+    from ..models import Usuario, UsuarioTurma
+    from ..core.database import session_scope as _scope
+    
+    with _scope() as session:
+        for prof_name in professors:
+            prof_name = prof_name.strip()
+            if not prof_name:
+                continue
+            
+            # Generate username: alcianecastro (first + last name)
+            normalized = u_normalize("NFKD", prof_name).encode("ascii", "ignore").decode("ascii")
+            clean_name = re.sub(r"[^a-zA-Z\s]", "", normalized).lower()
+            tokens = clean_name.split()
+            if not tokens:
+                continue
+            
+            if len(tokens) >= 2:
+                base_username = tokens[0] + tokens[-1]
+            else:
+                base_username = tokens[0]
+            username = base_username
+            
+            # Check for collision and append numbers if needed
+            suffix = 1
+            existing = None
+            while True:
+                existing_user = session.query(Usuario).filter(
+                    Usuario.username == username,
+                    Usuario.tenant_id == tenant_id
+                ).first()
+                if not existing_user:
+                    break
+                
+                # If name matches base_username and the role is professor, we assume it's the same professor
+                if existing_user.role == "professor":
+                    existing = existing_user
+                    break
+                else:
+                    username = f"{base_username}{suffix}"
+                    suffix += 1
+            
+            if not existing:
+                initial_password = "Professor123!"
+                usuario = Usuario(
+                    username=username,
+                    password_hash=hash_password(initial_password),
+                    role="professor",
+                    tenant_id=tenant_id,
+                    must_change_password=True,
+                )
+                session.add(usuario)
+                session.flush()
+                logger.info("Created professor user: {} for tenant {}", username, tenant_id)
+            else:
+                usuario = existing
+            
+            # Link professor to turma
+            link_stmt = select(UsuarioTurma).where(
+                UsuarioTurma.usuario_id == usuario.id,
+                UsuarioTurma.turma == turma_nome,
+                UsuarioTurma.tenant_id == tenant_id,
+                UsuarioTurma.academic_year_id == academic_year_id
+            )
+            link = session.execute(link_stmt).scalar_one_or_none()
+            if not link:
+                link = UsuarioTurma(
+                    usuario_id=usuario.id,
+                    turma=turma_nome,
+                    tenant_id=tenant_id,
+                    academic_year_id=academic_year_id
+                )
+                session.add(link)
+                logger.info("Linked professor {} to class {}", username, turma_nome)
+
+
+def parse_pdf(filepath: Path, errors: list[str], *, turno: str | None = None, turma: str | None = None) -> tuple[list[ParsedAlunoRecord], int | None, list[str]]:
     parsed: dict[str, ParsedAlunoRecord] = {}
     extracted_year = None
+    extracted_professors = []
     
     with pdfplumber.open(str(filepath)) as pdf:
         first_page_text = (pdf.pages[0].extract_text() or "").upper()
@@ -207,22 +307,25 @@ def parse_pdf(filepath: Path, errors: list[str], *, turno: str | None = None, tu
                         continue
                     registro.notas.append(
                         ParsedNotaRecord(
-                            disciplina=disciplina.strip(),
+                            disciplina=_clean_disciplina(disciplina),
                             disciplina_normalizada=_normalize_disciplina(disciplina),
                             trimestre1=_parse_float(row.get("trimestre1")),
                             trimestre2=_parse_float(row.get("trimestre2")),
                             trimestre3=_parse_float(row.get("trimestre3")),
                             total=_parse_float(row.get("total")),
+                            recuperacao=_parse_float(row.get("recuperacao")),
+                            conselho_de_classe=_parse_float(row.get("conselho_de_classe")),
                             faltas=_parse_int(row.get("faltas")),
                             situacao=_clean_text(row.get("situacao")),
                         )
                     )
-    return list(parsed.values()), extracted_year
+    return list(parsed.values()), extracted_year, extracted_professors
 
 
-def _parse_matricula_inicial(pdf: pdfplumber.PDF, _errors: list[str], *, turno: str | None = None, turma: str | None = None) -> tuple[list[ParsedAlunoRecord], int | None]:
+def _parse_matricula_inicial(pdf: pdfplumber.PDF, _errors: list[str], *, turno: str | None = None, turma: str | None = None) -> tuple[list[ParsedAlunoRecord], int | None, list[str]]:
     parsed_alunos: dict[str, ParsedAlunoRecord] = {}
     extracted_year = None
+    extracted_professors: list[str] = []
     
     file_turma = turma
     file_turno = turno
@@ -236,6 +339,19 @@ def _parse_matricula_inicial(pdf: pdfplumber.PDF, _errors: list[str], *, turno: 
             if year_match:
                 extracted_year = int(year_match.group("year"))
         
+        # Extract professors list (typically on first page)
+        if not extracted_professors:
+            prof_match = re.search(r"Professor(?:es)?:\s*(?P<content>.*?)(?=Munic[ií]pio|Diretor|Nº\s+Nome|$)", text, re.IGNORECASE | re.DOTALL)
+            if prof_match:
+                prof_content = prof_match.group("content").strip()
+                # Clean content: remove "Ano: \d{4}" and handle spacing/newlines
+                prof_content = re.sub(r"Ano:\s*\d{4}", "", prof_content, flags=re.IGNORECASE)
+                prof_content = re.sub(r"\s+", " ", prof_content)
+                for p in prof_content.split("-"):
+                    p_clean = " ".join(p.strip().split())
+                    if p_clean and p_clean not in extracted_professors:
+                        extracted_professors.append(p_clean)
+
         if file_turma is None:
             tm = MI_TURMA_PATTERN.search(text)
             if tm:
@@ -293,7 +409,7 @@ def _parse_matricula_inicial(pdf: pdfplumber.PDF, _errors: list[str], *, turno: 
                     situacao_anterior=(row[12] or "").strip(),
                 )
     
-    return list(parsed_alunos.values()), extracted_year
+    return list(parsed_alunos.values()), extracted_year, extracted_professors
 
 
 def _extract_student_meta(text: str) -> list[dict[str, str | None]]:
@@ -557,6 +673,8 @@ def _upsert_notas(session: Session, aluno: Aluno, notas: Sequence[ParsedNotaReco
         nota.trimestre2 = nota_data.trimestre2
         nota.trimestre3 = nota_data.trimestre3
         nota.total = nota_data.total
+        nota.recuperacao = nota_data.recuperacao
+        nota.conselho_de_classe = nota_data.conselho_de_classe
         nota.faltas = nota_data.faltas or 0
         nota.situacao = _normalize_situacao(nota_data.situacao)
 
@@ -579,6 +697,8 @@ _SITUACAO_ALIASES: dict[str, str] = {
     "EM RECUPERAÇÃO": "REC",
     "APROVADO POR CONSELHO": "APCC",
     "APCC": "APCC",
+    "ACC": "APCC",
+    "APROVADO CONSELHO": "APCC",
     "EM CURSO": "EMC",
     "EMCURSO": "EMC",
     "EM REGIME": "EMR",
@@ -636,6 +756,9 @@ def _normalize_header(value: str | None) -> str | None:
         "total": "total",
         "total-de-pontos": "total",
         "recuperacao": "recuperacao",
+        "recuperacao-final": "recuperacao",
+        "conselho-de-classe": "conselho_de_classe",
+        "conselho": "conselho_de_classe",
         "t-faltas": "faltas",
         "faltas": "faltas",
         "situacao": "situacao",
@@ -643,8 +766,19 @@ def _normalize_header(value: str | None) -> str | None:
     return aliases.get(key)
 
 
+_DISCIPLINA_NOISE = re.compile(
+    r"\s*gerado\s+por\s+.*$",
+    re.IGNORECASE,
+)
+
+
+def _clean_disciplina(value: str) -> str:
+    """Remove rodapés do SGE capturados junto com o nome da disciplina."""
+    return _DISCIPLINA_NOISE.sub("", value).strip()
+
+
 def _normalize_disciplina(value: str) -> str:
-    return _slugify(value)
+    return _slugify(_clean_disciplina(value))
 
 
 def _slugify(value: str) -> str:

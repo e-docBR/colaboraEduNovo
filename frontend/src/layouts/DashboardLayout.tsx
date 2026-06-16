@@ -12,6 +12,7 @@ import { useGetMeQuery, useGetBillingStatusQuery, useCreateBillingCheckoutMutati
 import { updateUser } from "../features/auth/authSlice";
 
 import { ChatWidget } from "../features/ai-chat/ChatWidget";
+import { ClosedYearBanner } from "../components/layout/ClosedYearBanner";
 
 const BillingBanner = () => {
   const user = useAppSelector((s) => s.auth.user);
@@ -101,6 +102,7 @@ export const DashboardLayout = () => {
       <Box component="main" flex={1} p={{ xs: 2, md: 4 }} sx={{ height: "100vh", overflowY: "auto", overflowX: "hidden" }}>
         <TopBar onMenuClick={handleDrawerToggle} />
         <BillingBanner />
+        <ClosedYearBanner />
         <Outlet />
       </Box>
       {user?.role !== "aluno" && user?.role !== "responsavel" && <ChatWidget />}

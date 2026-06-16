@@ -8,6 +8,8 @@ class TurmaSummarySchema(BaseModel):
     media: Optional[float] = None
     faltas_medias: float = 0.0
     slug: str
+    professor_ids: List[int] = []
+    max_pts: Optional[int] = None
 
 class TurmaListResponse(BaseModel):
     items: List[TurmaSummarySchema]
@@ -31,6 +33,8 @@ class AlunoTurmaDetailSchema(BaseModel):
     media: Optional[float] = None
     situacao: str
     status: Optional[str] = None
+    sexo: Optional[str] = None
+    data_nascimento: Optional[str] = None
     notas: List[NotaSimplificadaSchema]
 
 class TurmaDetailResponse(BaseModel):

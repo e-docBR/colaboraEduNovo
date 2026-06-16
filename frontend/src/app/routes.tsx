@@ -3,17 +3,17 @@ import { lazy, Suspense } from "react";
 import { CircularProgress, Box } from "@mui/material";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 
-import { DashboardLayout } from "../layouts/DashboardLayout";
-import { LoginPage } from "../features/auth/LoginPage";
-import { ChangePasswordPage } from "../features/auth/ChangePasswordPage";
-import { ForgotPasswordPage } from "../features/auth/ForgotPasswordPage";
-import { ResetPasswordPage } from "../features/auth/ResetPasswordPage";
-import { LandingPage } from "../features/landing/LandingPage";
 import { store } from "./store";
 import { setCredentials, logout } from "../features/auth/authSlice";
 import { setTenantId } from "../features/app/appSlice";
 
-// Lazily loaded authenticated routes — split per route for smaller initial bundle
+// Split route surfaces so the entry bundle only keeps routing/auth glue.
+const DashboardLayout = lazy(() => import("../layouts/DashboardLayout").then(m => ({ default: m.DashboardLayout })));
+const LoginPage = lazy(() => import("../features/auth/LoginPage").then(m => ({ default: m.LoginPage })));
+const ChangePasswordPage = lazy(() => import("../features/auth/ChangePasswordPage").then(m => ({ default: m.ChangePasswordPage })));
+const ForgotPasswordPage = lazy(() => import("../features/auth/ForgotPasswordPage").then(m => ({ default: m.ForgotPasswordPage })));
+const ResetPasswordPage = lazy(() => import("../features/auth/ResetPasswordPage").then(m => ({ default: m.ResetPasswordPage })));
+const LandingPage = lazy(() => import("../features/landing/LandingPage").then(m => ({ default: m.LandingPage })));
 const DashboardPage = lazy(() => import("../features/dashboard/DashboardPage").then(m => ({ default: m.DashboardPage })));
 const TeacherDashboard = lazy(() => import("../features/dashboard/TeacherDashboard").then(m => ({ default: m.TeacherDashboard })));
 const BulkInterventionPage = lazy(() => import("../features/dashboard/BulkInterventionPage").then(m => ({ default: m.BulkInterventionPage })));
@@ -33,8 +33,13 @@ const AuditLogsPage = lazy(() => import("../features/usuarios/AuditLogsPage").th
 const ComunicadosPage = lazy(() => import("../features/comunicados/ComunicadosPage").then(m => ({ default: m.ComunicadosPage })));
 const OcorrenciasPage = lazy(() => import("../features/ocorrencias/OcorrenciasPage").then(m => ({ default: m.OcorrenciasPage })));
 const TenantsPage = lazy(() => import("../features/super-admin/TenantsPage").then(m => ({ default: m.TenantsPage })));
+const AcademicYearsPage = lazy(() => import("../features/admin/AcademicYearsPage").then(m => ({ default: m.AcademicYearsPage })));
 const PortalResponsavelPage = lazy(() => import("../features/responsavel/PortalResponsavelPage").then(m => ({ default: m.PortalResponsavelPage })));
 const AISettingsPage = lazy(() => import("../features/ai-chat/AISettingsPage"));
+const MinhasTurmasPage = lazy(() => import("../features/professor/MinhasTurmasPage").then(m => ({ default: m.MinhasTurmasPage })));
+const AtaResultadoPage = lazy(() => import("../features/relatorios/AtaResultadoPage").then(m => ({ default: m.AtaResultadoPage })));
+const EscolaConfigPage = lazy(() => import("../features/escola/EscolaConfigPage").then(m => ({ default: m.EscolaConfigPage })));
+
 
 const PageLoader = () => (
   <Box display="flex" alignItems="center" justifyContent="center" minHeight={300}>
@@ -56,12 +61,20 @@ const requireAuth = async () => {
     // Não há mais refreshToken no estado Redux (inacessível ao JS por design).
     try {
       const base = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api/v1";
+      const tenantHeaders =
+        state.app.tenantId != null
+          ? { "X-Tenant-ID": String(state.app.tenantId) }
+          : undefined;
       const res = await fetch(`${base}/auth/refresh`, {
         method: "POST",
         credentials: "include", // envia o cookie rt automaticamente
+        headers: tenantHeaders,
       });
       if (res.ok) {
-        const data = await res.json() as { access_token: string; user?: { tenant_id?: number | null; must_change_password?: boolean } };
+        const data = await res.json() as {
+          access_token: string;
+          user?: typeof state.auth.user;
+        };
         store.dispatch(setCredentials({ access_token: data.access_token, user: data.user }));
         if (data.user?.tenant_id) store.dispatch(setTenantId(data.user.tenant_id));
         if (data.user?.must_change_password) throw redirect("/alterar-senha");
@@ -81,10 +94,20 @@ const requireAuth = async () => {
   return null;
 };
 
+const requireAdmin = async () => {
+  await requireAuth();
+  const state = store.getState();
+  const role = state.auth.user?.role;
+  if (!role || !["admin", "super_admin"].includes(role)) {
+    throw redirect("/app");
+  }
+  return null;
+};
+
 export const appRouter = createBrowserRouter([
   {
     path: "/",
-    element: <LandingPage />
+    element: wrap(<LandingPage />)
   },
   {
     path: "/relatorios/:slug?",
@@ -116,10 +139,11 @@ export const appRouter = createBrowserRouter([
   {
     path: "/app",
     loader: requireAuth,
-    element: <DashboardLayout />,
+    element: wrap(<DashboardLayout />),
     children: [
       { index: true, element: wrap(<DashboardPage />) },
       { path: "professor", element: wrap(<TeacherDashboard />) },
+      { path: "professor/minhas-turmas", element: wrap(<MinhasTurmasPage />) },
       { path: "alunos", element: wrap(<AlunosPage />) },
       { path: "alunos/arquivo", element: wrap(<ArchivedAlunosPage />) },
       { path: "alunos/:alunoId", element: wrap(<AlunoDetailPage />) },
@@ -128,6 +152,7 @@ export const appRouter = createBrowserRouter([
       { path: "notas", element: wrap(<NotasPage />) },
       { path: "graficos", element: wrap(<GraficosPage />) },
       { path: "relatorios", element: wrap(<RelatoriosPage />) },
+      { path: "ata-resultado", element: wrap(<AtaResultadoPage />) },
       { path: "relatorios/:slug", element: wrap(<RelatorioDetailPage />) },
       { path: "uploads", element: wrap(<UploadsPage />) },
       { path: "usuarios", element: wrap(<UsuariosPage />) },
@@ -137,28 +162,30 @@ export const appRouter = createBrowserRouter([
       { path: "ia/intervencoes-em-lote", element: wrap(<BulkInterventionPage />) },
       { path: "meu-boletim", element: wrap(<MeuBoletimPage />) },
       { path: "portal-responsavel", element: wrap(<PortalResponsavelPage />) },
-      { path: "admin/escolas", element: wrap(<TenantsPage />) },
-      { path: "admin/ia", element: wrap(<AISettingsPage />) }
+      { path: "admin/escolas", loader: requireAdmin, element: wrap(<TenantsPage />) },
+      { path: "admin/ia", loader: requireAdmin, element: wrap(<AISettingsPage />) },
+      { path: "admin/anos-letivos", loader: requireAdmin, element: wrap(<AcademicYearsPage />) },
+      { path: "configuracoes", loader: requireAdmin, element: wrap(<EscolaConfigPage />) }
     ]
   },
   {
     path: "/login",
-    element: <LoginPage />
+    element: wrap(<LoginPage />)
   },
   {
     path: "/login/aluno",
-    element: <LoginPage />
+    element: wrap(<LoginPage />)
   },
   {
     path: "/alterar-senha",
-    element: <ChangePasswordPage />
+    element: wrap(<ChangePasswordPage />)
   },
   {
     path: "/esqueci-senha",
-    element: <ForgotPasswordPage />
+    element: wrap(<ForgotPasswordPage />)
   },
   {
     path: "/redefinir-senha",
-    element: <ResetPasswordPage />
+    element: wrap(<ResetPasswordPage />)
   }
 ]);

@@ -56,8 +56,11 @@ required_vars=(
   POSTGRES_USER
   POSTGRES_PASSWORD
   POSTGRES_DB
+  APP_DB_USER
+  APP_DB_PASSWORD
   REDIS_PASSWORD
   FLASK_ENV
+  FRONTEND_URL
   SMTP_SERVER
   SMTP_PORT
   SMTP_USER
@@ -71,16 +74,33 @@ done
 
 require_secret SECRET_KEY
 require_secret JWT_SECRET_KEY
+require_secret ENCRYPTION_KEY
+require_secret BACKUP_ENCRYPTION_KEY
 
 [ "$FLASK_ENV" = "production" ] || fail "FLASK_ENV deve ser production"
 [ "$SECRET_KEY" != "$JWT_SECRET_KEY" ] || fail "SECRET_KEY e JWT_SECRET_KEY devem ser diferentes"
+[ "$SECRET_KEY" != "$ENCRYPTION_KEY" ] || fail "ENCRYPTION_KEY deve ser diferente de SECRET_KEY"
+[ "$JWT_SECRET_KEY" != "$ENCRYPTION_KEY" ] || fail "ENCRYPTION_KEY deve ser diferente de JWT_SECRET_KEY"
+[[ "$APP_DB_USER" != "$POSTGRES_USER" ]] || fail "APP_DB_USER deve ser diferente de POSTGRES_USER"
 [[ "$DOMAIN" != http://* && "$DOMAIN" != https://* ]] || fail "DOMAIN deve conter apenas o host, sem protocolo"
 [[ "$ACME_EMAIL" == *@* ]] || fail "ACME_EMAIL deve ser um e-mail válido"
 [[ "$SMTP_FROM" == *@* ]] || fail "SMTP_FROM deve ser um e-mail válido"
+[ "$FRONTEND_URL" = "https://${DOMAIN}" ] || fail "FRONTEND_URL deve ser https://${DOMAIN}"
 
 if [ -n "${ALLOWED_ORIGINS:-}" ]; then
   [[ "$ALLOWED_ORIGINS" == *"https://"* ]] || fail "ALLOWED_ORIGINS deve usar HTTPS em produção"
   [[ "$ALLOWED_ORIGINS" != *"localhost"* && "$ALLOWED_ORIGINS" != *"127.0.0.1"* ]] || fail "ALLOWED_ORIGINS não pode conter localhost em produção"
+fi
+
+if [ -n "${S3_BACKUP_BUCKET:-}" ]; then
+  require_env AWS_ACCESS_KEY_ID
+  require_env AWS_SECRET_ACCESS_KEY
+fi
+
+if [ -n "${STRIPE_SECRET_KEY:-}" ] || [ -n "${STRIPE_WEBHOOK_SECRET:-}" ] || [ -n "${STRIPE_PRICE_ID:-}" ]; then
+  require_env STRIPE_SECRET_KEY
+  require_env STRIPE_WEBHOOK_SECRET
+  require_env STRIPE_PRICE_ID
 fi
 
 env \
@@ -90,14 +110,25 @@ env \
   POSTGRES_USER="$POSTGRES_USER" \
   POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
   POSTGRES_DB="$POSTGRES_DB" \
+  APP_DB_USER="$APP_DB_USER" \
+  APP_DB_PASSWORD="$APP_DB_PASSWORD" \
   REDIS_PASSWORD="$REDIS_PASSWORD" \
   SECRET_KEY="$SECRET_KEY" \
   JWT_SECRET_KEY="$JWT_SECRET_KEY" \
+  ENCRYPTION_KEY="$ENCRYPTION_KEY" \
+  BACKUP_ENCRYPTION_KEY="$BACKUP_ENCRYPTION_KEY" \
+  FRONTEND_URL="$FRONTEND_URL" \
   SMTP_SERVER="$SMTP_SERVER" \
   SMTP_PORT="$SMTP_PORT" \
   SMTP_USER="$SMTP_USER" \
   SMTP_PASSWORD="$SMTP_PASSWORD" \
   SMTP_FROM="$SMTP_FROM" \
+  AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-}" \
+  AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-}" \
+  S3_BACKUP_BUCKET="${S3_BACKUP_BUCKET:-}" \
+  STRIPE_SECRET_KEY="${STRIPE_SECRET_KEY:-}" \
+  STRIPE_WEBHOOK_SECRET="${STRIPE_WEBHOOK_SECRET:-}" \
+  STRIPE_PRICE_ID="${STRIPE_PRICE_ID:-}" \
   docker compose -f docker-compose.prod.yml config --quiet
 
 printf 'Preflight de produção OK para %s\n' "$DOMAIN"

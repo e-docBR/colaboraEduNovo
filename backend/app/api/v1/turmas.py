@@ -46,15 +46,53 @@ def register(parent: Blueprint) -> None:
         data = request.get_json() or {}
         new_nome = data.get("nome", "").strip()
         new_turno = data.get("turno", "").strip() or None
+        professor_ids = data.get("professor_ids")
 
         if not new_nome:
             return jsonify({"error": "Nome da turma é obrigatório"}), 400
 
+        from flask import g
+        tenant_id = getattr(g, "tenant_id", None)
+        academic_year_id = getattr(g, "academic_year_id", None)
+
         with session_scope() as session:
             service = TurmaService(session)
-            count = service.rename_turma(slug_decoded, new_nome, new_turno)
-            if count is None:
+            
+            # Resolve actual class name
+            turma_real = service.repository.get_real_name(slug_decoded, service._slugify)
+            if not turma_real:
                 return jsonify({"error": "Turma não encontrada"}), 404
+            
+            # Update students
+            count = service.rename_turma(slug_decoded, new_nome, new_turno)
+            
+            # If professor_ids is provided, update class-professor linkages
+            if professor_ids is not None:
+                from app.models import UsuarioTurma, Usuario
+                # Delete existing linkages for old and new names
+                session.query(UsuarioTurma).filter(
+                    UsuarioTurma.turma.in_([turma_real, new_nome]),
+                    UsuarioTurma.tenant_id == tenant_id,
+                    UsuarioTurma.academic_year_id == academic_year_id
+                ).delete(synchronize_session=False)
+                
+                # Add new linkages
+                for p_id in professor_ids:
+                    # Validate professor exists in current tenant
+                    prof = session.query(Usuario).filter(
+                        Usuario.id == p_id,
+                        Usuario.tenant_id == tenant_id,
+                        Usuario.role == "professor"
+                    ).first()
+                    if prof:
+                        link = UsuarioTurma(
+                            usuario_id=p_id,
+                            turma=new_nome,
+                            tenant_id=tenant_id,
+                            academic_year_id=academic_year_id
+                        )
+                        session.add(link)
+            
             from ...core.cache import invalidate_tenant_cache
             invalidate_tenant_cache()
             return jsonify({"updated": count, "turma": new_nome})

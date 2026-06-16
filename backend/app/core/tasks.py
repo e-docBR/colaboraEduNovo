@@ -1,7 +1,12 @@
+import re
+
 from loguru import logger
 from ..core.database import session_scope
 from ..models import Ocorrencia, Tenant
 from ..services.communication_service import CommunicationService
+
+_EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+_PHONE_RE = re.compile(r'^\+?\d[\d\s\-()]{7,}$')
 
 TIPO_LABELS = {
     "ADVERTENCIA": "Advertência",
@@ -17,6 +22,20 @@ GRAVIDADE_LABELS = {
     "GRAVE": "Grave",
     "GRAVISSIMA": "Gravíssima"
 }
+
+def _mask_name(name: str) -> str:
+    if not name:
+        return name
+    parts = name.split()
+    if not parts:
+        return name
+    masked_parts = []
+    for i, part in enumerate(parts):
+        if i == 0:
+            masked_parts.append(part)
+        else:
+            masked_parts.append(part[0] + "*" * (len(part) - 1) if part else "")
+    return " ".join(masked_parts)
 
 def notify_occurrence_task(ocorrencia_id: int):
     """Background task to send occurrence notifications via Email and WhatsApp.
@@ -52,7 +71,7 @@ def notify_occurrence_task(ocorrencia_id: int):
         gravidade_label = GRAVIDADE_LABELS.get(occurrence.gravidade or "LEVE", "Leve")
         data_str = occurrence.data_registro.strftime("%d/%m/%Y")
 
-        subject = f"🔔 Comunicado Escolar — {tipo_label}: {aluno.nome}"
+        subject = f"🔔 Comunicado Escolar — {tipo_label}: {_mask_name(aluno.nome)}"
 
         message_body = (
             f"Prezados Pais/Responsáveis,\n\n"
@@ -80,24 +99,30 @@ def notify_occurrence_task(ocorrencia_id: int):
         email_destino = getattr(aluno, "email_responsavel", None) or aluno.email
         telefone_destino = getattr(aluno, "telefone_responsavel", None) or aluno.telefones
 
-        # Send Email
-        if email_destino:
+        # Send Email (validate format before attempting)
+        if email_destino and _EMAIL_RE.match(email_destino):
             status_email = CommunicationService.send_email(
                 to_email=email_destino,
                 subject=subject,
                 body=message_body
             )
         else:
-            logger.warning(f"Aluno {aluno.id} ({aluno.nome}) sem email cadastrado — email não enviado")
+            if email_destino:
+                logger.warning(f"Aluno {aluno.id} ({_mask_name(aluno.nome)}) email inválido: {CommunicationService._mask_email(email_destino)!r}")
+            else:
+                logger.warning(f"Aluno {aluno.id} ({_mask_name(aluno.nome)}) sem email cadastrado — email não enviado")
 
-        # Send WhatsApp
-        if telefone_destino:
+        # Send WhatsApp (validate phone format before attempting)
+        if telefone_destino and _PHONE_RE.match(telefone_destino.strip()):
             status_whatsapp = CommunicationService.send_whatsapp(
                 phone=telefone_destino,
                 message=message_body
             )
         else:
-            logger.warning(f"Aluno {aluno.id} ({aluno.nome}) sem telefone cadastrado — WhatsApp não enviado")
+            if telefone_destino:
+                logger.warning(f"Aluno {aluno.id} ({_mask_name(aluno.nome)}) telefone inválido: {CommunicationService._mask_phone(telefone_destino)!r}")
+            else:
+                logger.warning(f"Aluno {aluno.id} ({_mask_name(aluno.nome)}) sem telefone cadastrado — WhatsApp não enviado")
 
         # Update status distinguindo "não tentado" de "falha"
         email_attempted = bool(email_destino)

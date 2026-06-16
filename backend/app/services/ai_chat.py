@@ -21,6 +21,7 @@ from sqlalchemy import distinct, select, func, desc, and_
 from sqlalchemy.orm import Session
 
 from ..core.database import session_scope
+from ..core.helpers import escape_like
 from ..models import Aluno, Nota, Comunicado, Ocorrencia, Tenant
 from ..models.ai_configuration import AIConfiguration
 from .intervention_service import intervention_service
@@ -274,10 +275,11 @@ class AIAnalystEngine:
             "- Use markdown: **negrito** para destaques, listas com `-` para enumerar alunos/disciplinas\n"
             "- Emojis para status: ⚠️ crítico, 🔴 grave, 🟡 atenção, 🟢 bom, 📊 estatística\n"
             "- Quando apresentar alunos em risco, liste nome + turma + motivo específico\n\n"
-            "CRITÉRIOS EDUCACIONAIS (escola brasileira):\n"
-            "- Aprovação: média ≥ 60 pontos\n"
-            "- Risco de reprovação: média 40–59\n"
-            "- Situação crítica: média < 40 ou faltas > 20% da carga horária\n"
+            "CRITÉRIOS EDUCACIONAIS (sistema de pontos por trimestre):\n"
+            "- Pontuação total: T1 (0–30 pts) + T2 (0–30 pts) + T3 (0–40 pts) = 100 pts\n"
+            "- Aprovação: ≥ 50 pts no ano | Mínimo parcial: 15 pts após T1, 30 pts após T2\n"
+            "- Risco: abaixo do mínimo acumulado do período em andamento\n"
+            "- Situação crítica: muito abaixo do mínimo ou faltas > 20% da carga horária\n"
             "- Priorize sempre intervenções preventivas antes que o aluno reprove\n\n"
             "AÇÃO:\n"
             "- Toda análise deve terminar com ao menos UMA recomendação concreta e acionável\n"
@@ -392,6 +394,13 @@ class AIAnalystEngine:
 
     # ── Helpers de query ──────────────────────────────────────────────────────
 
+    def _stage_threshold(self, s: Session, tenant_id: int) -> int:
+        """Retorna o limiar de aprovação atual baseado nos trimestres com dados."""
+        from flask import g
+        from .analytics import get_grading_stage
+        stage = get_grading_stage(s, tenant_id, getattr(g, "academic_year_id", None))
+        return stage["threshold"]
+
     def _apply_turma_filter(self, query, filters: dict):
         if filters.get("turmas"):
             return query.where(Aluno.turma.in_(filters["turmas"]))
@@ -460,7 +469,7 @@ class AIAnalystEngine:
             Nota.aluno_id.in_(select(Aluno.id).where(Aluno.tenant_id == tenant_id))
         ).group_by(Nota.disciplina).order_by("media")
         if f.get("disciplina"):
-            q = q.where(Nota.disciplina.ilike(f"%{f['disciplina']}%"))
+            q = q.where(Nota.disciplina.ilike(f"%{escape_like(f['disciplina'])}%", escape="\\"))
         q = q.limit(10)
         rows = s.execute(q).all()
         data = [{"name": r.disciplina, "value": round(float(r.media or 0), 1)} for r in rows]
@@ -474,7 +483,7 @@ class AIAnalystEngine:
         aluno_filter = select(Aluno.id).where(Aluno.tenant_id == tenant_id)
         aluno_nome = f.get("aluno_nome")
         if aluno_nome:
-            aluno_filter = aluno_filter.where(Aluno.nome.ilike(f"%{aluno_nome}%"))
+            aluno_filter = aluno_filter.where(Aluno.nome.ilike(f"%{escape_like(aluno_nome)}%", escape="\\"))
         if f.get("turmas"):
             aluno_filter = aluno_filter.where(Aluno.turma.in_(f["turmas"]))
 
@@ -531,16 +540,17 @@ class AIAnalystEngine:
                 "_ctx": {"situacoes": data}}
 
     def _risky_students(self, s: Session, f: dict, tenant_id: int, **kw) -> dict:
+        threshold = self._stage_threshold(s, tenant_id)
         q = select(Aluno.nome, Aluno.turma, func.avg(Nota.total).label("media")).join(Nota).where(
             Aluno.tenant_id == tenant_id
-        ).group_by(Aluno.id).having(func.avg(Nota.total) < 50).order_by("media").limit(15)
+        ).group_by(Aluno.id).having(func.avg(Nota.total) < threshold).order_by("media").limit(15)
         q = self._apply_turma_filter(q, f)
         rows = s.execute(q).all()
         if not rows:
-            return {"text": "Nenhum aluno em situação crítica (média < 50) encontrado com esses filtros. ✅",
+            return {"text": f"Nenhum aluno em situação crítica (abaixo de {threshold} pts) encontrado com esses filtros. ✅",
                     "type": "text", "data": None, "chart_config": None, "_ctx": {}}
-        data = [{"Aluno": r.nome, "Turma": r.turma, "Média": round(float(r.media), 1)} for r in rows]
-        base = f"⚠️ {len(rows)} alunos com média abaixo de 50. O mais crítico: {rows[0].nome} ({round(float(rows[0].media),1)})."
+        data = [{"Aluno": r.nome, "Turma": r.turma, "Pontos": round(float(r.media), 1)} for r in rows]
+        base = f"⚠️ {len(rows)} alunos abaixo de {threshold} pts. O mais crítico: {rows[0].nome} ({round(float(rows[0].media),1)} pts)."
         return {"text": base, "type": "table", "data": data, "chart_config": None,
                 "_ctx": {"total_risco": len(rows), "mais_critico": rows[0].nome, "dados": data[:5]}}
 
@@ -583,21 +593,22 @@ class AIAnalystEngine:
                 "_ctx": {"total": len(rows), "media_grupo": round(sum(r.media for r in rows) / max(len(rows), 1), 1)}}
 
     def _dropout_radar(self, s: Session, f: dict, tenant_id: int, **kw) -> dict:
+        threshold = self._stage_threshold(s, tenant_id)
         q = select(
             Aluno.nome, Aluno.turma, Aluno.turno,
             func.avg(Nota.total).label("media"),
             func.sum(Nota.faltas).label("faltas"),
         ).join(Nota).where(Aluno.tenant_id == tenant_id).group_by(Aluno.id).having(
-            and_(func.avg(Nota.total) < 50, func.sum(Nota.faltas) > 10)
+            and_(func.avg(Nota.total) < threshold, func.sum(Nota.faltas) > 10)
         ).order_by(desc("faltas")).limit(15)
         rows = s.execute(q).all()
         if not rows:
-            return {"text": "✅ Radar de abandono: nenhum aluno em risco iminente com os critérios atuais (média < 50 + faltas > 10).",
+            return {"text": f"✅ Radar de abandono: nenhum aluno em risco iminente (abaixo de {threshold} pts + faltas > 10).",
                     "type": "text", "data": None, "chart_config": None, "_ctx": {}}
         data = [{"Aluno": r.nome, "Turma": r.turma, "Turno": r.turno,
-                 "Média": round(float(r.media), 1), "Faltas": int(r.faltas or 0),
+                 "Pontos": round(float(r.media), 1), "Faltas": int(r.faltas or 0),
                  "Risco": "🔴 Crítico"} for r in rows]
-        base = f"🚨 Radar de Abandono: {len(rows)} alunos em risco iminente (média baixa + alta infrequência)."
+        base = f"🚨 Radar de Abandono: {len(rows)} alunos em risco iminente (abaixo de {threshold} pts + infrequência)."
         return {"text": base, "type": "table", "data": data, "chart_config": None,
                 "_ctx": {"total_risco_abandono": len(rows), "dados": data[:5]}}
 
@@ -651,7 +662,6 @@ class AIAnalystEngine:
                 "_ctx": {"total": total, "tipos": data}}
 
     def _recent_occurrences(self, s: Session, f: dict, tenant_id: int, **kw) -> dict:
-        from sqlalchemy import text as sa_text
         q = select(
             Ocorrencia.tipo, Ocorrencia.descricao, Ocorrencia.data_registro,
             Aluno.nome.label("aluno"), Aluno.turma,
@@ -689,7 +699,7 @@ class AIAnalystEngine:
         q = select(
             Ocorrencia.tipo, Ocorrencia.gravidade, Ocorrencia.descricao, Ocorrencia.data_registro
         ).join(Aluno).where(
-            Aluno.tenant_id == tenant_id, Aluno.nome.ilike(f"%{nome}%")
+            Aluno.tenant_id == tenant_id, Aluno.nome.ilike(f"%{escape_like(nome)}%", escape="\\")
         ).order_by(desc(Ocorrencia.data_registro))
         rows = s.execute(q).all()
         if not rows:
@@ -755,7 +765,7 @@ class AIAnalystEngine:
             return {"text": "Informe o nome. Ex: 'Perfil do aluno João Silva'",
                     "type": "text", "data": None, "chart_config": None, "_ctx": {}}
         aluno = s.execute(
-            select(Aluno).where(Aluno.tenant_id == tenant_id, Aluno.nome.ilike(f"%{nome}%"))
+            select(Aluno).where(Aluno.tenant_id == tenant_id, Aluno.nome.ilike(f"%{escape_like(nome)}%", escape="\\"))
         ).scalar_one_or_none()
         if not aluno:
             return {"text": f"Aluno '{nome}' não encontrado.", "type": "text",
@@ -769,7 +779,8 @@ class AIAnalystEngine:
         notas_detail = s.execute(
             select(Nota.disciplina, Nota.total, Nota.situacao).where(Nota.aluno_id == aluno.id)
         ).all()
-        situacao = "🔴 Em Risco" if media < 50 else ("🟡 Atenção" if media < 60 else "🟢 Regular")
+        threshold = self._stage_threshold(s, tenant_id)
+        situacao = "🔴 Em Risco" if media < threshold else ("🟡 Atenção" if media < threshold * 1.2 else "🟢 Regular")
         perfil = (
             f"👤 **{aluno.nome}** — {aluno.turma} ({aluno.turno})\n"
             f"📛 Matrícula: {aluno.matricula or '—'}\n"
@@ -788,7 +799,7 @@ class AIAnalystEngine:
             return {"text": "Informe o nome do aluno. Ex: 'Evolução trimestral do aluno Maria'",
                     "type": "text", "data": None, "chart_config": None, "_ctx": {}}
         aluno = s.execute(
-            select(Aluno).where(Aluno.tenant_id == tenant_id, Aluno.nome.ilike(f"%{nome}%"))
+            select(Aluno).where(Aluno.tenant_id == tenant_id, Aluno.nome.ilike(f"%{escape_like(nome)}%", escape="\\"))
         ).scalar_one_or_none()
         if not aluno:
             return {"text": f"Aluno '{nome}' não encontrado.", "type": "text",
@@ -863,7 +874,7 @@ class AIAnalystEngine:
             return {"text": "Informe o nome. Ex: 'Intervenção pedagógica para João'",
                     "type": "text", "data": None, "chart_config": None, "_ctx": {}}
         aluno = s.execute(
-            select(Aluno).where(Aluno.tenant_id == tenant_id, Aluno.nome.ilike(f"%{nome}%"))
+            select(Aluno).where(Aluno.tenant_id == tenant_id, Aluno.nome.ilike(f"%{escape_like(nome)}%", escape="\\"))
         ).scalar_one_or_none()
         if not aluno:
             return {"text": f"Aluno '{nome}' não encontrado.", "type": "text",
@@ -916,10 +927,11 @@ class AIAnalystEngine:
                 Comunicado.tenant_id == tenant_id, Comunicado.arquivado.is_(False)
             )
         ).scalar() or 0
+        threshold = self._stage_threshold(s, tenant_id)
         alunos_risco = s.execute(
             select(func.count()).select_from(
                 select(Aluno.id).join(Nota).where(Aluno.tenant_id == tenant_id)
-                .group_by(Aluno.id).having(func.avg(Nota.total) < 50).subquery()
+                .group_by(Aluno.id).having(func.avg(Nota.total) < threshold).subquery()
             )
         ).scalar() or 0
         summary = {

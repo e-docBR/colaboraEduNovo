@@ -20,7 +20,12 @@ import {
     Tooltip,
     InputAdornment,
     Alert,
-    CircularProgress
+    CircularProgress,
+    Select,
+    MenuItem,
+    FormControl,
+    InputLabel,
+    Slider
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import SchoolIcon from "@mui/icons-material/School";
@@ -30,13 +35,23 @@ import HistoryIcon from "@mui/icons-material/History";
 import SearchIcon from "@mui/icons-material/Search";
 import EditIcon from "@mui/icons-material/Edit";
 import SecurityIcon from "@mui/icons-material/Security";
-import { useState } from "react";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
+import WifiIcon from "@mui/icons-material/Wifi";
+import SaveIcon from "@mui/icons-material/Save";
+
+import { useState, useEffect } from "react";
 import {
     useListTenantsQuery,
     useCreateTenantMutation,
     useAddAcademicYearToTenantMutation,
     useUpdateTenantMutation,
-    useDeleteTenantMutation
+    useDeleteTenantMutation,
+    useGetAISettingsQuery,
+    useUpdateAISettingsMutation,
+    useTestAISettingsMutation,
+    useClearAIKeyMutation
 } from "../../lib/api";
 import { useAppSelector } from "../../app/hooks";
 import { Navigate } from "react-router-dom";
@@ -54,6 +69,7 @@ export const TenantsPage = () => {
     const [openTenantDialog, setOpenTenantDialog] = useState(false);
     const [openEditDialog, setOpenEditDialog] = useState(false);
     const [openYearDialog, setOpenYearDialog] = useState(false);
+    const [openAiDialog, setOpenAiDialog] = useState(false);
     const [createError, setCreateError] = useState<string | null>(null);
     const [isCreating, setIsCreating] = useState(false);
 
@@ -315,6 +331,14 @@ export const TenantsPage = () => {
                                             label={<Typography variant="caption" fontWeight={800} sx={{ color: tenant.is_active ? 'success.main' : 'error.main' }}>{tenant.is_active ? "ATIVO" : "BLOQUEADO"}</Typography>}
                                         />
                                         <Divider orientation="vertical" flexItem />
+                                        <Tooltip title="Configurar IA da Escola">
+                                            <IconButton size="small" sx={{ color: TEAL_COLOR }} onClick={() => {
+                                                setSelectedTenant(tenant);
+                                                setOpenAiDialog(true);
+                                            }}>
+                                                <AutoAwesomeIcon fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
                                         <Tooltip title="Editar Dados">
                                             <IconButton size="small" onClick={() => {
                                                 setSelectedTenant(tenant);
@@ -526,6 +550,339 @@ export const TenantsPage = () => {
                     {snackbar.message}
                 </Alert>
             </Snackbar>
+
+            <TenantAiDialog
+                open={openAiDialog}
+                onClose={() => setOpenAiDialog(false)}
+                tenant={selectedTenant}
+            />
         </Box>
     );
+};
+
+// ─── Componente de Configuração de IA por Escola ───────────────────────────────
+
+interface TenantAiDialogProps {
+  open: boolean;
+  onClose: () => void;
+  tenant: any;
+}
+
+const PROVIDER_LABELS: Record<string, { label: string; color: string; description: string; getUrl: string }> = {
+  openai: {
+    label: "OpenAI",
+    color: "#10a37f",
+    description: "GPT-4o, GPT-4o Mini. Requer chave da OpenAI Platform.",
+    getUrl: "platform.openai.com",
+  },
+  anthropic: {
+    label: "Anthropic",
+    color: "#cc785c",
+    description: "Claude 3.5 Haiku e Sonnet. Alta qualidade de raciocínio.",
+    getUrl: "console.anthropic.com",
+  },
+  openrouter: {
+    label: "OpenRouter",
+    color: "#6366f1",
+    description: "Acesse dezenas de modelos com uma única chave.",
+    getUrl: "openrouter.ai/keys",
+  },
+  gemini: {
+    label: "Google Gemini",
+    color: "#4285f4",
+    description: "Gemini 1.5 Flash e Pro. Requer chave do Google AI Studio.",
+    getUrl: "aistudio.google.com",
+  },
+  deepseek: {
+    label: "DeepSeek",
+    color: "#4d6bfe",
+    description: "DeepSeek-V3 e DeepSeek-R1. Modelos de alto desempenho.",
+    getUrl: "platform.deepseek.com",
+  },
+  minimax: {
+    label: "MiniMax",
+    color: "#ff5a00",
+    description: "MiniMax-M3 e MiniMax-M2.7. Alto desempenho para português.",
+    getUrl: "platform.minimax.io",
+  },
+};
+
+const TenantAiDialog = ({ open, onClose, tenant }: TenantAiDialogProps) => {
+  const { data: settings, isLoading } = useGetAISettingsQuery(tenant?.id, { skip: !tenant || !open });
+  const [updateSettings, { isLoading: isSaving }] = useUpdateAISettingsMutation();
+  const [testConnection, { isLoading: isTesting }] = useTestAISettingsMutation();
+  const [clearKey] = useClearAIKeyMutation();
+
+  const [provider, setProvider] = useState("openai");
+  const [modelName, setModelName] = useState("gpt-4o-mini");
+  const [apiKey, setApiKey] = useState("");
+  const [showKey, setShowKey] = useState(false);
+  const [aiName, setAiName] = useState("");
+  const [temperature, setTemperature] = useState(0.4);
+  const [systemPrompt, setSystemPrompt] = useState("");
+  const [isActive, setIsActive] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  useEffect(() => {
+    if (settings) {
+      setProvider(settings.provider || "openai");
+      setModelName(settings.model_name || "gpt-4o-mini");
+      setApiKey(settings.api_key_set ? "***configured***" : "");
+      setAiName(settings.ai_name || "");
+      setTemperature(settings.temperature ?? 0.4);
+      setSystemPrompt(settings.system_prompt || "");
+      setIsActive(settings.is_active || false);
+      setTestResult(null);
+    }
+  }, [settings, open]);
+
+  const availableModels = settings?.provider_models?.[provider] ?? [];
+
+  const handleProviderChange = (newProvider: string) => {
+    setProvider(newProvider);
+    const models = settings?.provider_models?.[newProvider] ?? [];
+    if (models.length > 0) setModelName(models[0].id);
+    setTestResult(null);
+  };
+
+  const handleTest = async () => {
+    setTestResult(null);
+    try {
+      const keyToTest = apiKey.startsWith("***") ? "***" : apiKey;
+      const result = await testConnection({
+        provider,
+        api_key: keyToTest,
+        model_name: modelName,
+        tenantId: tenant.id,
+      }).unwrap();
+      setTestResult(result);
+    } catch (e: any) {
+      setTestResult({
+        ok: false,
+        message: `❌ Erro: ${e?.data?.error ?? e?.status ?? "Falha de conexão"}`,
+      });
+    }
+  };
+
+  const handleSave = async () => {
+    setSaveSuccess(false);
+    const payload: any = {
+      tenantId: tenant.id,
+      is_active: isActive,
+      provider,
+      model_name: modelName,
+      temperature,
+      ai_name: aiName,
+      system_prompt: systemPrompt,
+    };
+    if (apiKey && !apiKey.startsWith("***")) {
+      payload.api_key = apiKey;
+    }
+    try {
+      await updateSettings(payload).unwrap();
+      setSaveSuccess(true);
+      setTimeout(() => {
+        setSaveSuccess(false);
+        onClose();
+      }, 1500);
+    } catch {
+      // tratado pelo RTK Query
+    }
+  };
+
+  const handleClearKey = async () => {
+    if (!confirm("Remover a API key da escola e desativar o assistente?")) return;
+    await clearKey(tenant.id);
+    setApiKey("");
+    setIsActive(false);
+  };
+
+  if (!tenant) return null;
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 4, p: 2 } }}>
+      <DialogTitle sx={{ fontWeight: 950, pb: 1 }}>
+        🤖 Configurar IA — {tenant.name}
+      </DialogTitle>
+      <DialogContent>
+        {isLoading ? (
+          <Box display="flex" justifyContent="center" py={6}>
+            <CircularProgress />
+          </Box>
+        ) : (
+          <Stack spacing={3} sx={{ mt: 1 }}>
+            {/* Provedor de IA */}
+            <Box>
+              <Typography variant="subtitle2" fontWeight={700} mb={1}>🔌 Provedor de IA</Typography>
+              <Box display="flex" gap={1} flexWrap="wrap" mb={2}>
+                {Object.entries(PROVIDER_LABELS).map(([key, info]) => (
+                  <Chip
+                    key={key}
+                    label={info.label}
+                    onClick={() => handleProviderChange(key)}
+                    variant={provider === key ? "filled" : "outlined"}
+                    sx={{
+                      bgcolor: provider === key ? info.color : undefined,
+                      color: provider === key ? "white" : undefined,
+                      borderColor: info.color,
+                      fontWeight: provider === key ? 700 : 400,
+                      "&:hover": { bgcolor: `${info.color}22` },
+                    }}
+                  />
+                ))}
+              </Box>
+              <Alert severity="info" sx={{ py: 0.5 }}>
+                {PROVIDER_LABELS[provider]?.description}
+              </Alert>
+            </Box>
+
+            {/* Modelo e API Key */}
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <FormControl fullWidth>
+                  <InputLabel id="tenant-model-select-label">Modelo</InputLabel>
+                  <Select
+                    labelId="tenant-model-select-label"
+                    value={modelName}
+                    onChange={(e) => setModelName(e.target.value)}
+                    label="Modelo"
+                  >
+                    {availableModels.map((m: any) => (
+                      <MenuItem key={m.id} value={m.id}>
+                        {m.label} ({m.id})
+                      </MenuItem>
+                    ))}
+                    {modelName && !availableModels.some((m: any) => m.id === modelName) && (
+                      <MenuItem value={modelName}>
+                        {modelName} (Personalizado)
+                      </MenuItem>
+                    )}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  label="API Key"
+                  type={showKey ? "text" : "password"}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder={settings?.api_key_set ? "••• chave salva" : "Cole a API key aqui"}
+                  helperText={
+                    settings?.api_key_set
+                      ? "Chave configurada. Deixe em branco para manter a atual."
+                      : `Obtenha em: ${PROVIDER_LABELS[provider]?.getUrl}`
+                  }
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton size="small" onClick={() => setShowKey((v) => !v)}>
+                          {showKey ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
+            </Grid>
+
+            {/* Identidade */}
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  label="Nome do Assistente"
+                  value={aiName}
+                  onChange={(e) => setAiName(e.target.value)}
+                  placeholder={`AI ${tenant.name.split(" ")[0]}`}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <Box mt={1}>
+                  <Typography variant="body2" fontWeight={600} gutterBottom>
+                    Temperatura: <Typography component="span" color="primary.main" fontWeight={700}>{temperature.toFixed(1)}</Typography>
+                  </Typography>
+                  <Slider
+                    value={temperature}
+                    onChange={(_, v) => setTemperature(v as number)}
+                    min={0}
+                    max={1}
+                    step={0.1}
+                    marks={[
+                      { value: 0, label: "Preciso" },
+                      { value: 0.5, label: "Equilibrado" },
+                      { value: 1, label: "Criativo" },
+                    ]}
+                  />
+                </Box>
+              </Grid>
+            </Grid>
+
+            <TextField
+              fullWidth
+              multiline
+              rows={2}
+              label="Instruções adicionais (opcional)"
+              placeholder="Instruções extras de sistema para personalizar o comportamento do assistente"
+              value={systemPrompt}
+              onChange={(e) => setSystemPrompt(e.target.value)}
+            />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={isActive}
+                  onChange={(e) => setIsActive(e.target.checked)}
+                  color="success"
+                />
+              }
+              label={
+                <Box>
+                  <Typography fontWeight={600}>Assistente de IA ativo para esta escola</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Habilita o LLM para enriquecer as análises pedagógicas
+                  </Typography>
+                </Box>
+              }
+            />
+
+            {testResult && (
+              <Alert severity={testResult.ok ? "success" : "error"} onClose={() => setTestResult(null)}>
+                {testResult.message}
+              </Alert>
+            )}
+            {saveSuccess && (
+              <Alert severity="success">Configurações salvas com sucesso!</Alert>
+            )}
+          </Stack>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} color="inherit">Cancelar</Button>
+        {settings?.api_key_set && (
+          <Button variant="outlined" color="error" onClick={handleClearKey}>
+            Limpar Key
+          </Button>
+        )}
+        <Button
+          variant="outlined"
+          startIcon={isTesting ? <CircularProgress size={14} /> : <WifiIcon />}
+          onClick={handleTest}
+          disabled={isTesting || isLoading || (!apiKey && !settings?.api_key_set)}
+        >
+          Testar Conexão
+        </Button>
+        <Button
+          variant="contained"
+          onClick={handleSave}
+          disabled={isSaving || isLoading}
+          startIcon={isSaving ? <CircularProgress size={14} /> : <SaveIcon />}
+          sx={{ bgcolor: "#14b8a6", '&:hover': { bgcolor: '#0d9488' } }}
+        >
+          Salvar
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
 };

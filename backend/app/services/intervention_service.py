@@ -33,18 +33,22 @@ class PedagogicalInterventionService:
             tenant_id = getattr(g, "tenant_id", None)
             year_id = getattr(g, "academic_year_id", None)
 
-            aluno_query = session.query(Aluno).filter(Aluno.id == aluno_id)
-            if tenant_id:
-                aluno_query = aluno_query.filter(Aluno.tenant_id == tenant_id)
+            # Tenant obrigatório — falhar explicitamente para evitar vazamento cross-tenant
+            if not tenant_id:
+                logger.error("analyze_student chamado sem tenant_id no contexto Flask g (aluno_id={})", aluno_id)
+                return {"error": "Contexto de tenant obrigatório"}
+
+            aluno_query = session.query(Aluno).filter(
+                Aluno.id == aluno_id,
+                Aluno.tenant_id == tenant_id,
+            )
             if year_id:
                 aluno_query = aluno_query.filter(Aluno.academic_year_id == year_id)
             aluno = aluno_query.first()
             if not aluno:
                 return {}
 
-            stm = select(Nota).where(Nota.aluno_id == aluno_id)
-            if tenant_id:
-                stm = stm.where(Nota.tenant_id == tenant_id)
+            stm = select(Nota).where(Nota.aluno_id == aluno_id, Nota.tenant_id == tenant_id)
             if year_id:
                 stm = stm.where(Nota.academic_year_id == year_id)
             notas = session.execute(stm).scalars().all()

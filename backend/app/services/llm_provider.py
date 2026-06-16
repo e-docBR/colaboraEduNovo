@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from ..models.ai_configuration import AIConfiguration
 
 
-TIMEOUT = 30  # segundos
+TIMEOUT = 60  # segundos
 
 
 def _parse_api_error(exc: requests.HTTPError) -> str:
@@ -142,6 +142,18 @@ def call_llm(config: "AIConfiguration", messages: list[dict]) -> str | None:
         elif provider == "gemini":
             return _gemini_complete(config.api_key, model, messages, temperature)
 
+        elif provider == "deepseek":
+            return _openai_complete(
+                config.api_key, model, messages, temperature,
+                base_url="https://api.deepseek.com"
+            )
+
+        elif provider == "minimax":
+            return _openai_complete(
+                config.api_key, model, messages, temperature,
+                base_url="https://api.minimax.io/v1"
+            )
+
         else:
             logger.warning(f"LLM provider desconhecido: {provider}")
             return None
@@ -153,14 +165,6 @@ def call_llm(config: "AIConfiguration", messages: list[dict]) -> str | None:
 
 def test_llm_connection(provider: str, api_key: str, model: str) -> dict:
     """Testa a conexão com o LLM. Retorna {'ok': bool, 'message': str}."""
-    config_mock = type("Cfg", (), {
-        "is_active": True,
-        "api_key": api_key,
-        "provider": provider,
-        "model_name": model,
-        "temperature": 0.1,
-    })()
-
     provider = provider.lower()
 
     try:
@@ -169,8 +173,15 @@ def test_llm_connection(provider: str, api_key: str, model: str) -> dict:
             {"role": "user", "content": "Responda apenas com a palavra: OK"},
         ]
 
-        if provider in ("openai", "openrouter"):
-            base = "https://openrouter.ai/api/v1" if provider == "openrouter" else "https://api.openai.com/v1"
+        if provider in ("openai", "openrouter", "deepseek", "minimax"):
+            if provider == "openrouter":
+                base = "https://openrouter.ai/api/v1"
+            elif provider == "deepseek":
+                base = "https://api.deepseek.com"
+            elif provider == "minimax":
+                base = "https://api.minimax.io/v1"
+            else:
+                base = "https://api.openai.com/v1"
             result = _openai_complete(api_key, model, messages, 0.1, base_url=base)
         elif provider == "anthropic":
             result = _anthropic_complete(api_key, model, messages, 0.1)
@@ -326,6 +337,12 @@ def stream_llm(config: "AIConfiguration", messages: list[dict]) -> Iterator[str]
             yield from _anthropic_stream(config.api_key, model, messages, temperature)
         elif provider == "gemini":
             yield from _gemini_stream(config.api_key, model, messages, temperature)
+        elif provider == "deepseek":
+            yield from _openai_stream(config.api_key, model, messages, temperature,
+                                      base_url="https://api.deepseek.com")
+        elif provider == "minimax":
+            yield from _openai_stream(config.api_key, model, messages, temperature,
+                                      base_url="https://api.minimax.io/v1")
         else:
             logger.warning(f"Stream LLM provider desconhecido: {provider}")
     except Exception as exc:

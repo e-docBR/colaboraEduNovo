@@ -8,6 +8,31 @@ ou restaurar qualquer release via `git checkout vX.Y.Z` ou pelo GitHub → *Rele
 
 ---
 
+## [1.8.2] - 2026-06-12
+
+### Relatórios / Ata de Resultado
+- **Ata de Resultado Final**: Integrou e exibiu com sucesso os dados de **Data de Nascimento** (formatada no padrão brasileiro `DD/MM/YYYY`) e **Sexo** (com fallback para `-` se ausente) para cada aluno.
+- **Resolução de Colisão de Slugs**: Corrigiu o problema onde turmas com nomes semelhantes (como `6º A` e `6º A -`) colidiam no mesmo slug, resultando em dados incorretos no frontend. Agora, os slugs são gerados de forma determinística e única (ex: `6o-a` e `6o-a-2`).
+- **Navegação**: Adicionou a página de "Ata de Resultado Final" ao roteador e ao menu lateral do frontend para fácil acesso pela equipe pedagógica.
+
+### Qualidade / Code Style
+- **Ajustes de Linter e Avisos**: Removeu imports e componentes não utilizados no backend e no frontend, limpando todos os avisos de linter do Ruff e ESLint para manter o build e as validações 100% livres de alertas.
+
+---
+
+## [1.8.1] - 2026-05-22
+
+### Auditoria / Operação
+- `audit-remediation-plan.md`: consolida o plano e as validações do ciclo.
+- `docs/PRODUCTION_READINESS.md`: registra gates e pendências para go-live.
+- `scripts/doctor.sh` e `scripts/validate-workspace.sh`: validação reprodutível com fallback seguro quando `node_modules` local estiver ausente/quebrado.
+- `Makefile`: adiciona `make doctor`, `make validate` e alvos por projeto (backend/frontend/mobile).
+
+### CI/CD e Deploy
+- CI alinha o frontend a `VITE_API_BASE_URL` (variável efetivamente consumida).
+- Deploy ajusta `docker compose` (`--scale worker=3`) e adiciona smoke test (frontend, `/health`, descoberta de tenants).
+- `scripts/prod-preflight.sh`: falha cedo quando variáveis mínimas de produção estão ausentes e valida integrações opcionais (S3/Stripe) de forma consistente.
+
 ## [1.8.0] - 2026-05-20
 
 ### Segurança — Hardening Completo

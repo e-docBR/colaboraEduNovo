@@ -39,7 +39,10 @@ def create_checkout_session(tenant_id: int, tenant_slug: str, email: Optional[st
     if email:
         params["customer_email"] = email
 
-    session = stripe.checkout.Session.create(**params)
+    session = stripe.checkout.Session.create(
+        **params,
+        idempotency_key=_checkout_idempotency_key(tenant_id, tenant_slug),
+    )
     return session.url
 
 
@@ -56,24 +59,126 @@ def handle_webhook_event(payload: bytes, sig_header: str) -> dict:
     except stripe.error.SignatureVerificationError as e:
         raise ValueError(f"Invalid webhook signature: {e}") from e
 
+    event_id = event.get("id")
     event_type = event["type"]
     data = event["data"]["object"]
 
     logger.info("Stripe webhook received: type={}", event_type)
 
-    if event_type in ("customer.subscription.created", "customer.subscription.updated"):
-        _handle_subscription_change(data)
-    elif event_type == "customer.subscription.deleted":
-        _handle_subscription_deleted(data)
-    elif event_type == "invoice.payment_failed":
-        _handle_payment_failed(data)
-    elif event_type == "checkout.session.completed":
-        _handle_checkout_completed(data)
-    else:
-        logger.debug("Stripe event {} not handled", event_type)
-        return {"action": "ignored", "type": event_type}
+    if event_id:
+        claim_result = _claim_webhook_event(event_id, event_type)
+        if claim_result in ("processed", "duplicate"):
+            logger.info("Stripe webhook duplicate ignored: id={} type={} reason={}", event_id, event_type, claim_result)
+            return {"action": "ignored_duplicate", "type": event_type, "event_id": event_id}
 
-    return {"action": "processed", "type": event_type}
+    try:
+        if event_type in ("customer.subscription.created", "customer.subscription.updated"):
+            _handle_subscription_change(data)
+        elif event_type == "customer.subscription.deleted":
+            _handle_subscription_deleted(data)
+        elif event_type == "invoice.payment_failed":
+            _handle_payment_failed(data)
+        elif event_type == "checkout.session.completed":
+            _handle_checkout_completed(data)
+        else:
+            logger.debug("Stripe event {} not handled", event_type)
+            if event_id:
+                _finalize_webhook_event(event_id, "ignored")
+            return {"action": "ignored", "type": event_type, "event_id": event_id}
+    except Exception as exc:
+        if event_id:
+            _finalize_webhook_event(event_id, "failed", str(exc))
+        raise
+
+    if event_id:
+        _finalize_webhook_event(event_id, "processed")
+
+    return {"action": "processed", "type": event_type, "event_id": event_id}
+
+
+def _checkout_idempotency_key(tenant_id: int, tenant_slug: str) -> str:
+    return f"tenant-checkout:{tenant_id}:{tenant_slug}:{settings.stripe_price_id}"
+
+
+def _claim_webhook_event(event_id: str, event_type: str) -> str:
+    """Atomicamente registra o evento Stripe como 'processing'.
+
+    Em PostgreSQL usa INSERT ... ON CONFLICT DO NOTHING para garantir atomicidade
+    (sem race condition entre workers). Em outros dialetos (ex: SQLite em testes)
+    cai no caminho de check-and-insert convencional.
+
+    Retorna:
+      "processed"  — evento já foi concluído com sucesso
+      "duplicate"  — outro worker está processando (ou houve falha anterior)
+      "processing" — reivindicado com sucesso por este worker
+    """
+    from sqlalchemy.exc import IntegrityError
+    from ..core.database import session_scope
+    from ..models import StripeWebhookEvent
+
+    with session_scope() as session:
+        dialect = session.bind.dialect.name if hasattr(session, "bind") and session.bind else "postgresql"
+
+        if dialect == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+            stmt = (
+                pg_insert(StripeWebhookEvent)
+                .values(event_id=event_id, event_type=event_type, status="processing")
+                .on_conflict_do_nothing(index_elements=["event_id"])
+            )
+            result = session.execute(stmt)
+            if result.rowcount == 0:
+                existing = (
+                    session.query(StripeWebhookEvent)
+                    .filter(StripeWebhookEvent.event_id == event_id)
+                    .first()
+                )
+                if existing and existing.status == "processed":
+                    return "processed"
+                return "duplicate"
+            return "processing"
+
+        # Fallback para dialetos não-PostgreSQL (SQLite em testes)
+        existing = (
+            session.query(StripeWebhookEvent)
+            .filter(StripeWebhookEvent.event_id == event_id)
+            .first()
+        )
+        if existing:
+            if existing.status == "processed":
+                return "processed"
+            return "duplicate"
+
+        try:
+            session.add(StripeWebhookEvent(
+                event_id=event_id,
+                event_type=event_type,
+                status="processing",
+            ))
+            session.flush()
+            return "processing"
+        except IntegrityError:
+            session.rollback()
+            return "duplicate"
+
+
+def _finalize_webhook_event(event_id: str, status: str, error_message: str | None = None) -> None:
+    from ..core.database import session_scope
+    from ..models import StripeWebhookEvent
+
+    with session_scope() as session:
+        webhook_event = (
+            session.query(StripeWebhookEvent)
+            .filter(StripeWebhookEvent.event_id == event_id)
+            .first()
+        )
+        if not webhook_event:
+            webhook_event = StripeWebhookEvent(event_id=event_id, event_type="unknown", status=status)
+
+        webhook_event.status = status
+        webhook_event.error_message = error_message
+        webhook_event.processed_at = datetime.now(timezone.utc) if status in {"processed", "ignored"} else None
+        session.add(webhook_event)
 
 
 def _get_tenant_by_customer(session, customer_id: str):
@@ -112,7 +217,6 @@ def _handle_checkout_completed(data: dict) -> None:
 
 def _handle_subscription_change(data: dict) -> None:
     from ..core.database import session_scope
-    from datetime import timezone
 
     customer_id = data.get("customer")
     status = data.get("status")

@@ -45,10 +45,14 @@ import {
   BarChart,
   Bar,
   Cell,
-  CartesianGrid
+  CartesianGrid,
+  LineChart,
+  Line,
+  PieChart,
+  Pie
 } from "recharts";
 
-const DEFAULT_FILTERS = { turno: "", serie: "", turma: "", disciplina: "" };
+const DEFAULT_FILTERS = { turno: "", serie: "", turma: "", disciplina: "", trimestre: "" };
 
 const deriveSerieFromTurma = (turma?: string) => {
   if (!turma) return "";
@@ -94,15 +98,18 @@ export const RelatorioDetailPage = () => {
 
   const serieOptions = useMemo(() => {
     if (!definition?.filters?.serie) return [];
+    const filtered = turmasList.filter((item) => {
+      return !filters.turno || item.turno === filters.turno;
+    });
     const set = new Set<string>();
-    turmasList.forEach((item) => {
+    filtered.forEach((item) => {
       const serie = deriveSerieFromTurma(item.turma);
       if (serie) {
         set.add(serie);
       }
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
-  }, [definition?.filters?.serie, turmasList]);
+  }, [definition?.filters?.serie, filters.turno, turmasList]);
 
   const turmaOptions = useMemo(() => {
     if (!definition?.filters?.turma) return [];
@@ -114,6 +121,13 @@ export const RelatorioDetailPage = () => {
     const set = new Set(filtered.map((item) => item.turma));
     return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [definition?.filters?.turma, filters.serie, filters.turno, turmasList]);
+
+  useEffect(() => {
+    if (!definition?.filters?.serie || !filters.serie) return;
+    if (!serieOptions.includes(filters.serie)) {
+      setFilters((prev) => ({ ...prev, serie: "", turma: "" }));
+    }
+  }, [definition?.filters?.serie, filters.serie, serieOptions]);
 
   useEffect(() => {
     if (!definition?.filters?.turma || !filters.turma) return;
@@ -133,7 +147,8 @@ export const RelatorioDetailPage = () => {
       turno: filters.turno || undefined,
       serie: filters.serie || undefined,
       turma: filters.turma || undefined,
-      disciplina: filters.disciplina || undefined
+      disciplina: filters.disciplina || undefined,
+      trimestre: filters.trimestre || undefined,
     }),
     [filters]
   );
@@ -182,6 +197,7 @@ export const RelatorioDetailPage = () => {
     if (sanitizedFilters.serie) params.set("serie", sanitizedFilters.serie);
     if (sanitizedFilters.turma) params.set("turma", sanitizedFilters.turma);
     if (sanitizedFilters.disciplina) params.set("disciplina", sanitizedFilters.disciplina);
+    if (sanitizedFilters.trimestre) params.set("trimestre", sanitizedFilters.trimestre);
 
     const url = `${API_BASE}/relatorios/${slug}?${params.toString()}`;
 
@@ -368,6 +384,20 @@ export const RelatorioDetailPage = () => {
                   ))}
                 </TextField>
               )}
+              {definition.filters?.trimestre && (
+                <TextField
+                  select
+                  label="Trimestre"
+                  value={filters.trimestre}
+                  onChange={handleFilterChange("trimestre")}
+                  fullWidth
+                >
+                  <MenuItem value="">Todos os trimestres</MenuItem>
+                  <MenuItem value="1">1º Trimestre (0–30 pts)</MenuItem>
+                  <MenuItem value="2">2º Trimestre (0–30 pts)</MenuItem>
+                  <MenuItem value="3">3º Trimestre (0–40 pts)</MenuItem>
+                </TextField>
+              )}
             </Stack>
             {combinationIssues.length > 0 && (
               <Box mt={2}>
@@ -430,6 +460,10 @@ export const RelatorioDetailPage = () => {
             <RadarVisual data={rows} />
           ) : definition.type === "bar" ? (
             <BarVisual data={rows} />
+          ) : definition.type === "pie" ? (
+            <PieVisual data={rows} />
+          ) : definition.type === "line" ? (
+            <LineVisual data={rows} />
           ) : null}
         </CardContent>
       </Card>
@@ -438,7 +472,7 @@ export const RelatorioDetailPage = () => {
 };
 
 const ReportSummaryCards = ({ summary }: { summary: any }) => {
-  const items = [summary.main, summary.secondary].filter(Boolean);
+  const items = [summary.main, summary.secondary, summary.extra].filter(Boolean);
 
   return (
     <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
@@ -559,6 +593,66 @@ const BarVisual = ({ data }: { data: any[] }) => {
           })}
         </Bar>
       </BarChart>
+    </ResponsiveContainer>
+  );
+};
+
+const PieVisual = ({ data }: { data: any[] }) => {
+  const aggregated = useMemo(() => {
+    const counts: Record<string, number> = {};
+    data.forEach((row) => {
+      const sit = row.situacao || "N/A";
+      counts[sit] = (counts[sit] || 0) + 1;
+    });
+    return Object.entries(counts).map(([name, value]) => ({ name, value }));
+  }, [data]);
+
+  const COLORS = {
+    APROVADO: "#10B981",
+    RECUPERAÇÃO: "#F59E0B",
+    REPROVADO: "#EF4444",
+  };
+
+  return (
+    <Box display="flex" flexDirection="column" alignItems="center" gap={3}>
+      <ResponsiveContainer width="100%" height={350}>
+        <PieChart>
+          <Pie
+            data={aggregated}
+            dataKey="value"
+            nameKey="name"
+            cx="50%"
+            cy="50%"
+            outerRadius={100}
+            fill="#8884d8"
+            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+          >
+            {aggregated.map((entry, index) => {
+              const color = COLORS[entry.name as keyof typeof COLORS] || "#64748B";
+              return <Cell key={`cell-${index}`} fill={color} />;
+            })}
+          </Pie>
+          <Tooltip />
+          <Legend />
+        </PieChart>
+      </ResponsiveContainer>
+    </Box>
+  );
+};
+
+const LineVisual = ({ data }: { data: any[] }) => {
+  return (
+    <ResponsiveContainer width="100%" height={400}>
+      <LineChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="turma" />
+        <YAxis domain={[0, 100]} />
+        <Tooltip />
+        <Legend />
+        <Line type="monotone" dataKey="t1" name="1º Trimestre" stroke="#06B6D4" strokeWidth={3} activeDot={{ r: 8 }} />
+        <Line type="monotone" dataKey="t2" name="2º Trimestre" stroke="#3b82f6" strokeWidth={3} />
+        <Line type="monotone" dataKey="t3" name="3º Trimestre" stroke="#10b981" strokeWidth={3} />
+      </LineChart>
     </ResponsiveContainer>
   );
 };

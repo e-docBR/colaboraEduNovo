@@ -53,6 +53,30 @@ export interface AISettings {
   provider_models: Record<string, { id: string; label: string }[]>;
 }
 
+export interface EscolaSettings {
+  cnpj?: string;
+  endereco?: string;
+  telefone?: string;
+  email?: string;
+  media_aprovacao: number;
+  logo_url?: string | null;
+  whatsapp_enabled: boolean;
+  email_enabled: boolean;
+  whatsapp_instance_url?: string | null;
+  whatsapp_instance_token?: string | null;
+}
+
+export interface EscolaDetailResponse {
+  name: string;
+  slug: string;
+  settings: EscolaSettings;
+}
+
+export interface EscolaUpdatePayload {
+  name: string;
+  settings: EscolaSettings;
+}
+
 
 type DashboardKpis = {
   total_alunos: number;
@@ -61,6 +85,11 @@ type DashboardKpis = {
   alunos_em_risco: number;
   ocorrencias_abertas: number;
   comunicados_recentes: number;
+  grading_stage?: {
+    max_pts: number;
+    threshold: number;
+    trimester: "T1" | "T2" | "T3";
+  };
 };
 
 export type PublicTenant = {
@@ -150,6 +179,8 @@ export type NotaResumo = {
   trimestre2?: number | null;
   trimestre3?: number | null;
   total?: number | null;
+  recuperacao?: number | null;
+  conselho_de_classe?: number | null;
   faltas?: number | null;
   situacao?: string | null;
   aluno?: {
@@ -203,6 +234,7 @@ export type AlunoSummary = {
   senha_inicial?: string | null;
   is_archived?: boolean;
   deleted_at?: string | null;
+  max_pts?: number;
 };
 
 
@@ -213,6 +245,8 @@ export type AlunoNota = {
   trimestre2?: number | null;
   trimestre3?: number | null;
   total?: number | null;
+  recuperacao?: number | null;
+  conselho_de_classe?: number | null;
   faltas?: number | null;
   situacao?: string | null;
 };
@@ -246,6 +280,17 @@ export type TurmaSummary = {
   media?: number | null;
   faltas_medias?: number | null;
   slug?: string;
+  professor_ids?: number[];
+  max_pts?: number;
+};
+
+export type ProfessorTurma = {
+  turma: string;
+  turno: string;
+  total_alunos: number;
+  media: number;
+  faltas_medias: number;
+  max_pts?: number;
 };
 
 type ListTurmasResponse = {
@@ -338,6 +383,7 @@ export type RelatorioQueryArgs = {
   serie?: string;
   turma?: string;
   disciplina?: string;
+  trimestre?: string;
 };
 
 export type JobStatusResponse = {
@@ -388,7 +434,7 @@ export type Tenant = {
   is_active: boolean;
   domain?: string;
   created_at?: string;
-  academic_years?: Array<{ id: number; label: string; is_current: boolean }>;
+  academic_years?: Array<{ id: number; label: string; is_current: boolean; status: string; closed_at: string | null }>;
   plano?: string;
   plano_ativo?: boolean;
   plano_expira_em?: string | null;
@@ -446,12 +492,35 @@ export type StudentInterventionAnalysis = {
   turma?: string;
   global_risk: "ALTO" | "MEDIO" | "BAIXO";
   interventions: Intervention[];
-  stats: {
+  stats?: {
     total_faltas: number;
     disciplinas_abaixo_media: number;
   };
   status?: string;
 };
+
+export interface PedagogicalAction {
+  title: string;
+  description: string;
+  priority: "HIGH" | "MEDIUM" | "LOW";
+  type: "ACADEMIC" | "BEHAVIORAL" | "EMERGENCY";
+}
+
+export interface PedagogicalPlan {
+  id: number;
+  aluno_id: number;
+  aluno_nome: string;
+  diagnostico: string;
+  global_risk: "ALTO" | "MEDIO" | "BAIXO";
+  metas: string[];
+  acoes: PedagogicalAction[];
+  status: "PENDENTE" | "APROVADO" | "REJEITADO";
+  edited: boolean;
+  feedback_usuario?: string | null;
+  acoes_finais?: PedagogicalAction[] | null;
+  created_at: string;
+  updated_at: string;
+}
 
 const sanitizeParams = (params?: Record<string, string | number | boolean | undefined | null>) =>
   Object.fromEntries(
@@ -547,7 +616,7 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
 export const api = createApi({
   reducerPath: "boletinsApi",
   baseQuery: baseQueryWithReauth,
-  tagTypes: ["Dashboard", "Alunos", "Notas", "Uploads", "Turmas", "Usuarios", "Comunicados", "Ocorrencias", "Graficos", "AISettings"],
+  tagTypes: ["Dashboard", "Alunos", "Notas", "Uploads", "Turmas", "Usuarios", "Comunicados", "Ocorrencias", "Graficos", "AISettings", "Escola"],
   endpoints: (builder) => ({
     login: builder.mutation<LoginResponse, LoginRequest>({
       query: (body) => ({
@@ -624,7 +693,7 @@ export const api = createApi({
       }),
       providesTags: (result, _error, slug) => ["Turmas", { type: "Turmas", id: slug }]
     }),
-    updateTurma: builder.mutation<{ updated: number; turma: string }, { slug: string; nome: string; turno?: string }>({
+    updateTurma: builder.mutation<{ updated: number; turma: string }, { slug: string; nome: string; turno?: string; professor_ids?: number[] }>({
       query: ({ slug, ...body }) => ({
         url: `/turmas/${slug}`,
         method: "PATCH",
@@ -761,7 +830,7 @@ export const api = createApi({
       query: () => "/usuarios/me",
       providesTags: ["Usuarios"]
     }),
-    listComunicados: builder.query<{ items: { id: number; titulo: string; conteudo: string; autor: string; data_envio: string; arquivado?: boolean; target_type?: string; target_value?: string; is_read?: boolean }[]; meta: { page: number; per_page: number; total: number } }, { page?: number; per_page?: number } | void>({
+    listComunicados: builder.query<{ items: { id: number; titulo: string; conteudo: string; autor: string; autor_id?: number | null; data_envio: string; arquivado?: boolean; target_type?: string; target_value?: string; is_read?: boolean }[]; meta: { page: number; per_page: number; total: number } }, { page?: number; per_page?: number } | void>({
       query: (params) => ({
         url: "/comunicados",
         params: sanitizeParams(params ?? undefined)
@@ -852,32 +921,38 @@ export const api = createApi({
       providesTags: ["AISettings"]
     }),
 
-    getAISettings: builder.query<AISettings, void>({
-      query: () => "/ai-settings",
+    getAISettings: builder.query<AISettings, number | void>({
+      query: (tenantId) => ({
+        url: "/ai-settings",
+        headers: tenantId ? { "X-Tenant-ID": tenantId.toString() } : undefined
+      }),
       providesTags: ["AISettings"]
     }),
 
-    updateAISettings: builder.mutation<{ message: string; display_name: string; is_active: boolean }, Partial<AISettings>>({
-      query: (body) => ({
+    updateAISettings: builder.mutation<{ message: string; display_name: string; is_active: boolean }, Partial<AISettings> & { tenantId?: number }>({
+      query: ({ tenantId, ...body }) => ({
         url: "/ai-settings",
         method: "PUT",
+        headers: tenantId ? { "X-Tenant-ID": tenantId.toString() } : undefined,
         body
       }),
       invalidatesTags: ["AISettings"]
     }),
 
-    testAISettings: builder.mutation<{ ok: boolean; message: string }, { provider: string; api_key: string; model_name: string }>({
-      query: (body) => ({
+    testAISettings: builder.mutation<{ ok: boolean; message: string }, { provider: string; api_key: string; model_name: string; tenantId?: number }>({
+      query: ({ tenantId, ...body }) => ({
         url: "/ai-settings/test",
         method: "POST",
+        headers: tenantId ? { "X-Tenant-ID": tenantId.toString() } : undefined,
         body
       })
     }),
 
-    clearAIKey: builder.mutation<{ message: string }, void>({
-      query: () => ({
+    clearAIKey: builder.mutation<{ message: string }, number | void>({
+      query: (tenantId) => ({
         url: "/ai-settings/key",
-        method: "DELETE"
+        method: "DELETE",
+        headers: tenantId ? { "X-Tenant-ID": tenantId.toString() } : undefined
       }),
       invalidatesTags: ["AISettings"]
     }),
@@ -932,9 +1007,17 @@ export const api = createApi({
       }),
       invalidatesTags: ["Alunos", "Dashboard", "Turmas"]
     }),
-    listAcademicYears: builder.query<{ id: number; label: string; is_current: boolean }[], void>({
+    listAcademicYears: builder.query<{ id: number; label: string; is_current: boolean; status: string; closed_at: string | null; trimestre_atual: number }[], void>({
       query: () => "/academic-years",
       providesTags: ["Dashboard"]
+    }),
+    updateAcademicYearStatus: builder.mutation<{ id: number; label: string; is_current: boolean; status: string; closed_at: string | null; trimestre_atual: number }, { yearId: number; status?: "open" | "closed"; trimestre_atual?: 1 | 2 | 3 }>({
+      query: ({ yearId, ...body }) => ({
+        url: `/academic-years/${yearId}`,
+        method: "PATCH",
+        body
+      }),
+      invalidatesTags: ["Dashboard"]
     }),
 
     // Super Admin Endpoints
@@ -969,9 +1052,18 @@ export const api = createApi({
     deleteTenant: builder.mutation<void, number>({
       query: (id) => ({
         url: `/admin/tenants/${id}`,
-        method: "DELETE"
+        method: "DELETE",
+        body: { confirm_delete: true }
       }),
       invalidatesTags: ["Usuarios"]
+    }),
+    updateTenantYearStatus: builder.mutation<{ id: number; label: string; is_current: boolean; status: string; closed_at: string | null }, { tenantId: number; yearId: number; status: "open" | "closed" }>({
+      query: ({ tenantId, yearId, ...body }) => ({
+        url: `/admin/tenants/${tenantId}/years/${yearId}`,
+        method: "PATCH",
+        body
+      }),
+      invalidatesTags: ["Usuarios", "Dashboard"]
     }),
     getInterventions: builder.query<StudentInterventionAnalysis, number | string>({
       query: (alunoId) => `/ai/interventions/${alunoId}`
@@ -986,6 +1078,25 @@ export const api = createApi({
         body
       })
     }),
+    generatePedagogicalPlan: builder.mutation<PedagogicalPlan, { aluno_id: number }>({
+      query: (body) => ({
+        url: "/ai/interventions/generate",
+        method: "POST",
+        body
+      }),
+      invalidatesTags: ["Dashboard"]
+    }),
+    savePedagogicalPlanFeedback: builder.mutation<PedagogicalPlan, { id: number; status: "APROVADO" | "REJEITADO"; feedback_usuario?: string; acoes_finais?: PedagogicalAction[] }>({
+      query: (body) => ({
+        url: "/ai/interventions/save-feedback",
+        method: "POST",
+        body
+      }),
+      invalidatesTags: ["Dashboard"]
+    }),
+    getPedagogicalPlanHistory: builder.query<PedagogicalPlan[], number | string>({
+      query: (alunoId) => `/ai/interventions/history/${alunoId}`
+    }),
     getBillingStatus: builder.query<BillingStatusResponse, void>({
       query: () => "/billing/status",
       providesTags: ["Dashboard"]
@@ -995,6 +1106,30 @@ export const api = createApi({
         url: "/billing/checkout",
         method: "POST"
       })
+    }),
+    getProfessorTurmas: builder.query<ProfessorTurma[], void>({
+      query: () => "/professores/me/turmas",
+      providesTags: ["Turmas"]
+    }),
+    getEscolaSettings: builder.query<EscolaDetailResponse, void>({
+      query: () => "/escola",
+      providesTags: ["Escola"]
+    }),
+    updateEscolaSettings: builder.mutation<{ message: string; name: string; settings: EscolaSettings }, EscolaUpdatePayload>({
+      query: (body) => ({
+        url: "/escola",
+        method: "PUT",
+        body
+      }),
+      invalidatesTags: ["Escola"]
+    }),
+    uploadEscolaLogo: builder.mutation<{ logo_url: string }, FormData>({
+      query: (body) => ({
+        url: "/escola/logo",
+        method: "POST",
+        body
+      }),
+      invalidatesTags: ["Escola"]
     })
   })
 });
@@ -1054,14 +1189,23 @@ export const {
   useRestoreAlunoMutation,
   useUploadAlunosCsvMutation,
   useListAcademicYearsQuery,
+  useUpdateAcademicYearStatusMutation,
   useListTenantsQuery,
   useCreateTenantMutation,
   useAddAcademicYearToTenantMutation,
   useUpdateTenantMutation,
   useDeleteTenantMutation,
+  useUpdateTenantYearStatusMutation,
   useGetInterventionsQuery,
   useGetStudentRiskQuery,
   useGetBulkInterventionsMutation,
+  useGeneratePedagogicalPlanMutation,
+  useSavePedagogicalPlanFeedbackMutation,
+  useGetPedagogicalPlanHistoryQuery,
   useGetBillingStatusQuery,
-  useCreateBillingCheckoutMutation
+  useCreateBillingCheckoutMutation,
+  useGetProfessorTurmasQuery,
+  useGetEscolaSettingsQuery,
+  useUpdateEscolaSettingsMutation,
+  useUploadEscolaLogoMutation
 } = api;

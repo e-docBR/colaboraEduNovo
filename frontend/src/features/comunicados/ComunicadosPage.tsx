@@ -57,7 +57,8 @@ import {
     useDeleteComunicadoMutation,
     useMarkComunicadoReadMutation,
     useListAlunosQuery,
-    useGetComunicadoLeiturasQuery
+    useGetComunicadoLeiturasQuery,
+    useGetProfessorTurmasQuery
 } from "../../lib/api";
 import { useAppSelector } from "../../app/hooks";
 
@@ -77,6 +78,7 @@ export const ComunicadosPage = () => {
         user?.role === "coordenador" ||
         user?.role === "orientacao" ||
         user?.role === "orientador";
+    const isProfessor = user?.role === "professor";
 
     const [open, setOpen] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
@@ -88,12 +90,18 @@ export const ComunicadosPage = () => {
 
     // For filtering turmas
     const { data: alunosData } = useListAlunosQuery({ per_page: 1000 });
+    const { data: professorTurmasData } = useGetProfessorTurmasQuery(undefined, { skip: !isProfessor });
+
     const turmas = useMemo(() => {
+        if (isProfessor) {
+            if (!professorTurmasData) return [];
+            return professorTurmasData.map((pt: any) => pt.turma).sort();
+        }
         if (!alunosData?.items) return [];
         // Extract unique turmas
         const t = new Set(alunosData.items.map((a: any) => a.turma).filter(Boolean));
         return Array.from(t).sort();
-    }, [alunosData]);
+    }, [isProfessor, professorTurmasData, alunosData]);
 
     const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: "success" | "error" }>({
         open: false, message: "", severity: "success"
@@ -147,7 +155,7 @@ export const ComunicadosPage = () => {
         setTitulo("");
         setConteudo("");
         setEditingId(null);
-        setTargetType("TODOS");
+        setTargetType(isProfessor ? "TURMA" : "TODOS");
         setTargetValue("");
         setNotificarResponsaveis(false);
     };
@@ -157,7 +165,8 @@ export const ComunicadosPage = () => {
         setEditingId(menuComunicado.id);
         setTitulo(menuComunicado.titulo);
         setConteudo(menuComunicado.conteudo);
-        setTargetType("TODOS");
+        setTargetType(menuComunicado.target_type || (isProfessor ? "TURMA" : "TODOS"));
+        setTargetValue(menuComunicado.target_value || "");
         setOpen(true);
         handleCloseMenu();
     };
@@ -248,7 +257,7 @@ export const ComunicadosPage = () => {
                         Comunicação oficial entre escola, alunos e professores.
                     </Typography>
                 </Box>
-                {isAdmin && (
+                {(isAdmin || isProfessor) && (
                     <Button
                         variant="contained"
                         onClick={() => { resetForm(); setOpen(true); }}
@@ -327,7 +336,7 @@ export const ComunicadosPage = () => {
                                     </Avatar>
                                 }
                                 action={
-                                    isAdmin && (
+                                    (isAdmin || (isProfessor && comm.autor_id === user?.id)) && (
                                         <IconButton onClick={(e) => { e.stopPropagation(); handleOpenMenu(e, comm); }}>
                                             <MoreVertIcon />
                                         </IconButton>
@@ -430,42 +439,44 @@ export const ComunicadosPage = () => {
                             placeholder="Ex: Reunião de Pais"
                             variant="outlined"
                         />
-                        <FormControl fullWidth>
-                            <InputLabel id="destinatario-label">Destinatário</InputLabel>
-                            <Select
-                                labelId="destinatario-label"
-                                value={targetType}
-                                label="Destinatário"
-                                onChange={(e) => {
-                                    setTargetType(e.target.value);
-                                    setTargetValue(""); // Reset value when type changes
-                                }}
-                                renderValue={(selected) => (
-                                    <Box display="flex" alignItems="center" gap={1.5}>
-                                        {getTargetIcon(selected)}
-                                        <Typography fontWeight={500}>
-                                            {selected === "TODOS" ? "Todos (Escola Inteira)" :
-                                             selected === "TURMA" ? "Turma Específica" :
-                                             selected === "PROFESSOR" ? "Professor(es)" :
-                                             "Aluno Específico"}
-                                        </Typography>
-                                    </Box>
-                                )}
-                            >
-                                <MenuItem value="TODOS">
-                                    <ListItemIcon><SchoolIcon fontSize="small" sx={{ color: "primary.main" }} /></ListItemIcon>
-                                    <Typography variant="body2">Todos (Escola Inteira)</Typography>
-                                </MenuItem>
-                                <MenuItem value="TURMA">
-                                    <ListItemIcon><GroupsIcon fontSize="small" sx={{ color: "secondary.main" }} /></ListItemIcon>
-                                    <Typography variant="body2">Turma Específica</Typography>
-                                </MenuItem>
-                                <MenuItem value="PROFESSOR">
-                                    <ListItemIcon><GroupsIcon fontSize="small" sx={{ color: "warning.main" }} /></ListItemIcon>
-                                    <Typography variant="body2">Professor(es)</Typography>
-                                </MenuItem>
-                            </Select>
-                        </FormControl>
+                        {!isProfessor && (
+                            <FormControl fullWidth>
+                                <InputLabel id="destinatario-label">Destinatário</InputLabel>
+                                <Select
+                                    labelId="destinatario-label"
+                                    value={targetType}
+                                    label="Destinatário"
+                                    onChange={(e) => {
+                                        setTargetType(e.target.value);
+                                        setTargetValue(""); // Reset value when type changes
+                                    }}
+                                    renderValue={(selected) => (
+                                        <Box display="flex" alignItems="center" gap={1.5}>
+                                            {getTargetIcon(selected)}
+                                            <Typography fontWeight={500}>
+                                                {selected === "TODOS" ? "Todos (Escola Inteira)" :
+                                                 selected === "TURMA" ? "Turma Específica" :
+                                                 selected === "PROFESSOR" ? "Professor(es)" :
+                                                 "Aluno Específico"}
+                                            </Typography>
+                                        </Box>
+                                    )}
+                                >
+                                    <MenuItem value="TODOS">
+                                        <ListItemIcon><SchoolIcon fontSize="small" sx={{ color: "primary.main" }} /></ListItemIcon>
+                                        <Typography variant="body2">Todos (Escola Inteira)</Typography>
+                                    </MenuItem>
+                                    <MenuItem value="TURMA">
+                                        <ListItemIcon><GroupsIcon fontSize="small" sx={{ color: "secondary.main" }} /></ListItemIcon>
+                                        <Typography variant="body2">Turma Específica</Typography>
+                                    </MenuItem>
+                                    <MenuItem value="PROFESSOR">
+                                        <ListItemIcon><GroupsIcon fontSize="small" sx={{ color: "warning.main" }} /></ListItemIcon>
+                                        <Typography variant="body2">Professor(es)</Typography>
+                                    </MenuItem>
+                                </Select>
+                            </FormControl>
+                        )}
 
                         {/* Dynamic Target Value Input */}
                         {targetType === "TURMA" && (
@@ -493,7 +504,7 @@ export const ComunicadosPage = () => {
                             onChange={(e) => setConteudo(e.target.value)}
                             placeholder="Escreva sua mensagem aqui..."
                         />
-                        {!editingId && (
+                        {!editingId && !isProfessor && (
                             <FormControlLabel
                                 control={
                                     <Switch

@@ -36,6 +36,14 @@ import { useGetMyAlunoQuery, useListComunicadosQuery, useListOcorrenciasQuery, u
 
 const formatNota = (value?: number | null) => (typeof value === "number" ? value.toFixed(1) : "-");
 
+const getNotaColor = (value: number | null | undefined, scale: number) => {
+  if (value === null || value === undefined) return "text.primary";
+  const ratio = value / scale;
+  if (ratio < 0.50) return "error.main";
+  if (ratio < 0.57) return "warning.main";
+  return "success.main";
+};
+
 const formatSituacao = (value?: string | null) => {
   if (!value) return { label: "-", color: "default" as const };
   const normalized = value.toUpperCase();
@@ -73,6 +81,9 @@ export const MeuBoletimPage = () => {
   const [markRead] = useMarkComunicadoReadMutation();
 
   const token = useAppSelector((state) => state.auth.accessToken);
+  const tenantId = useAppSelector((state) => state.app.tenantId);
+  const academicYearId = useAppSelector((state) => state.app.academicYearId);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   // Mark unread comunicados as read when switching to the recados tab
   useEffect(() => {
@@ -86,13 +97,13 @@ export const MeuBoletimPage = () => {
   const handleDownloadPdf = async () => {
     if (!alunoId || !token) return;
     const baseUrl = import.meta.env.VITE_API_BASE_URL || "/api/v1";
-
+    setPdfLoading(true);
     try {
-      const response = await fetch(`${baseUrl}/alunos/${alunoId}/boletim/pdf`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
+      const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+      if (tenantId) headers["X-Tenant-ID"] = String(tenantId);
+      if (academicYearId) headers["x-academic-year-id"] = String(academicYearId);
+
+      const response = await fetch(`${baseUrl}/alunos/${alunoId}/boletim/pdf`, { headers });
       if (!response.ok) throw new Error("Falha ao gerar PDF");
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -101,9 +112,12 @@ export const MeuBoletimPage = () => {
       a.download = `Meu_Boletim_${data?.nome.replace(/\s+/g, "_")}.pdf`;
       document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
     } catch {
       setSnackbar({ open: true, message: "Erro ao gerar o PDF. Tente novamente.", severity: "error" });
+    } finally {
+      setPdfLoading(false);
     }
   };
 
@@ -150,15 +164,7 @@ export const MeuBoletimPage = () => {
               <Typography variant="body2" color="text.secondary">
                 Média geral
               </Typography>
-              <Typography fontWeight={600} color={
-                data.media === null || data.media === undefined
-                  ? "text.primary"
-                  : data.media < 50
-                    ? "error.main"
-                    : data.media < 60
-                      ? "warning.main"
-                      : "success.main"
-              }>
+              <Typography fontWeight={600} color={getNotaColor(data.media, data.max_pts ?? 100)}>
                 {typeof data.media === "number" ? data.media.toFixed(1) : "-"}
               </Typography>
             </Box>
@@ -167,10 +173,11 @@ export const MeuBoletimPage = () => {
             <Button
               variant="contained"
               color="success"
-              startIcon={<DownloadIcon />}
+              startIcon={pdfLoading ? <CircularProgress size={16} color="inherit" /> : <DownloadIcon />}
               onClick={handleDownloadPdf}
+              disabled={pdfLoading}
             >
-              Baixar Meu Boletim (PDF)
+              {pdfLoading ? "Gerando..." : "Baixar Meu Boletim (PDF)"}
             </Button>
           </Box>
         </CardContent>
@@ -212,10 +219,10 @@ export const MeuBoletimPage = () => {
                 return (
                   <TableRow key={nota.id} hover>
                     <TableCell>{nota.disciplina}</TableCell>
-                    <TableCell>{formatNota(nota.trimestre1)}</TableCell>
-                    <TableCell>{formatNota(nota.trimestre2)}</TableCell>
-                    <TableCell>{formatNota(nota.trimestre3)}</TableCell>
-                    <TableCell>{formatNota(nota.total)}</TableCell>
+                    <TableCell sx={{ color: getNotaColor(nota.trimestre1, 30), fontWeight: 500 }}>{formatNota(nota.trimestre1)}</TableCell>
+                    <TableCell sx={{ color: getNotaColor(nota.trimestre2, 30), fontWeight: 500 }}>{formatNota(nota.trimestre2)}</TableCell>
+                    <TableCell sx={{ color: getNotaColor(nota.trimestre3, 40), fontWeight: 500 }}>{formatNota(nota.trimestre3)}</TableCell>
+                    <TableCell sx={{ color: getNotaColor(nota.total, data.max_pts ?? 100), fontWeight: 700 }}>{formatNota(nota.total)}</TableCell>
                     <TableCell>{nota.faltas ?? "-"}</TableCell>
                     <TableCell>
                       <Chip label={situacao.label} color={situacao.color} size="small" variant="outlined" />

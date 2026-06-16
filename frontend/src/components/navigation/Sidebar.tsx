@@ -12,6 +12,8 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import ArchiveIcon from "@mui/icons-material/Archive";
+import EventNoteIcon from "@mui/icons-material/EventNote";
+import SettingsIcon from "@mui/icons-material/Settings";
 import { NavLink } from "react-router-dom";
 import { memo, useMemo } from "react";
 import { useAppSelector } from "../../app/hooks";
@@ -33,7 +35,8 @@ const staffNavItems = [
   { label: "Turmas", icon: <ClassIcon />, path: `${appBasePath}/turmas` },
   { label: "Notas", icon: <TableViewIcon />, path: `${appBasePath}/notas` },
   { label: "Gráficos", icon: <InsightsIcon />, path: `${appBasePath}/graficos` },
-  { label: "Relatórios", icon: <ArticleIcon />, path: `${appBasePath}/relatorios` }
+  { label: "Relatórios", icon: <ArticleIcon />, path: `${appBasePath}/relatorios` },
+  { label: "Ata de Resultado", icon: <ArticleIcon />, path: `${appBasePath}/ata-resultado` }
 ];
 
 const alunoNavItems = [{ label: "Meu Boletim", icon: <PeopleIcon />, path: `${appBasePath}/meu-boletim` }];
@@ -56,9 +59,11 @@ const SidebarInner = ({ mobile }: { mobile?: boolean }) => {
 
     if (user?.role === "admin" || user?.role === "super_admin") {
       base.splice(1, 0, { label: "Usuários", icon: <ManageAccountsIcon />, path: `${appBasePath}/usuarios` });
+      base.push({ label: "Configurações", icon: <SettingsIcon />, path: `${appBasePath}/configuracoes` });
     }
 
     if (isAdmin) {
+      base.push({ label: "Anos Letivos", icon: <EventNoteIcon />, path: `${appBasePath}/admin/anos-letivos` });
       base.push({ label: "Uploads", icon: <UploadFileIcon />, path: `${appBasePath}/uploads` });
       base.push({ label: "Arquivo de Alunos", icon: <ArchiveIcon />, path: `${appBasePath}/alunos/arquivo` });
       base.push({ label: "Audit Logs", icon: <ArticleIcon />, path: `${appBasePath}/audit-logs` });
@@ -66,6 +71,10 @@ const SidebarInner = ({ mobile }: { mobile?: boolean }) => {
 
     if (isAdmin || user?.role === "professor" || user?.role === "orientador" || user?.role === "diretor") {
       base.push({ label: "Visão Professor", icon: <InsightsIcon />, path: `${appBasePath}/professor` });
+    }
+
+    if (isAdmin || user?.role === "professor") {
+      base.push({ label: "Minhas turmas", icon: <ClassIcon />, path: `${appBasePath}/professor/minhas-turmas` });
     }
 
     if (isAdmin || user?.role === "coordenador") {

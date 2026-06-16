@@ -120,9 +120,9 @@ class TestWeakPasswordRejection:
         assert stored is not None, "Token was consumed before password validation — violates C4"
 
 
-class TestStudentRandomPassword:
-    def test_aluno_initial_password_is_not_matricula(self, client, auth_headers):
-        """Student account initial password must be a random token, not the matricula."""
+class TestStudentInitialPassword:
+    def test_aluno_initial_password_is_matricula(self, client, auth_headers):
+        """Student account initial password must be the matricula."""
         year_id = _get_default_year()
         response = client.post("/api/v1/alunos", headers=auth_headers, json={
             "matricula": "SEC-TEST-001",
@@ -134,17 +134,15 @@ class TestStudentRandomPassword:
         assert response.status_code == 201
         data = response.json
         assert "senha_inicial" in data
-        # Must not be the matricula
-        assert data["senha_inicial"] != "SEC-TEST-001"
-        # Must be a proper random token (at least 16 chars)
-        assert len(data["senha_inicial"]) >= 16
+        # Must be the matricula
+        assert data["senha_inicial"] == "SEC-TEST-001"
 
 
 class TestOcorrenciasCRUD:
     def test_create_and_list_ocorrencia(self, client, auth_headers, flask_app):
         from app.core.security import generate_tokens
         from app.core.database import session_scope as _ss
-        from app.models import Usuario, Tenant
+        from app.models import Usuario
 
         with _ss() as session:
             user = session.query(Usuario).filter(Usuario.username == "admin_test").first()

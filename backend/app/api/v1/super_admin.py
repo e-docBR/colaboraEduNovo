@@ -45,7 +45,13 @@ def register(parent: Blueprint) -> None:
                     "slug": t.slug,
                     "is_active": t.is_active,
                     "years": [
-                        {"id": y.id, "label": y.label, "is_current": y.is_current}
+                        {
+                            "id": y.id,
+                            "label": y.label,
+                            "is_current": y.is_current,
+                            "status": y.status,
+                            "closed_at": y.closed_at.isoformat() if y.closed_at else None,
+                        }
                         for y in t.academic_years
                     ]
                 } for t in tenants
@@ -137,7 +143,7 @@ def register(parent: Blueprint) -> None:
         with session_scope() as session:
             # Optionally set previous ones to is_current=False
             if data.get("set_current", False):
-                session.query(AcademicYear).filter(
+                session.query(AcademicYear).execution_options(include_all_tenants=True).filter(
                     AcademicYear.tenant_id == tenant_id
                 ).update({"is_current": False})
                 
@@ -149,13 +155,59 @@ def register(parent: Blueprint) -> None:
             session.add(new_year)
             return jsonify({"message": "Ano acadêmico adicionado"}), 201
 
+    @bp.route("/tenants/<int:tenant_id>/years/<int:year_id>", methods=["PATCH"])
+    @jwt_required()
+    @super_admin_required
+    def update_academic_year(tenant_id, year_id):
+        """Super admin pode fechar ou reabrir qualquer ano letivo de qualquer tenant."""
+        from datetime import datetime, timezone
+
+        data = request.get_json() or {}
+        new_status = (data.get("status") or "").strip().lower()
+        if new_status not in ("open", "closed"):
+            return jsonify({"error": "status deve ser 'open' ou 'closed'"}), 400
+
+        with session_scope() as session:
+            year = session.query(AcademicYear).filter(
+                AcademicYear.id == year_id,
+                AcademicYear.tenant_id == tenant_id,
+            ).execution_options(include_all_tenants=True).first()
+            if not year:
+                return jsonify({"error": "Ano letivo não encontrado."}), 404
+
+            if new_status == "closed" and year.is_current:
+                return jsonify({"error": "Não é possível encerrar o ano letivo atual. "
+                                         "Defina outro ano como atual antes de encerrar este."}), 409
+
+            old_status = year.status
+            year.status = new_status
+            year.closed_at = datetime.now(timezone.utc) if new_status == "closed" else None
+
+            actor_id = int(get_jwt_identity())
+            action = "close_year" if new_status == "closed" else "reopen_year"
+            log_action(session, actor_id, action, "AcademicYear", year.id,
+                       {"tenant_id": tenant_id, "label": year.label,
+                        "old_status": old_status, "new_status": new_status})
+
+            return jsonify({
+                "id": year.id,
+                "label": year.label,
+                "is_current": year.is_current,
+                "status": year.status,
+                "closed_at": year.closed_at.isoformat() if year.closed_at else None,
+            })
+
     @bp.route("/tenants/<int:tenant_id>", methods=["PATCH"])
     @jwt_required()
     @super_admin_required
     def update_tenant(tenant_id):
         data = request.get_json()
         with session_scope() as session:
-            tenant = session.get(Tenant, tenant_id)
+            tenant = session.execute(
+                select(Tenant)
+                .where(Tenant.id == tenant_id)
+                .execution_options(include_all_tenants=True)
+            ).scalar_one_or_none()
             if not tenant:
                 return jsonify({"error": "Escola não encontrada"}), 404
             
@@ -177,17 +229,25 @@ def register(parent: Blueprint) -> None:
             return jsonify({"error": "Confirme a exclusão enviando confirm_delete: true"}), 400
 
         with session_scope() as session:
-            tenant = session.get(Tenant, tenant_id)
+            tenant = session.execute(
+                select(Tenant)
+                .where(Tenant.id == tenant_id)
+                .execution_options(include_all_tenants=True)
+            ).scalar_one_or_none()
             if not tenant:
                 return jsonify({"error": "Escola não encontrada"}), 404
 
             # Check all dependent data before attempting delete to avoid FK violations
             aluno_count = session.execute(
-                select(func.count(Aluno.id)).where(Aluno.tenant_id == tenant_id)
+                select(func.count(Aluno.id))
+                .where(Aluno.tenant_id == tenant_id)
+                .execution_options(include_all_tenants=True)
             ).scalar() or 0
 
             usuario_count = session.execute(
-                select(func.count(Usuario.id)).where(Usuario.tenant_id == tenant_id)
+                select(func.count(Usuario.id))
+                .where(Usuario.tenant_id == tenant_id)
+                .execution_options(include_all_tenants=True)
             ).scalar() or 0
 
             if aluno_count > 0 or usuario_count > 0:

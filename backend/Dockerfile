@@ -1,8 +1,8 @@
-FROM python:3.12-slim
+FROM python:3.12-slim AS builder
 
-WORKDIR /app
+WORKDIR /build
 
-# Install system dependencies (gcc and libpq-dev for postgres)
+# Install build-time system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
     pkg-config \
@@ -13,22 +13,40 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy project definition
+# Copy project definition and install Python deps
 COPY pyproject.toml README.md ./
 COPY app ./app
 
-# Install dependencies from pyproject.toml.
-# --prefer-binary ensures pycairo (dep of xhtml2pdf) uses pre-built wheels,
-# avoiding meson source compilation that fails with WSL2 clock skew.
-# For reproducible builds, generate requirements.lock with scripts/generate-lock.sh,
-# then replace this line with: COPY requirements.lock ./ && pip install -r requirements.lock
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir --prefer-binary pycairo && \
     pip install --no-cache-dir --prefer-binary . gunicorn flask-migrate flask-cors
 
-# Copy application code (overwriting if needed, effectively adding other files like migrations)
+
+# ── Runtime stage (no compilers) ─────────────────────────────────────────────
+FROM python:3.12-slim AS runtime
+
+WORKDIR /app
+
+# Install only runtime native libs (no gcc/dev headers)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libcairo2 \
+    libpq5 \
+    libxml2 \
+    libxslt1.1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy installed Python packages from builder
+COPY --from=builder /usr/local/lib/python3.12 /usr/local/lib/python3.12
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copy application code
 COPY . .
 RUN chmod +x entrypoint.sh
+
+# Create non-root user for production
+RUN groupadd -g 1001 app && useradd -u 1001 -g app -s /bin/sh -m app && \
+    mkdir -p /data/uploads && chown -R app:app /data /app
+USER app
 
 # Expose port
 EXPOSE 5000

@@ -6,7 +6,8 @@ import redis
 from .config import settings
 
 # Initialize redis client
-redis_client = redis.from_url(settings.redis_url)
+_redis_url = settings.redis_url or "redis://localhost:6379/0"
+redis_client = redis.from_url(_redis_url)
 
 # ─── Cache version key helpers ────────────────────────────────────────────────
 # Instead of SCAN+DELETE (O(N)), we use a version counter per tenant.
@@ -76,6 +77,15 @@ def cache_response(timeout=300, key_prefix="cache"):
                 f"{key_prefix}:{tenant_id}:v{version}:{year_id}"
                 f":{role}:{request.path}:{request.query_string.decode()}"
             )
+
+            if role in ("professor", "aluno"):
+                try:
+                    from flask_jwt_extended import get_jwt_identity
+                    uid = get_jwt_identity()
+                    if uid:
+                        cache_key += f":u{uid}"
+                except Exception:
+                    pass
 
             try:
                 cached_data = redis_client.get(cache_key)

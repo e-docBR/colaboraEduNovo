@@ -105,7 +105,7 @@ O `academic_year_id` também é propagado pelo JWT para que todas as queries sej
 ### JWT
 
 - **Access token**: TTL 30 minutos, carrega `roles`, `tenant_id`, `academic_year_id`, `aluno_id`
-- **Refresh token**: TTL 30 dias
+- **Refresh token**: TTL 7 dias
 - **Blocklist**: tokens revogados armazenados no Redis com chave `blocklist:{jti}`
 - **Fail-closed**: se o Redis estiver indisponível, todos os tokens são tratados como revogados
 

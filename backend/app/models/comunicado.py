@@ -37,6 +37,7 @@ class Comunicado(Base, TenantYearMixin):
             "conteudo": self.conteudo,
             "data_envio": self.data_envio.isoformat(),
             "autor": self.autor.username if self.autor_id and self.autor else "Sistema",
+            "autor_id": self.autor_id,
             "target_type": self.target_type,
             "target_value": self.target_value,
             "target": f"{self.target_type} {self.target_value or ''}".strip(),

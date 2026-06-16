@@ -46,6 +46,8 @@ import InfoIcon from "@mui/icons-material/Info";
 import AddIcon from "@mui/icons-material/Add";
 import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
 import NotificationsIcon from "@mui/icons-material/Notifications";
+import ContactPhoneIcon from "@mui/icons-material/ContactPhone";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
 import { ocorrenciaSchema, getFieldErrors, type ZodFieldErrors } from "../../lib/schemas";
 
@@ -55,7 +57,8 @@ import {
     useListAlunosQuery,
     useUpdateOcorrenciaMutation,
     useDeleteOcorrenciaMutation,
-    useRenotificarOcorrenciaMutation
+    useRenotificarOcorrenciaMutation,
+    useUpdateAlunoMutation
 } from "../../lib/api";
 import { useAppSelector } from "../../app/hooks";
 
@@ -81,9 +84,16 @@ export const OcorrenciasPage = () => {
     const [updateOcorrencia] = useUpdateOcorrenciaMutation();
     const [deleteOcorrencia] = useDeleteOcorrenciaMutation();
     const [renotificarOcorrencia] = useRenotificarOcorrenciaMutation();
+    const [updateAluno] = useUpdateAlunoMutation();
 
     const user = useAppSelector((state) => state.auth.user);
     const isStaff = user?.role !== "aluno";
+    const canWrite = user?.role === "admin" ||
+        user?.role === "super_admin" ||
+        user?.role === "coordenacao" ||
+        user?.role === "coordenador" ||
+        user?.role === "orientacao" ||
+        user?.role === "orientador";
 
     const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: "success" | "error" }>({
         open: false, message: "", severity: "success"
@@ -100,6 +110,11 @@ export const OcorrenciasPage = () => {
     const [gravidade, setGravidade] = useState("LEVE");
     const [acaoTomada, setAcaoTomada] = useState("");
     const [notificarResponsaveis, setNotificarResponsaveis] = useState(false);
+
+    // Responsável inline form (quando o aluno não tem contato cadastrado)
+    const [showResponsavelForm, setShowResponsavelForm] = useState(false);
+    const [novoEmailResponsavel, setNovoEmailResponsavel] = useState("");
+    const [novoTelefoneResponsavel, setNovoTelefoneResponsavel] = useState("");
 
     // Menu state
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -183,6 +198,15 @@ export const OcorrenciasPage = () => {
         }
         setFieldErrors({});
         try {
+            // Se o usuário preencheu dados do responsável, atualizar o cadastro do aluno primeiro
+            if (!editingId && (novoEmailResponsavel.trim() || novoTelefoneResponsavel.trim())) {
+                await updateAluno({
+                    id: alunoId,
+                    ...(novoEmailResponsavel.trim() && { email_responsavel: novoEmailResponsavel.trim() }),
+                    ...(novoTelefoneResponsavel.trim() && { telefone_responsavel: novoTelefoneResponsavel.trim() }),
+                }).unwrap();
+            }
+
             if (editingId) {
                 await updateOcorrencia({
                     id: editingId,
@@ -222,6 +246,9 @@ export const OcorrenciasPage = () => {
         setDataRegistro(new Date().toISOString().split("T")[0]);
         setFilterTurma("");
         setNotificarResponsaveis(false);
+        setShowResponsavelForm(false);
+        setNovoEmailResponsavel("");
+        setNovoTelefoneResponsavel("");
     };
 
     const handleEdit = () => {
@@ -301,7 +328,7 @@ export const OcorrenciasPage = () => {
                         Registro e acompanhamento disciplinar dos alunos
                     </Typography>
                 </Box>
-                {isStaff && (
+                {canWrite && (
                     <Button
                         variant="contained"
                         onClick={() => setOpen(true)}
@@ -444,7 +471,7 @@ export const OcorrenciasPage = () => {
                                                 </Box>
                                             </Stack>
 
-                                            {isStaff && (
+                                            {canWrite && (
                                                 <IconButton onClick={(e) => handleOpenMenu(e, oc)} size="small">
                                                     <MoreVertIcon fontSize="small" />
                                                 </IconButton>
@@ -754,10 +781,55 @@ export const OcorrenciasPage = () => {
 
                                 {!editingId && (
                                     <Box>
-                                        {alunoId && !alunoSelecionado?.email_responsavel && !alunoSelecionado?.email && !alunoSelecionado?.telefone_responsavel && !alunoSelecionado?.telefones && (
-                                            <Alert severity="warning" sx={{ borderRadius: 2, mb: 1 }}>
-                                                Este aluno não possui email nem telefone cadastrado (do aluno ou do responsável). A notificação não será enviada.
-                                            </Alert>
+                                        {/* Painel para cadastrar responsável inline quando ainda não há contato */}
+                                        {alunoId && !alunoSelecionado?.email_responsavel && !alunoSelecionado?.telefone_responsavel && (
+                                            <Box mb={1}>
+                                                <Alert
+                                                    severity="warning"
+                                                    sx={{ borderRadius: 2 }}
+                                                    action={
+                                                        <Button
+                                                            size="small"
+                                                            color="warning"
+                                                            startIcon={<ContactPhoneIcon />}
+                                                            onClick={() => setShowResponsavelForm(!showResponsavelForm)}
+                                                            endIcon={<ExpandMoreIcon sx={{ transform: showResponsavelForm ? "rotate(180deg)" : "none", transition: "0.2s" }} />}
+                                                        >
+                                                            {showResponsavelForm ? "Fechar" : "Cadastrar"}
+                                                        </Button>
+                                                    }
+                                                >
+                                                    Aluno sem contato de responsável — notificação não será enviada.
+                                                </Alert>
+                                                {showResponsavelForm && (
+                                                    <Box mt={1.5} p={2} sx={{ bgcolor: "warning.50", borderRadius: 2, border: "1px solid", borderColor: "warning.200" }}>
+                                                        <Typography variant="caption" fontWeight={700} color="text.secondary" display="block" mb={1.5}>
+                                                            CONTATO DO RESPONSÁVEL — será salvo no cadastro do aluno ao registrar a ocorrência
+                                                        </Typography>
+                                                        <Stack spacing={1.5}>
+                                                            <TextField
+                                                                fullWidth
+                                                                size="small"
+                                                                label="Email do Responsável"
+                                                                type="email"
+                                                                value={novoEmailResponsavel}
+                                                                onChange={(e) => setNovoEmailResponsavel(e.target.value)}
+                                                                placeholder="ex: pai@email.com"
+                                                                helperText="Será usado para notificações por e-mail"
+                                                            />
+                                                            <TextField
+                                                                fullWidth
+                                                                size="small"
+                                                                label="WhatsApp do Responsável"
+                                                                value={novoTelefoneResponsavel}
+                                                                onChange={(e) => setNovoTelefoneResponsavel(e.target.value)}
+                                                                placeholder="ex: 73999998888"
+                                                                helperText="Com DDD, sem espaços ou traços"
+                                                            />
+                                                        </Stack>
+                                                    </Box>
+                                                )}
+                                            </Box>
                                         )}
                                         <Box p={1.5} sx={{ bgcolor: "error.50", borderRadius: 3, border: "1px solid", borderColor: "error.100" }}>
                                             <FormControlLabel

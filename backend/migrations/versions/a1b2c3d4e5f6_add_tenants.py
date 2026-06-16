@@ -7,6 +7,7 @@ Create Date: 2026-01-12 16:30:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 # revision identifiers, used by Alembic.
 revision = 'a1b2c3d4e5f6'
@@ -15,6 +16,9 @@ branch_labels = None
 depends_on = None
 
 def upgrade() -> None:
+    conn = op.get_bind()
+    usuarios_columns = {column["name"] for column in inspect(conn).get_columns("usuarios")}
+
     # 1. Create tenants table
     op.create_table(
         'tenants',
@@ -31,6 +35,8 @@ def upgrade() -> None:
 
     # 2. Add tenant_id to usuarios
     with op.batch_alter_table('usuarios', schema=None) as batch_op:
+        if 'email' not in usuarios_columns:
+            batch_op.add_column(sa.Column('email', sa.String(length=255), nullable=True))
         batch_op.add_column(sa.Column('tenant_id', sa.Integer(), nullable=True))
         batch_op.create_foreign_key('fk_usuarios_tenant_id_tenants', 'tenants', ['tenant_id'], ['id'])
 

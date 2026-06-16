@@ -22,7 +22,6 @@ import {
   Divider,
   FormControl,
   FormControlLabel,
-  FormHelperText,
   Grid2 as Grid,
   IconButton,
   InputAdornment,
@@ -72,6 +71,16 @@ const PROVIDER_LABELS: Record<string, { label: string; color: string; descriptio
     label: "Google Gemini",
     color: "#4285f4",
     description: "Gemini 1.5 Flash e Pro. Requer chave do Google AI Studio.",
+  },
+  deepseek: {
+    label: "DeepSeek",
+    color: "#4d6bfe",
+    description: "DeepSeek-V4 (Flash e Pro) e DeepSeek-R1. Modelos de última geração para raciocínio e codificação.",
+  },
+  minimax: {
+    label: "MiniMax",
+    color: "#ff5a00",
+    description: "MiniMax-M3 e MiniMax-M2.7. Alto desempenho para tarefas em português.",
   },
 };
 
@@ -301,41 +310,28 @@ export default function AISettingsPage() {
 
           <Grid container spacing={2}>
             <Grid size={{ xs: 12, sm: 6 }}>
-              <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                {/* Atalhos rápidos — modelos sugeridos */}
-                {availableModels.length > 0 && (
-                  <FormControl fullWidth size="small">
-                    <InputLabel>Sugestões de modelos</InputLabel>
-                    <Select
-                      value={availableModels.find((m: any) => m.id === modelName) ? modelName : ""}
-                      onChange={(e) => { if (e.target.value) setModelName(e.target.value); }}
-                      label="Sugestões de modelos"
-                      displayEmpty
-                    >
-                      <MenuItem value="" disabled>
-                        <em>Selecionar da lista...</em>
-                      </MenuItem>
-                      {availableModels.map((m: any) => (
-                        <MenuItem key={m.id} value={m.id}>{m.label}</MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                )}
-                {/* Campo livre sempre editável */}
-                <TextField
-                  fullWidth
-                  label="ID do modelo"
+              <FormControl fullWidth>
+                <InputLabel id="model-select-label">Modelo</InputLabel>
+                <Select
+                  labelId="model-select-label"
+                  id="model-select"
                   value={modelName}
                   onChange={(e) => setModelName(e.target.value)}
-                  placeholder={
-                    provider === "openrouter" ? "ex: google/gemma-3-27b-it:free"
-                    : provider === "openai" ? "ex: gpt-4o-mini"
-                    : provider === "anthropic" ? "ex: claude-3-5-haiku-20241022"
-                    : "ex: gemini-1.5-flash"
-                  }
-                  helperText="Selecione da lista acima ou digite o ID exato do modelo"
-                />
-              </Box>
+                  label="Modelo"
+                >
+                  {availableModels.map((m: any) => (
+                    <MenuItem key={m.id} value={m.id}>
+                      {m.label} ({m.id})
+                    </MenuItem>
+                  ))}
+                  {/* Se o modelo atual não estiver na lista, exibe como personalizado */}
+                  {modelName && !availableModels.some((m: any) => m.id === modelName) && (
+                    <MenuItem value={modelName}>
+                      {modelName} (Personalizado)
+                    </MenuItem>
+                  )}
+                </Select>
+              </FormControl>
             </Grid>
 
             <Grid size={{ xs: 12, sm: 6 }}>
@@ -356,6 +352,10 @@ export default function AISettingsPage() {
                           ? "console.anthropic.com"
                           : provider === "openrouter"
                           ? "openrouter.ai/keys"
+                          : provider === "deepseek"
+                          ? "platform.deepseek.com"
+                          : provider === "minimax"
+                          ? "platform.minimax.io"
                           : "aistudio.google.com"
                       }`
                 }

@@ -7,7 +7,14 @@ export type ChartSlug =
   | "medias-por-trimestre"
   | "gauss-escola"
   | "correlacao-frequencia"
-  | "evolucao-turnos";
+  | "evolucao-turnos"
+  | "abaixo-por-disciplina"
+  | "abaixo-por-turma"
+  | "deficit-ranking"
+  | "aprovacao-por-turma"
+  | "ocorrencias-por-tipo"
+  | "ocorrencias-evolucao-mensal"
+  | "recuperacao-efetividade";
 
 export type ChartDefinition = {
   slug: ChartSlug;
@@ -23,6 +30,10 @@ export type ChartDefinition = {
   supportsTrimestre?: boolean;
   supportsDisciplina?: boolean;
   maxItems?: number;
+  horizontal?: boolean;
+  stacked?: boolean;
+  /** Named stack keys + colors for multi-series stacked charts */
+  stackConfig?: { key: string; name: string; color: string }[];
 };
 
 export const CHARTS: ChartDefinition[] = [
@@ -98,10 +109,10 @@ export const CHARTS: ChartDefinition[] = [
   },
   {
     slug: "correlacao-frequencia",
-    title: "Correlação: Freq. vs Notas",
+    title: "Correlação: Faltas vs Notas",
     description: "Identificação de quadrantes de risco e performance.",
     type: "scatter",
-    xKey: "frequencia",
+    xKey: "faltas",
     yKey: "media",
     supportsTurno: true,
     supportsSerie: true
@@ -112,7 +123,107 @@ export const CHARTS: ChartDefinition[] = [
     description: "Performance Matutino vs Vespertino/Noturno ao longo do tempo.",
     type: "line",
     supportsDisciplina: true
-  }
+  },
+  {
+    slug: "abaixo-por-disciplina",
+    title: "Reprovações por Disciplina",
+    description: "Quais matérias concentram mais alunos abaixo do mínimo por trimestre.",
+    type: "bar",
+    xKey: "disciplina",
+    yKey: "abaixo",
+    supportsTurno: true,
+    supportsTurma: true,
+    supportsTrimestre: true,
+    supportsDisciplina: true,
+  },
+  {
+    slug: "abaixo-por-turma",
+    title: "Alunos em Risco por Turma",
+    description: "Turmas com maior proporção de alunos abaixo do mínimo por trimestre.",
+    type: "bar",
+    xKey: "turma",
+    stacked: true,
+    stackConfig: [
+      { key: "abaixo", name: "Abaixo do mínimo", color: "#ef4444" },
+      { key: "acima", name: "Acima do mínimo", color: "#10b981" },
+    ],
+    supportsTurno: true,
+    supportsSerie: true,
+    supportsTrimestre: true,
+    supportsDisciplina: true,
+  },
+  {
+    slug: "deficit-ranking",
+    title: "Ranking de Déficit por Aluno",
+    description: "Top 20 alunos com maior soma de déficit de pontos em relação ao mínimo.",
+    type: "bar",
+    xKey: "nome",
+    yKey: "deficit_total",
+    horizontal: true,
+    supportsTurno: true,
+    supportsTurma: true,
+    supportsTrimestre: true,
+    supportsDisciplina: true,
+    maxItems: 20,
+  },
+  {
+    slug: "aprovacao-por-turma",
+    title: "Taxa de Aprovação por Turma",
+    description: "Proporção de alunos aprovados vs em risco por turma.",
+    type: "bar",
+    xKey: "turma",
+    stacked: true,
+    stackConfig: [
+      { key: "aprovados", name: "Aprovados", color: "#10b981" },
+      { key: "em_risco", name: "Em risco", color: "#ef4444" },
+    ],
+    supportsTurno: true,
+    supportsSerie: true,
+  },
+  {
+    slug: "ocorrencias-por-tipo",
+    title: "Ocorrências por Tipo e Gravidade",
+    description: "Distribuição de ocorrências disciplinares por tipo e nível de gravidade.",
+    type: "bar",
+    xKey: "tipo",
+    stacked: true,
+    stackConfig: [
+      { key: "LEVE", name: "Leve", color: "#60a5fa" },
+      { key: "MEDIA", name: "Média", color: "#fbbf24" },
+      { key: "GRAVE", name: "Grave", color: "#f97316" },
+      { key: "GRAVISSIMA", name: "Gravíssima", color: "#ef4444" },
+    ],
+    supportsTurno: true,
+    supportsSerie: true,
+    supportsTurma: true,
+  },
+  {
+    slug: "ocorrencias-evolucao-mensal",
+    title: "Evolução Mensal de Ocorrências",
+    description: "Tendência de ocorrências ao longo dos meses do ano letivo.",
+    type: "line",
+    xKey: "mes",
+    yKey: "total",
+    supportsTurno: true,
+    supportsSerie: true,
+    supportsTurma: true,
+  },
+  {
+    slug: "recuperacao-efetividade",
+    title: "Efetividade da Recuperação",
+    description: "Alunos que fizeram recuperação: aprovados vs reprovados por disciplina.",
+    type: "bar",
+    xKey: "disciplina",
+    stacked: true,
+    stackConfig: [
+      { key: "aprovados", name: "Aprovados pós-recuperação", color: "#10b981" },
+      { key: "reprovados", name: "Reprovados", color: "#ef4444" },
+    ],
+    supportsTurno: true,
+    supportsSerie: true,
+    supportsTurma: true,
+    supportsDisciplina: true,
+  },
 ];
 
 export const CHARTS_BY_SLUG = Object.fromEntries(CHARTS.map((chart) => [chart.slug, chart])) as Record<

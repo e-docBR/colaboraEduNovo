@@ -22,7 +22,13 @@ import {
   Typography,
   Chip,
   Avatar,
-  useTheme
+  useTheme,
+  Select,
+  OutlinedInput,
+  Checkbox,
+  ListItemText,
+  FormControl,
+  InputLabel
 } from "@mui/material";
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -34,26 +40,26 @@ import ClassIcon from "@mui/icons-material/Class";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 
-import { TurmaSummary, useListTurmasQuery, useUpdateTurmaMutation, useDeleteTurmaMutation } from "../../lib/api";
+import { TurmaSummary, useListTurmasQuery, useUpdateTurmaMutation, useDeleteTurmaMutation, useListUsuariosQuery } from "../../lib/api";
 import { useAppSelector } from "../../app/hooks";
 
 const TURNOS = ["Matutino", "Vespertino", "Noturno"];
 
-const progressFromMedia = (media?: number | null) => {
+const progressFromMedia = (media?: number | null, maxPts?: number | null) => {
   if (media === undefined || media === null) return 0;
-  const scale = media > 20 ? 100 : 20;
+  const scale = maxPts ?? (media > 20 ? 100 : 20);
   return Math.min(100, Math.max(0, (media / scale) * 100));
 };
 
-const getPerformanceColor = (media: number, theme: any) => {
-  const isLargeScale = media > 20;
-  if (isLargeScale) {
-    if (media < 50) return theme.palette.error.main;
-    if (media < 70) return theme.palette.warning.main;
-    return theme.palette.success.main;
+const getPerformanceColor = (media: number, theme: any, maxPts?: number | null) => {
+  const scale = maxPts ?? (media > 20 ? 100 : 20);
+  const ratio = media / scale;
+  if (ratio < 0.50) {
+    return theme.palette.error.main;
   }
-  if (media < 12) return theme.palette.error.main;
-  if (media < 15) return theme.palette.warning.main;
+  if (ratio < 0.57) {
+    return theme.palette.warning.main;
+  }
   return theme.palette.success.main;
 };
 
@@ -87,6 +93,13 @@ export const TurmasPage = () => {
   const [editingTurma, setEditingTurma] = useState<TurmaSummary | null>(null);
   const [editNome, setEditNome] = useState("");
   const [editTurno, setEditTurno] = useState("");
+  const [editProfessores, setEditProfessores] = useState<number[]>([]);
+
+  const { data: usersResponse } = useListUsuariosQuery(
+    { role: "professor", per_page: 100 },
+    { skip: !editingTurma }
+  );
+  const professorsList = useMemo(() => usersResponse?.items ?? [], [usersResponse]);
 
   const [deletingTurma, setDeletingTurma] = useState<TurmaSummary | null>(null);
 
@@ -100,6 +113,7 @@ export const TurmasPage = () => {
     e.stopPropagation();
     setEditNome(turma.turma);
     setEditTurno(turma.turno);
+    setEditProfessores(turma.professor_ids || []);
     setEditingTurma(turma);
   };
 
@@ -112,7 +126,7 @@ export const TurmasPage = () => {
     if (!editingTurma) return;
     const slug = editingTurma.slug || editingTurma.turma;
     try {
-      await updateTurma({ slug, nome: editNome, turno: editTurno }).unwrap();
+      await updateTurma({ slug, nome: editNome, turno: editTurno, professor_ids: editProfessores }).unwrap();
       setEditingTurma(null);
       setSnackbar({ open: true, message: "Turma atualizada com sucesso!", severity: "success" });
     } catch {
@@ -186,8 +200,8 @@ export const TurmasPage = () => {
         ) : (
           filtered.map((turma) => {
             const mediaVal = turma.media ?? 0;
-            const progress = progressFromMedia(mediaVal);
-            const performanceColor = getPerformanceColor(mediaVal, theme);
+            const progress = progressFromMedia(mediaVal, turma.max_pts);
+            const performanceColor = getPerformanceColor(mediaVal, theme, turma.max_pts);
 
             return (
               <Grid key={turma.slug || turma.turma} size={{ xs: 12, sm: 6, md: 4 }}>
@@ -321,6 +335,32 @@ export const TurmasPage = () => {
                 <MenuItem key={t} value={t}>{t}</MenuItem>
               ))}
             </TextField>
+
+            <FormControl fullWidth size="small">
+              <InputLabel id="edit-professores-label">Professores da Turma</InputLabel>
+              <Select
+                labelId="edit-professores-label"
+                id="edit-professores-select"
+                multiple
+                value={editProfessores}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setEditProfessores(typeof value === "string" ? value.split(",").map(Number) : value as number[]);
+                }}
+                input={<OutlinedInput label="Professores da Turma" />}
+                renderValue={(selected) => {
+                  const selectedUsers = professorsList.filter(u => selected.includes(u.id));
+                  return selectedUsers.map(u => u.username).join(", ");
+                }}
+              >
+                {professorsList.map((prof) => (
+                  <MenuItem key={prof.id} value={prof.id}>
+                    <Checkbox checked={editProfessores.includes(prof.id)} />
+                    <ListItemText primary={prof.username} />
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
           </Stack>
         </DialogContent>
         <DialogActions sx={{ p: 2, pt: 0 }}>

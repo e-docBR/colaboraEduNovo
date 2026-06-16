@@ -52,12 +52,13 @@ class UsuarioRepository(BaseRepository[Usuario]):
             count_stmt = count_stmt.where(Usuario.tenant_id == tenant_id)
             
         if query_text:
-            like = f"%{query_text}%"
-            # Keep aluno filters for searchability
+            from ..core.helpers import escape_like
+            escaped = escape_like(query_text)
+            like = f"%{escaped}%"
             filter_cond = or_(
-                Usuario.username.ilike(like),
-                Aluno.nome.ilike(like),
-                Aluno.matricula.ilike(like),
+                Usuario.username.ilike(like, escape="\\"),
+                Aluno.nome.ilike(like, escape="\\"),
+                Aluno.matricula.ilike(like, escape="\\"),
             )
             stmt = stmt.where(filter_cond)
             count_stmt = count_stmt.where(filter_cond)

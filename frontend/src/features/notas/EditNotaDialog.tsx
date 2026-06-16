@@ -29,6 +29,8 @@ export const EditNotaDialog = ({ open, onClose, nota, onError }: EditNotaDialogP
         trimestre2: string;
         trimestre3: string;
         total: string;
+        recuperacao: string;
+        conselho_de_classe: string;
         faltas: string;
         situacao: string;
     }>({
@@ -36,6 +38,8 @@ export const EditNotaDialog = ({ open, onClose, nota, onError }: EditNotaDialogP
         trimestre2: "",
         trimestre3: "",
         total: "",
+        recuperacao: "",
+        conselho_de_classe: "",
         faltas: "",
         situacao: ""
     });
@@ -47,6 +51,8 @@ export const EditNotaDialog = ({ open, onClose, nota, onError }: EditNotaDialogP
                 trimestre2: nota.trimestre2?.toString() ?? "",
                 trimestre3: nota.trimestre3?.toString() ?? "",
                 total: nota.total?.toString() ?? "",
+                recuperacao: nota.recuperacao?.toString() ?? "",
+                conselho_de_classe: nota.conselho_de_classe?.toString() ?? "",
                 faltas: nota.faltas?.toString() ?? "0",
                 situacao: nota.situacao ?? ""
             });
@@ -54,7 +60,14 @@ export const EditNotaDialog = ({ open, onClose, nota, onError }: EditNotaDialogP
     }, [nota]);
 
     const handleChange = (field: string, value: string) => {
-        setFormData((prev) => ({ ...prev, [field]: value }));
+        setFormData((prev) => {
+            const next = { ...prev, [field]: value };
+            // Limpa o total ao editar qualquer trimestre para forçar recálculo automático no backend
+            if (field === "trimestre1" || field === "trimestre2" || field === "trimestre3") {
+                next.total = "";
+            }
+            return next;
+        });
     };
 
     const handleSave = async () => {
@@ -77,11 +90,13 @@ export const EditNotaDialog = ({ open, onClose, nota, onError }: EditNotaDialogP
             if (formData.trimestre2 !== "") payload.trimestre2 = parse(formData.trimestre2);
             if (formData.trimestre3 !== "") payload.trimestre3 = parse(formData.trimestre3);
 
-            // If user clears total input, assume they want auto-calc
+            // Se total vazio → backend auto-calcula como soma dos trimestres
             if (formData.total !== "") {
                 payload.total = parse(formData.total);
             }
 
+            if (formData.recuperacao !== "") payload.recuperacao = parse(formData.recuperacao);
+            if (formData.conselho_de_classe !== "") payload.conselho_de_classe = parse(formData.conselho_de_classe);
             if (formData.faltas !== "") payload.faltas = parseIntVal(formData.faltas);
             if (formData.situacao !== "") payload.situacao = formData.situacao;
 
@@ -131,13 +146,13 @@ export const EditNotaDialog = ({ open, onClose, nota, onError }: EditNotaDialogP
 
                     <Grid item xs={6}>
                         <TextField
-                            label="Total (Deixe vazio para auto-calc)"
+                            label="Total de Pontos (vazio = auto)"
                             type="number"
                             fullWidth
                             value={formData.total}
                             onChange={(e) => handleChange("total", e.target.value)}
-                            inputProps={{ step: "0.1" }}
-                            helperText="Soma dos trimestres"
+                            inputProps={{ step: "0.1", min: 0, max: 100 }}
+                            helperText={formData.total === "" ? "Será recalculado (T1 + T2 + T3)" : "T1 + T2 + T3 (0–100)"}
                         />
                     </Grid>
                     <Grid item xs={6}>
@@ -147,6 +162,30 @@ export const EditNotaDialog = ({ open, onClose, nota, onError }: EditNotaDialogP
                             fullWidth
                             value={formData.faltas}
                             onChange={(e) => handleChange("faltas", e.target.value)}
+                            inputProps={{ min: 0 }}
+                        />
+                    </Grid>
+
+                    <Grid item xs={6}>
+                        <TextField
+                            label="Recuperação (0–100)"
+                            type="number"
+                            fullWidth
+                            value={formData.recuperacao}
+                            onChange={(e) => handleChange("recuperacao", e.target.value)}
+                            inputProps={{ step: "0.1", min: 0, max: 100 }}
+                            helperText="Prova de recuperação"
+                        />
+                    </Grid>
+                    <Grid item xs={6}>
+                        <TextField
+                            label="Conselho de Classe (0–100)"
+                            type="number"
+                            fullWidth
+                            value={formData.conselho_de_classe}
+                            onChange={(e) => handleChange("conselho_de_classe", e.target.value)}
+                            inputProps={{ step: "0.1", min: 0, max: 100 }}
+                            helperText="Nota aprovada pelo conselho"
                         />
                     </Grid>
 
@@ -158,18 +197,23 @@ export const EditNotaDialog = ({ open, onClose, nota, onError }: EditNotaDialogP
                                 label="Situação"
                                 onChange={(e) => handleChange("situacao", e.target.value)}
                             >
-                                <MenuItem value="">-</MenuItem>
-                                <MenuItem value="APROVADO">Aprovado</MenuItem>
-                                <MenuItem value="REPROVADO">Reprovado</MenuItem>
-                                <MenuItem value="RECUPERACAO">Recuperação</MenuItem>
-                                <MenuItem value="APCC">APCC</MenuItem>
-                                <MenuItem value="AR">Apr. com Rec.</MenuItem>
+                                <MenuItem value="">— automática —</MenuItem>
+                                <MenuItem value="APR">APR — Aprovado</MenuItem>
+                                <MenuItem value="REP">REP — Reprovado</MenuItem>
+                                <MenuItem value="REC">REC — Em Recuperação</MenuItem>
+                                <MenuItem value="APCC">ACC — Aprovado por Conselho</MenuItem>
+                                <MenuItem value="AR">AR — Aprovado com Restrição</MenuItem>
+                                <MenuItem value="EMC">EMC — Em Curso</MenuItem>
+                                <MenuItem value="EMR">EMR — Em Regime de Recuperação</MenuItem>
+                                <MenuItem value="AFC">AFC — Apr. Frequência Compensada</MenuItem>
+                                <MenuItem value="TRN">TRN — Transferido</MenuItem>
+                                <MenuItem value="ABA">ABA — Abandono</MenuItem>
                             </Select>
                         </FormControl>
                     </Grid>
                 </Grid>
                 <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: "block" }}>
-                    * Campos vazios (exceto Total) serão salvos como "null".
+                    * Situação "automática": calculada pelo sistema ao salvar Recuperação/Conselho.
                 </Typography>
             </DialogContent>
             <DialogActions>

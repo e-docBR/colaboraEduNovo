@@ -3,6 +3,7 @@
 .idea/
 .DS_Store
 *.swp
+*:Zone.Identifier
 
 # Python / Flask
 __pycache__/
@@ -34,6 +35,8 @@ frontend/.turbo/
 npm-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+backend_logs.txt
+*.bak
 .coverage
 coverage/
 
@@ -51,3 +54,10 @@ letsencrypt/acme.json
 Mat_Inicial/
 debug_*.py
 landingPage/
+
+# Local tooling / nested worktrees
+.claude/
+colaboraEdu-produc/
+
+# PIDs
+.pids/

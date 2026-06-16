@@ -1,10 +1,63 @@
 """Analytics service responsible for KPIs and reports."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from ..models import Aluno, Nota
+
+# Distribuição de pontos por trimestre: (campo, max_acumulado, aprovação_acumulada)
+# Ordem importa: verificamos do mais avançado para o menos avançado.
+GRADING_STAGES = [
+    ("trimestre3", 100, 50),  # T1+T2+T3 disponíveis
+    ("trimestre2",  60, 30),  # somente T1+T2
+    ("trimestre1",  30, 15),  # somente T1
+]
+
+# Mapa trimestre → label legível
+_STAGE_LABELS = {
+    "trimestre3": "T3",
+    "trimestre2": "T2",
+    "trimestre1": "T1",
+}
+
+
+def get_grading_stage(session: Session, tenant_id: int | None, year_id: int | None) -> dict[str, Any]:
+    """Retorna o estágio atual do ano letivo com base no campo trimestre_atual do AcademicYear.
+
+    Retorna {"trimester": "T1"|"T2"|"T3", "max_pts": int, "threshold": int, "trimestre_atual": int}.
+    """
+    from ..models.academic_year import AcademicYear as AcademicYearModel
+
+    trimestre = 1  # default
+    if year_id:
+        row = session.query(AcademicYearModel.trimestre_atual).filter(
+            AcademicYearModel.id == year_id
+        ).scalar()
+        if row is not None:
+            trimestre = int(row)
+    elif tenant_id:
+        row = session.query(AcademicYearModel.trimestre_atual).filter(
+            AcademicYearModel.tenant_id == tenant_id,
+            AcademicYearModel.is_current.is_(True),
+        ).scalar()
+        if row is not None:
+            trimestre = int(row)
+
+    # Configuração acumulada por trimestre
+    _STAGE_MAP = {
+        1: ("T1",  30,  15),
+        2: ("T2",  60,  30),
+        3: ("T3", 100,  50),
+    }
+    label, max_pts, threshold = _STAGE_MAP.get(trimestre, ("T3", 100, 50))
+    return {
+        "trimester":      label,
+        "max_pts":        max_pts,
+        "threshold":      threshold,
+        "trimestre_atual": trimestre,
+    }
 
 
 @dataclass(slots=True)
@@ -15,6 +68,7 @@ class DashboardAnalytics:
     alunos_em_risco: int
     ocorrencias_abertas: int = 0
     comunicados_recentes: int = 0
+    grading_stage: dict[str, Any] = field(default_factory=lambda: {"trimester": "T3", "max_pts": 100, "threshold": 50})
     # Teacher specific
     distribution: dict[str, int] | None = None
 
@@ -30,6 +84,7 @@ class DashboardAnalytics:
             "alunos_em_risco": self.alunos_em_risco,
             "ocorrencias_abertas": self.ocorrencias_abertas,
             "comunicados_recentes": self.comunicados_recentes,
+            "grading_stage": self.grading_stage,
         }
         if self.distribution:
             data["distribution"] = self.distribution
@@ -64,21 +119,51 @@ def build_dashboard_metrics(session: Session) -> DashboardAnalytics:
     )
     total_turmas = session.query(func.count(func.distinct(normalized_turma))).filter(*aluno_filter).scalar() or 0
     
-    # Media Geral
+    # Filtros base para notas
     nota_filter = [Aluno.status.is_(None)]
     if tenant_id:
         nota_filter.append(Nota.tenant_id == tenant_id)
     if year_id:
         nota_filter.append(Nota.academic_year_id == year_id)
-        
-    media_geral = session.query(func.avg(Nota.total)).join(Aluno).filter(*nota_filter).scalar()
-    media_geral_value = float(media_geral) if media_geral is not None else 0.0
 
-    # Risk alerts
-    alunos_em_risco = session.query(func.count(func.distinct(Nota.aluno_id))).join(Aluno).filter(
-        Nota.total < 50,
-        *nota_filter
-    ).scalar() or 0
+    # Estágio atual — determina a expressão acumulada e o threshold
+    stage = get_grading_stage(session, tenant_id, year_id)
+    risk_threshold = stage["threshold"]
+    trimester = stage["trimester"]
+
+    # Expressão acumulada de pontos de acordo com o trimestre vigente
+    if trimester == "T1":
+        accumulated = Nota.trimestre1
+        stage_not_null = Nota.trimestre1.isnot(None)
+    elif trimester == "T2":
+        accumulated = func.coalesce(Nota.trimestre1, 0) + func.coalesce(Nota.trimestre2, 0)
+        stage_not_null = Nota.trimestre2.isnot(None)
+    else:  # T3 — usa total já calculado (T1+T2+T3)
+        accumulated = func.coalesce(Nota.total, 0)
+        stage_not_null = Nota.total.isnot(None)
+
+    # Subquery: média acumulada POR ALUNO (evita distorção por quantidade de disciplinas)
+    per_student_sq = (
+        session.query(
+            Nota.aluno_id,
+            func.avg(accumulated).label("avg_pts"),
+        )
+        .join(Aluno)
+        .filter(stage_not_null, *nota_filter)
+        .group_by(Nota.aluno_id)
+        .subquery()
+    )
+
+    media_geral_value = float(
+        session.query(func.avg(per_student_sq.c.avg_pts)).scalar() or 0
+    )
+
+    alunos_em_risco = (
+        session.query(func.count())
+        .select_from(per_student_sq)
+        .filter(per_student_sq.c.avg_pts < risk_threshold)
+        .scalar() or 0
+    )
 
     # Ocorrências abertas (não resolvidas)
     from ..models import Ocorrencia
@@ -111,12 +196,46 @@ def build_dashboard_metrics(session: Session) -> DashboardAnalytics:
         alunos_em_risco=alunos_em_risco,
         ocorrencias_abertas=ocorrencias_abertas,
         comunicados_recentes=comunicados_recentes,
+        grading_stage=stage,
     )
 
-def build_teacher_dashboard(session: Session, query: str | None = None, turno: str | None = None, turma: str | None = None) -> dict[str, any]:
+def build_teacher_dashboard(
+    session: Session,
+    query: str | None = None,
+    turno: str | None = None,
+    turma: str | None = None,
+    user_id: int | None = None,
+    is_professor: bool = False
+) -> dict[str, Any]:
     from flask import g
     tenant_id = getattr(g, 'tenant_id', None)
     year_id = getattr(g, 'academic_year_id', None)
+
+    linked_classes = []
+    if is_professor and user_id is not None:
+        from ..models import UsuarioTurma
+        turmas_query = session.query(UsuarioTurma.turma).filter(
+            UsuarioTurma.usuario_id == user_id,
+            UsuarioTurma.tenant_id == tenant_id,
+            UsuarioTurma.academic_year_id == year_id
+        ).distinct()
+        linked_classes = [t[0] for t in turmas_query.all() if t[0]]
+
+        # If the professor has no linked classes, return empty dashboard metrics immediately
+        if not linked_classes:
+            return {
+                "distribution": {
+                    "0-20": 0,
+                    "20-40": 0,
+                    "40-60": 0,
+                    "60-80": 0,
+                    "80-100": 0
+                },
+                "alerts": [],
+                "classes_count": 0,
+                "total_students": 0,
+                "global_average": 0.0
+            }
 
     # Base filter builder
     def apply_filters(stm):
@@ -126,11 +245,25 @@ def build_teacher_dashboard(session: Session, query: str | None = None, turno: s
             stm = stm.where(Aluno.academic_year_id == year_id)
         if turno and turno != 'Todos':
             stm = stm.where(Aluno.turno == turno)
-        if turma and turma != 'Todas':
-            stm = stm.where(Aluno.turma == turma)
+
+        # Scoping classes for professor
+        if is_professor and user_id is not None:
+            if turma and turma != 'Todas':
+                if turma in linked_classes:
+                    stm = stm.where(Aluno.turma == turma)
+                else:
+                    stm = stm.where(Aluno.turma == "__NO_ACCESS_CLASS__")
+            else:
+                stm = stm.where(Aluno.turma.in_(linked_classes))
+        else:
+            if turma and turma != 'Todas':
+                stm = stm.where(Aluno.turma == turma)
+
         if query:
-            term = f"%{query}%"
-            stm = stm.where(Aluno.nome.ilike(term) | Aluno.matricula.ilike(term))
+            from ..core.helpers import escape_like
+            escaped = escape_like(query)
+            term = f"%{escaped}%"
+            stm = stm.where(Aluno.nome.ilike(term, escape="\\") | Aluno.matricula.ilike(term, escape="\\"))
         # Exclude inactive students
         stm = stm.where(Aluno.status.is_(None))
         return stm

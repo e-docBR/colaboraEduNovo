@@ -16,10 +16,8 @@ class TenantService:
         tenant = self.repository.get_by_domain(host)
         if tenant:
             return tenant
-            
-        # Fallback 2: Check by slug if host contains it, or just use 'default'
-        # For simple deployments, we allow 'default' to be the catch-all
-        return self.repository.get_by_slug("default")
+
+        return None
 
     def get_public_settings(self, tenant_id: int) -> dict:
         tenant = self.repository.get(tenant_id)
