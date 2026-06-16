@@ -25,8 +25,14 @@ def upgrade() -> None:
                existing_type=postgresql.TIMESTAMP(),
                type_=sa.DateTime(timezone=True),
                existing_nullable=True)
-    op.drop_index(op.f('ix_audit_logs_tenant_id_fk'), table_name='audit_logs')
-    op.create_index(op.f('ix_audit_logs_tenant_id'), 'audit_logs', ['tenant_id'], unique=False)
+    op.drop_index(op.f('ix_audit_logs_tenant_id_fk'), table_name='audit_logs', if_exists=True)
+    op.create_index(
+        op.f('ix_audit_logs_tenant_id'),
+        'audit_logs',
+        ['tenant_id'],
+        unique=False,
+        if_not_exists=True,
+    )
     op.alter_column('comunicados', 'data_envio',
                existing_type=postgresql.TIMESTAMP(),
                type_=sa.DateTime(timezone=True),

@@ -12,6 +12,7 @@ como resolvidas.
 from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 revision: str = 'e2f3a4b5c6d7'
 down_revision: Union[str, Sequence[str], None] = 'd1e2f3a4b5c6'
@@ -20,6 +21,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    conn = op.get_bind()
+    columns = {column["name"] for column in inspect(conn).get_columns("ocorrencias")}
+    if "resolvida" in columns:
+        return
+
     op.add_column(
         'ocorrencias',
         sa.Column('resolvida', sa.Boolean(), nullable=False, server_default='false')

@@ -81,10 +81,9 @@ def upgrade() -> None:
     op.create_foreign_key('fk_comunicados_academic_year_id', 'comunicados', 'academic_years', ['academic_year_id'], ['id'])
     op.create_foreign_key('fk_comunicados_tenant_id', 'comunicados', 'tenants', ['tenant_id'], ['id'])
     
-    # Use batch for dropping to be safe
-    with op.batch_alter_table('comunicados') as batch_op:
-        batch_op.drop_column('data_envio')
-        batch_op.drop_column('arquivado')
+    # Keep data_envio and arquivado: later migrations and the current model still
+    # use these columns. Older databases that already ran this migration are
+    # handled by later compatibility migrations.
 
     # 6. OCORRENCIAS: Rename/Add columns
     op.add_column('ocorrencias', sa.Column('data_registro', sa.DateTime(), nullable=True))
@@ -106,10 +105,8 @@ def upgrade() -> None:
     op.create_foreign_key('fk_ocorrencias_academic_year_id', 'ocorrencias', 'academic_years', ['academic_year_id'], ['id'])
     op.create_foreign_key('fk_ocorrencias_tenant_id', 'ocorrencias', 'tenants', ['tenant_id'], ['id'])
 
-    with op.batch_alter_table('ocorrencias') as batch_op:
-        batch_op.drop_column('created_at')
-        batch_op.drop_column('data_ocorrencia')
-        batch_op.drop_column('resolvida')
+    # Keep legacy timestamp columns and resolvida so later migrations can remain
+    # idempotent on clean databases.
 
     # 7. USUARIOS: Ensure tenant_id FK
     # (Assuming tenant_id column already exists from a1b2c3d4e5f6)

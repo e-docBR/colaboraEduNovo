@@ -6,6 +6,7 @@ Create Date: 2026-05-08 00:00:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 # revision identifiers
 revision = 'a7b8c9d0e1f2'
@@ -15,6 +16,10 @@ depends_on = None
 
 
 def upgrade():
+    conn = op.get_bind()
+    if 'ai_configurations' not in inspect(conn).get_table_names():
+        return
+
     with op.batch_alter_table('ai_configurations') as batch_op:
         batch_op.add_column(
             sa.Column('ai_name', sa.String(100), nullable=True)
