@@ -1,4 +1,5 @@
 import io
+from datetime import datetime, timezone
 
 from app.core.database import session_scope
 from app.core.security import generate_tokens, hash_password
@@ -122,7 +123,7 @@ def test_regular_user_login_requires_tenant(client, admin_user):
     assert response.status_code == 401
 
 
-def test_global_super_admin_logout_uses_selected_tenant_context(client, flask_app, admin_user):
+def test_global_super_admin_can_login_without_school_when_archived_superadmins_exist(client, flask_app, admin_user):
     with session_scope() as session:
         session.add(
             Usuario(
@@ -133,6 +134,23 @@ def test_global_super_admin_logout_uses_selected_tenant_context(client, flask_ap
                 is_active=True,
             )
         )
+        session.add(
+            Usuario(
+                username="archived_global_super",
+                password_hash=hash_password("Archived123!"),
+                role="super_admin",
+                tenant_id=None,
+                is_active=False,
+                is_archived=True,
+                deleted_at=datetime.now(timezone.utc),
+            )
+        )
+
+    central_login = client.post("/api/v1/auth/login", json={
+        "username": "global_super",
+        "password": "Admin123!",
+    })
+    assert central_login.status_code == 200
 
     login = client.post("/api/v1/auth/login", json={
         "username": "global_super",

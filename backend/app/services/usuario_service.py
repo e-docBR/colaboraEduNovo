@@ -32,14 +32,18 @@ class UsuarioService:
             # Platform super_admin accounts are not tied to a school, so allow them
             # to authenticate even when the UI sends a tenant_slug.
             if not user:
-                user = self.repository.session.execute(
+                super_admins = self.repository.session.execute(
                     select(Usuario)
                     .where(
                         or_(Usuario.username == username, Usuario.email == username),
                         Usuario.role == "super_admin",
+                        Usuario.is_active.is_(True),
+                        Usuario.deleted_at.is_(None),
+                        Usuario.is_archived.is_(False),
                     )
                     .execution_options(include_all_tenants=True)
-                ).scalar_one_or_none()
+                ).scalars().all()
+                user = super_admins[0] if len(super_admins) == 1 else None
         else:
             # In SaaS mode, tenant context is mandatory for regular users because
             # usernames and e-mails are unique only inside each school.
@@ -48,6 +52,9 @@ class UsuarioService:
                 .where(
                     or_(Usuario.username == username, Usuario.email == username),
                     Usuario.role == "super_admin",
+                    Usuario.is_active.is_(True),
+                    Usuario.deleted_at.is_(None),
+                    Usuario.is_archived.is_(False),
                 )
                 .execution_options(include_all_tenants=True)
             ).scalars().all()
@@ -55,7 +62,13 @@ class UsuarioService:
             if not user:
                 raise UnauthorizedError("Selecione a escola para acessar")
 
-        if not user or not verify_password(password, user.password_hash):
+        if (
+            not user
+            or not user.is_active
+            or user.deleted_at is not None
+            or user.is_archived
+            or not verify_password(password, user.password_hash)
+        ):
             raise UnauthorizedError("Usuário ou senha inválidos")
 
         # super_admin can log in from any tenant scope without restriction
