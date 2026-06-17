@@ -6,7 +6,13 @@ BACKEND_SERVICE="${BACKEND_SERVICE:-backend}"
 RQ_SMOKE_QUEUE="${RQ_SMOKE_QUEUE:-default}"
 RQ_SMOKE_TIMEOUT_SECONDS="${RQ_SMOKE_TIMEOUT_SECONDS:-45}"
 
-docker compose -f "$COMPOSE_FILE" exec -T \
+compose_file_args=()
+IFS=':' read -r -a compose_files <<< "$COMPOSE_FILE"
+for compose_file in "${compose_files[@]}"; do
+  compose_file_args+=("-f" "$compose_file")
+done
+
+docker compose "${compose_file_args[@]}" exec -T \
   -e RQ_SMOKE_QUEUE="$RQ_SMOKE_QUEUE" \
   -e RQ_SMOKE_TIMEOUT_SECONDS="$RQ_SMOKE_TIMEOUT_SECONDS" \
   "$BACKEND_SERVICE" \

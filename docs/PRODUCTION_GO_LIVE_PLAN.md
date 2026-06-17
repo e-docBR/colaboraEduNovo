@@ -10,6 +10,30 @@ Runbook executável: `docs/PRODUCTION_PILOT_RUNBOOK.md`.
 
 ## Estado atual
 
+Atualizado em 2026-06-17: o piloto web/backend está publicado em
+`https://gestao.colaboraedu.cloud` usando Caddy no host e Docker Compose para
+backend, frontend, Postgres, Redis, worker RQ, backup e Uptime Kuma.
+
+Validações já concluídas no servidor:
+- `GET /` retorna o frontend com status 200;
+- `GET /health` retorna banco e Redis `ok`;
+- `GET /api/v1/auth/tenants` retorna o tenant público esperado;
+- `/metrics` e `/health/detailed` negam acesso sem JWT;
+- migrations aplicadas até `464576e87da1`;
+- 3 workers RQ estão ativos e um job real foi processado com sucesso;
+- primeiro backup local criptografado foi criado;
+- restore drill em Postgres temporário isolado foi aprovado em
+  `docs/RESTORE_DRILL_2026-06-17.md`.
+
+Pendências imediatas antes de ampliar o piloto:
+- publicar o commit local de estabilização de produção no GitHub;
+- rotacionar as credenciais que foram compartilhadas durante a operação;
+- criar uma conta `super_admin` de produção ou de smoke;
+- rodar o smoke autenticado com `SMOKE_SUPERADMIN_USER`,
+  `SMOKE_SUPERADMIN_PASSWORD` e `SMOKE_TENANT_SLUG=default`;
+- configurar backup externo S3-compatible ou registrar aceite formal de risco;
+- configurar monitoramento externo e alertas.
+
 O sistema está apto para piloto controlado, mas ainda não deve entrar em produção ampla sem concluir os gates abaixo.
 
 Itens críticos já tratados no código:

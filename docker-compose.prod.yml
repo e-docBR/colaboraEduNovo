@@ -219,10 +219,7 @@ services:
           cpus: "1.00"
     command: [
       "rq", "worker", "default",
-      "--url", "redis://:${REDIS_PASSWORD}@redis:6379/0",
-      "--result-ttl", "86400",
-      "--failure-ttl", "604800",
-      "--max-jobs", "500"
+      "--url", "redis://:${REDIS_PASSWORD}@redis:6379/0"
     ]
     environment:
       FLASK_APP: app
@@ -234,6 +231,8 @@ services:
       DATABASE_URL: postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
       APP_DATABASE_URL: postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      ALLOWED_ORIGINS: '["https://${DOMAIN}"]'
+      FRONTEND_URL: https://${DOMAIN}
       UPLOAD_FOLDER: /data/uploads
       BRAND_NAME: ${BRAND_NAME:-ColaboraEdu}
       SMTP_SERVER: ${SMTP_SERVER}
@@ -334,60 +333,7 @@ services:
         limits:
           memory: 256m
           cpus: "0.50"
-    entrypoint: >
-      sh -c "
-        echo '[pgbackup] Installing rclone and gnupg...';
-        apk add --no-cache rclone gnupg > /dev/null 2>&1 || echo '[pgbackup] optional packages unavailable';
-
-        echo 'ColaboraEdu pgbackup started — scheduling daily cron at 02:00';
-
-        cat > /usr/local/bin/run_backup.sh << 'SCRIPT'
-        #!/bin/sh
-        set -e
-        TIMESTAMP=$$(date +%Y%m%d_%H%M%S)
-        # Enforce encrypted backups — refuse to create unencrypted dumps
-        if [ -z "$$BACKUP_ENCRYPTION_KEY" ]; then
-          echo \"[pgbackup] ❌ FATAL: BACKUP_ENCRYPTION_KEY not set — refusing to create unencrypted backup\"
-          exit 1
-        fi
-        FILENAME=/backups/backup_$${TIMESTAMP}.sql.gz.gpg
-        echo \"[pgbackup] Starting encrypted backup -> $$FILENAME\"
-        pg_dump -h postgres -U $$POSTGRES_USER $$POSTGRES_DB \
-          | gzip \
-          | gpg --batch --symmetric --cipher-algo AES256 --passphrase "$$BACKUP_ENCRYPTION_KEY" \
-          > \"$$FILENAME\"
-        if [ $$? -eq 0 ]; then
-          SIZE=$$(stat -c%s \"$$FILENAME\" 2>/dev/null || echo 0)
-          if [ \"$$SIZE\" -lt 1024 ]; then
-            echo \"[pgbackup] FAILED: dump too small ($${SIZE} bytes) — removing\"
-            rm -f \"$$FILENAME\"
-            exit 1
-          fi
-          echo \"[pgbackup] OK: $$FILENAME ($${SIZE} bytes)\"
-          find /backups -name 'backup_*.sql.gz*' -mtime +30 -delete
-          if [ -n \"$$S3_BACKUP_BUCKET\" ] && command -v rclone > /dev/null 2>&1; then
-            echo \"[pgbackup] Uploading to s3:$$S3_BACKUP_BUCKET ...\"
-            rclone copy \"$$FILENAME\" \":s3:$$S3_BACKUP_BUCKET\" \
-              --s3-access-key-id=\"$$AWS_ACCESS_KEY_ID\" \
-              --s3-secret-access-key=\"$$AWS_SECRET_ACCESS_KEY\" \
-              --s3-region=\"$${AWS_DEFAULT_REGION:-us-east-1}\" \
-              $${S3_ENDPOINT:+--s3-endpoint=$$S3_ENDPOINT} \
-              && echo \"[pgbackup] S3 upload OK\" \
-              || echo \"[pgbackup] S3 upload FAILED (local backup kept)\"
-          fi
-        else
-          echo \"[pgbackup] FAILED: pg_dump returned non-zero\"
-          rm -f \"$$FILENAME\"
-          exit 1
-        fi
-        SCRIPT
-
-        chmod +x /usr/local/bin/run_backup.sh;
-        echo '0 2 * * * /usr/local/bin/run_backup.sh >> /proc/1/fd/1 2>&1' | crontab -;
-        echo 'Cron scheduled. Running initial backup now to verify connectivity...';
-        /usr/local/bin/run_backup.sh || echo '[pgbackup] Initial backup failed — check PGPASSWORD/postgres connectivity';
-        crond -f -l 2
-      "
+    entrypoint: ["/usr/local/bin/prod_pgbackup_entrypoint.sh"]
     environment:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -400,6 +346,7 @@ services:
       S3_ENDPOINT: ${S3_ENDPOINT:-}
     volumes:
       - pgbackups:/backups
+      - ./scripts/prod_pgbackup_entrypoint.sh:/usr/local/bin/prod_pgbackup_entrypoint.sh:ro
     networks:
       - app_network
     depends_on:

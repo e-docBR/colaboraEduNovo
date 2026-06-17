@@ -1,0 +1,57 @@
+services:
+  socket-proxy:
+    profiles: ["traefik-disabled"]
+
+  traefik:
+    profiles: ["traefik-disabled"]
+    ports: []
+
+  frontend:
+    ports:
+      - "127.0.0.1:8088:80"
+    labels: []
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  backend:
+    ports:
+      - "127.0.0.1:5000:5000"
+    labels: []
+    command:
+      - gunicorn
+      - --bind=0.0.0.0:5000
+      - --workers=2
+      - --threads=4
+      - --worker-class=gthread
+      - --timeout=120
+      - --keep-alive=5
+      - --max-requests=1000
+      - --max-requests-jitter=100
+      - --access-logfile=-
+      - --error-logfile=-
+      - app:create_app()
+
+  worker:
+    command:
+      - rq
+      - worker
+      - default
+      - --url
+      - redis://:${REDIS_PASSWORD}@redis:6379/0
+    environment:
+      ALLOWED_ORIGINS: '["https://${DOMAIN}"]'
+      FRONTEND_URL: https://${DOMAIN}
+
+  pgbackup:
+    entrypoint: ["/usr/local/bin/prod_pgbackup_entrypoint.sh"]
+    volumes:
+      - ./scripts/prod_pgbackup_entrypoint.sh:/usr/local/bin/prod_pgbackup_entrypoint.sh:ro
+
+  uptime-kuma:
+    ports:
+      - "127.0.0.1:3001:3001"
+    labels: []
