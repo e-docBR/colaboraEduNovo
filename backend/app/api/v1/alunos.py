@@ -27,7 +27,7 @@ def register(parent: Blueprint) -> None:
     @require_roles("admin", "super_admin", "coordenador", "diretor", "orientador", "professor")
     def list_alunos():
             
-        page, per_page = parse_pagination()
+        page, per_page = parse_pagination(max_per_page=2000)
         turno = request.args.get("turno")
         turma = request.args.get("turma")
         query_text = request.args.get("q")
