@@ -6,6 +6,7 @@ from decimal import Decimal
 import click
 
 from .core.database import Base, engine, session_scope
+from .core.config import settings
 from .core.security import hash_password
 from .models import Aluno, Nota, Usuario, Tenant, AcademicYear
 from .services.accounts import ensure_aluno_user
@@ -106,7 +107,8 @@ def register_cli(app):
     @click.option("--password", default=None, help="Super Admin password (auto-generated if omitted)")
     def create_superadmin_command(username, password):
         """Create a super admin user with a secure random password."""
-        Base.metadata.create_all(bind=engine)
+        if settings.environment != "production":
+            Base.metadata.create_all(bind=engine)
         generated = False
         if not password:
             password = secrets.token_urlsafe(16)
