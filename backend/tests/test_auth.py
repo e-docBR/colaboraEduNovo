@@ -1,7 +1,7 @@
 import io
 
 from app.core.database import session_scope
-from app.core.security import generate_tokens
+from app.core.security import generate_tokens, hash_password
 from app.models import AcademicYear, Aluno, Tenant, Usuario
 
 
@@ -120,6 +120,33 @@ def test_regular_user_login_requires_tenant(client, admin_user):
         "password": "admin123",
     })
     assert response.status_code == 401
+
+
+def test_global_super_admin_logout_uses_selected_tenant_context(client, flask_app, admin_user):
+    with session_scope() as session:
+        session.add(
+            Usuario(
+                username="global_super",
+                password_hash=hash_password("Admin123!"),
+                role="super_admin",
+                tenant_id=None,
+                is_active=True,
+            )
+        )
+
+    login = client.post("/api/v1/auth/login", json={
+        "username": "global_super",
+        "password": "Admin123!",
+        "tenant_slug": "default",
+    })
+    assert login.status_code == 200
+
+    logout = client.post(
+        "/api/v1/auth/logout",
+        headers={"Authorization": f"Bearer {login.json['access_token']}"},
+    )
+    assert logout.status_code == 204
+
 
 def test_change_password(client, auth_headers):
     # New password must satisfy: 8+ chars, uppercase, digit, special char

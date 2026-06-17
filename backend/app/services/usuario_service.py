@@ -64,13 +64,17 @@ class UsuarioService:
 
         roles = [user.role] if user.role else []
 
+        effective_tenant_id = user.tenant_id
+        if user.role == "super_admin" and tenant_id:
+            effective_tenant_id = tenant_id
+
         # Resolve the current academic year for this tenant so it's embedded in the JWT
         academic_year_id = None
-        if user.tenant_id:
+        if effective_tenant_id:
             from app.models.academic_year import AcademicYear
             current_year = self.repository.session.execute(
                 select(AcademicYear).where(
-                    AcademicYear.tenant_id == user.tenant_id,
+                    AcademicYear.tenant_id == effective_tenant_id,
                     AcademicYear.is_current.is_(True),
                 )
             ).scalar_one_or_none()
@@ -80,7 +84,7 @@ class UsuarioService:
         extra_claims = {
             "aluno_id": user.aluno_id,
             "matricula": user.matricula,
-            "tenant_id": user.tenant_id,
+            "tenant_id": effective_tenant_id,
             "academic_year_id": academic_year_id,
         }
         tokens = generate_tokens(identity=str(user.id), roles=roles, extra_claims=extra_claims)
