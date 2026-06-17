@@ -141,8 +141,13 @@ def process_pdf(filepath: Path, *, turno: str | None = None, turma: str | None =
         
         return {"count": count, "logs": errors, "year": final_year_label}
     except Exception as e:
-        logger.error(f"[DLQ_ALERT] Ingestion process failed for file {filepath.name} (Tenant: {tenant_id}): {e}", exc_info=True)
-        raise e
+        logger.opt(exception=True).error(
+            "[DLQ_ALERT] Ingestion process failed for file {} (Tenant: {}): {}",
+            filepath.name,
+            tenant_id,
+            e,
+        )
+        raise
 
 
 def apply_records(records: Sequence[ParsedAlunoRecord], tenant_id: int | None = None, academic_year_id: int | None = None) -> int:

@@ -30,6 +30,16 @@ require_env() {
   esac
 }
 
+require_app_writable_dir() {
+  local path="$1"
+
+  mkdir -p "$path"
+
+  local owner
+  owner="$(stat -c '%u:%g' "$path")"
+  [ "$owner" = "1001:1001" ] || fail "$path deve pertencer ao UID/GID 1001:1001 para escrita pelo container app. Ajuste com: sudo chown -R 1001:1001 data"
+}
+
 require_secret() {
   local key="$1"
   local value="${!key:-}"
@@ -102,6 +112,9 @@ if [ -n "${STRIPE_SECRET_KEY:-}" ] || [ -n "${STRIPE_WEBHOOK_SECRET:-}" ] || [ -
   require_env STRIPE_WEBHOOK_SECRET
   require_env STRIPE_PRICE_ID
 fi
+
+require_app_writable_dir "data"
+require_app_writable_dir "data/uploads"
 
 env \
   DOMAIN="$DOMAIN" \
