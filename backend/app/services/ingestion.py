@@ -376,22 +376,35 @@ def _parse_matricula_inicial(pdf: pdfplumber.PDF, _errors: list[str], *, turno: 
         for table in tables:
             if not table or len(table) < 2:
                 continue
-            
+            header = _build_matricula_header_map(table)
+
             for row in table:
-                if not row or len(row) < 12:
+                if not row:
                     continue
-                
-                idx_str = (row[0] or "").strip()
+
+                idx_str = (_mi_row_value(row, header, "numero", fallback_index=0) or "").strip()
                 if not idx_str.isdigit():
-                    continue # Skip header rows
-                
-                nome = (row[1] or "").strip()
+                    continue  # Skip header rows
+
+                nome = (_mi_row_value(row, header, "nome", fallback_index=1) or "").strip()
                 if not nome or "NOME DO ALUNO" in nome.upper():
                     continue
-                
-                inep = (row[11] or "").strip()
-                cpf = (row[9] or "").strip().replace(".", "").replace("-", "")
-                matricula = inep if len(inep) >= 5 else (cpf if len(cpf) >= 5 else f"SEM-{_slugify(nome)[:10]}")
+
+                inep = _only_digits(
+                    _mi_row_value(row, header, "inep", fallback_index=11),
+                    max_length=32,
+                )
+                cpf = (
+                    _only_digits(
+                        _mi_row_value(row, header, "cpf", fallback_index=9),
+                        max_length=20,
+                    )
+                )
+                matricula = (
+                    inep
+                    if len(inep) >= 5
+                    else (cpf if len(cpf) >= 5 else f"SEM-{_slugify(nome)[:10]}")
+                )
                 
                 if not matricula:
                     continue
@@ -401,20 +414,115 @@ def _parse_matricula_inicial(pdf: pdfplumber.PDF, _errors: list[str], *, turno: 
                     nome=nome,
                     turma=file_turma,
                     turno=file_turno,
-                    sexo=(row[2] or "").strip(),
-                    data_nascimento=(row[3] or "").strip(),
-                    naturalidade=(row[4] or "").strip(),
-                    zona=(row[5] or "").strip(),
-                    endereco=(row[6] or "").strip().replace("\n", " "),
-                    filiacao=(row[7] or "").strip().replace("\n", " "),
-                    telefones=(row[8] or "").strip(),
+                    sexo=_clean_field(
+                        _mi_row_value(row, header, "sexo", fallback_index=2),
+                        max_length=10,
+                    ),
+                    data_nascimento=_clean_field(
+                        _mi_row_value(row, header, "data_nascimento", fallback_index=3),
+                        max_length=20,
+                    ),
+                    naturalidade=_clean_field(
+                        _mi_row_value(row, header, "naturalidade", fallback_index=4),
+                        max_length=100,
+                    ),
+                    zona=_clean_field(
+                        _mi_row_value(row, header, "zona", fallback_index=5),
+                        max_length=50,
+                    ),
+                    endereco=_clean_field(
+                        _mi_row_value(row, header, "endereco", fallback_index=6),
+                        max_length=500,
+                    ),
+                    filiacao=_clean_field(
+                        _mi_row_value(row, header, "filiacao", fallback_index=7),
+                        max_length=500,
+                    ),
+                    telefones=_clean_field(
+                        _mi_row_value(row, header, "telefones", fallback_index=8),
+                        max_length=100,
+                    ),
                     cpf=cpf,
-                    nis=(row[10] or "").strip(),
+                    nis=_only_digits(
+                        _mi_row_value(row, header, "nis", fallback_index=10),
+                        max_length=20,
+                    ),
                     inep=inep,
-                    situacao_anterior=(row[12] or "").strip(),
+                    situacao_anterior=_clean_field(
+                        _mi_row_value(row, header, "situacao_anterior", fallback_index=13),
+                        max_length=100,
+                    ),
                 )
     
     return list(parsed_alunos.values()), extracted_year, extracted_professors
+
+
+def _build_matricula_header_map(table: Sequence[Sequence[str | None]]) -> dict[str, int]:
+    aliases = {
+        "n": "numero",
+        "no": "numero",
+        "numero": "numero",
+        "nome-do-aluno": "nome",
+        "nome": "nome",
+        "sexo": "sexo",
+        "data-de-nasc": "data_nascimento",
+        "data-nasc": "data_nascimento",
+        "data-nascimento": "data_nascimento",
+        "naturalidade": "naturalidade",
+        "zona": "zona",
+        "endereco": "endereco",
+        "filiacao": "filiacao",
+        "telefones": "telefones",
+        "telefone": "telefones",
+        "cpf": "cpf",
+        "nis": "nis",
+        "inep": "inep",
+        "situacao-no-anterior": "situacao_anterior",
+        "situacao-no-ano-anterior": "situacao_anterior",
+        "situacao-anterior": "situacao_anterior",
+    }
+    for row in table:
+        if not row:
+            continue
+        normalized = [_slugify(cell or "") for cell in row]
+        if not any(key in aliases for key in normalized):
+            continue
+        mapped: dict[str, int] = {}
+        for idx, key in enumerate(normalized):
+            alias = aliases.get(key)
+            if alias and alias not in mapped:
+                mapped[alias] = idx
+        if "nome" in mapped:
+            return mapped
+    return {}
+
+
+def _mi_row_value(
+    row: Sequence[str | None],
+    header: dict[str, int],
+    key: str,
+    *,
+    fallback_index: int,
+) -> str | None:
+    idx = header.get(key, fallback_index)
+    if idx < 0 or idx >= len(row):
+        return None
+    return row[idx]
+
+
+def _clean_field(value: str | None, *, max_length: int) -> str | None:
+    if not value:
+        return None
+    text = " ".join(value.split())
+    if not text:
+        return None
+    return text[:max_length]
+
+
+def _only_digits(value: str | None, *, max_length: int = 32) -> str:
+    if not value:
+        return ""
+    return re.sub(r"\D+", "", value)[:max_length]
 
 
 def _extract_student_meta(text: str) -> list[dict[str, str | None]]:
@@ -505,6 +613,19 @@ def _normalize_turma_name(name: str | None, turno: str | None = None) -> str | N
     # 2. Handle "ANO(S)" / "SERIE"
     name = re.sub(r"\bANOS?\b\.?", "", name)
     name = re.sub(r"\bS[EÉ]RIE\b\.?", "", name)
+
+    eja_range = re.search(
+        r"\b(?P<first>[6-9])\s*[º°ªOA]*\s+E\s+(?P<second>[6-9])\s*[º°ªOA]*",
+        name,
+    )
+    turma_letter = re.search(r"\bTURMA\s+(?P<letra>[A-Z])\b", name)
+    if eja_range and turma_letter:
+        first = eja_range.group("first")
+        second = eja_range.group("second")
+        letra = turma_letter.group("letra")
+        return f"{first}/{second} {letra}"
+
+    name = re.sub(r"\bTURMA\b", "", name)
 
     # 3. Handle numbers followed by letter directly (e.g., 6A -> 6º A)
     # Match digit(s) followed optionally by 'o' or 'º' or 'ª' then space or letter

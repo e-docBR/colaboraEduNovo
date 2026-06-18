@@ -36,7 +36,7 @@ export const UploadsPage = () => {
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
 
   const [uploadBoletim, { isLoading: isUploading }] = useUploadBoletimMutation();
-  const { data: jobStatus } = useGetJobStatusQuery(currentJobId || "", {
+  const { data: jobStatus, error: jobStatusError } = useGetJobStatusQuery(currentJobId || "", {
     pollingInterval: 5000,
     skip: !currentJobId
   });
@@ -45,6 +45,16 @@ export const UploadsPage = () => {
   const [processingLogs, setProcessingLogs] = useState<string[]>([]);
 
   useEffect(() => {
+    if (currentJobId && jobStatusError) {
+      setFeedback({
+        type: "error",
+        message: "Não foi possível acompanhar esse processamento. O formulário foi liberado para novo envio."
+      });
+      setCurrentJobId(null);
+      setQueuedStartTime(null);
+      return;
+    }
+
     if (jobStatus) {
       if (jobStatus.status === "finished") {
         const { count, logs, year } = jobStatus.result || { count: 0, logs: [], year: "?" };
@@ -57,9 +67,39 @@ export const UploadsPage = () => {
         setCurrentJobId(null);
         setQueuedStartTime(null);
       } else if (jobStatus.status === "failed") {
-        setFeedback({ type: "error", message: "Erro no processamento do arquivo. Verifique o formato do PDF." });
+        setFeedback({
+          type: "error",
+          message: jobStatus.error
+            ? `Erro no processamento: ${jobStatus.error}`
+            : "Erro no processamento do arquivo. Verifique o formato do PDF."
+        });
         setCurrentJobId(null);
         setQueuedStartTime(null);
+      } else if (jobStatus.status === "scheduled") {
+        const retryMessage = jobStatus.error
+          ? `Aguardando nova tentativa. Último erro: ${jobStatus.error}`
+          : "Aguardando nova tentativa de processamento.";
+        if (!queuedStartTime) {
+          setQueuedStartTime(Date.now());
+          setFeedback({
+            type: "info",
+            message: retryMessage
+          });
+        } else if (Date.now() - queuedStartTime > 75000) {
+          setFeedback({
+            type: "error",
+            message: jobStatus.error
+              ? `O processamento ficou agendado por tempo demais. Último erro: ${jobStatus.error}`
+              : "O processamento ficou agendado por tempo demais. O formulário foi liberado para novo envio."
+          });
+          setCurrentJobId(null);
+          setQueuedStartTime(null);
+        } else {
+          setFeedback({
+            type: "info",
+            message: retryMessage
+          });
+        }
       } else if (jobStatus.status === "queued") {
         if (!queuedStartTime) {
           setQueuedStartTime(Date.now());
@@ -76,7 +116,7 @@ export const UploadsPage = () => {
         setQueuedStartTime(null);
       }
     }
-  }, [jobStatus, queuedStartTime]);
+  }, [currentJobId, jobStatus, jobStatusError, queuedStartTime]);
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const selected = event.target.files?.[0];
@@ -208,7 +248,7 @@ export const UploadsPage = () => {
               <Button type="submit" variant="contained" disabled={!canSubmit}>
                 Enviar para ingestão
               </Button>
-              <Button variant="outlined" onClick={resetForm} disabled={isUploading || !!currentJobId}>
+              <Button variant="outlined" onClick={resetForm} disabled={isUploading}>
                 Limpar
               </Button>
             </Stack>

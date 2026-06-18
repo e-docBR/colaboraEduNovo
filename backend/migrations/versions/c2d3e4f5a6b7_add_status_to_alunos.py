@@ -18,9 +18,16 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _existing_columns() -> set[str]:
+    inspector = sa.inspect(op.get_bind())
+    return {column["name"] for column in inspector.get_columns("alunos")}
+
+
 def upgrade() -> None:
-    op.add_column("alunos", sa.Column("status", sa.String(length=32), nullable=True))
+    if "status" not in _existing_columns():
+        op.add_column("alunos", sa.Column("status", sa.String(length=32), nullable=True))
 
 
 def downgrade() -> None:
-    op.drop_column("alunos", "status")
+    if "status" in _existing_columns():
+        op.drop_column("alunos", "status")

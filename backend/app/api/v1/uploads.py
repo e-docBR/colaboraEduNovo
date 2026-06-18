@@ -175,10 +175,14 @@ def register(parent: Blueprint) -> None:
         if job_tenant_id is None or int(job_tenant_id) != int(g.tenant_id):
             return jsonify({"error": "Job não encontrado"}), 404
 
+        exc_info = job.exc_info
+        error_summary = _summarize_job_error(exc_info) if exc_info else None
+
         return jsonify({
             "job_id": job.id,
             "status": job.get_status(),
             "result": job.result if job.is_finished else None,
+            "error": error_summary,
             "enqueued_at": job.enqueued_at.isoformat() if job.enqueued_at else None,
             "started_at": job.started_at.isoformat() if job.started_at else None,
             "ended_at": job.ended_at.isoformat() if job.ended_at else None,
@@ -191,3 +195,10 @@ def register(parent: Blueprint) -> None:
 def _normalize_segment(value: str) -> str:
     slug = re.sub(r"[^0-9A-Za-z_-]+", "-", value.strip())
     return slug or "geral"
+
+
+def _summarize_job_error(exc_info: str) -> str:
+    lines = [line.strip() for line in exc_info.splitlines() if line.strip()]
+    if not lines:
+        return "Erro desconhecido no processamento."
+    return lines[-1][:500]

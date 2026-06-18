@@ -387,8 +387,8 @@ export type RelatorioQueryArgs = {
 };
 
 export type JobStatusResponse = {
-  /** Status strings returned by python-rq: queued | started | finished | failed | deferred | stopped */
-  status: 'queued' | 'started' | 'finished' | 'failed' | 'deferred' | 'stopped';
+  /** Status strings returned by python-rq. */
+  status: 'queued' | 'scheduled' | 'started' | 'finished' | 'failed' | 'deferred' | 'stopped';
   result?: {
     count: number;
     logs: string[];

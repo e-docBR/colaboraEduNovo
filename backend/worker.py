@@ -22,4 +22,4 @@ queues = [Queue("default", connection=redis_conn)]
 worker = Worker(queues, connection=redis_conn)
 
 if __name__ == "__main__":
-    worker.work(with_scheduler=False)
+    worker.work(with_scheduler=True)

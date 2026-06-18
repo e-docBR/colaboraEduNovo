@@ -219,6 +219,7 @@ services:
           cpus: "1.00"
     command: [
       "rq", "worker", "default",
+      "--with-scheduler",
       "--url", "redis://:${REDIS_PASSWORD}@redis:6379/0"
     ]
     environment:

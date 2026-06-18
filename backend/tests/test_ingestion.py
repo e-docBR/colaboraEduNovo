@@ -5,7 +5,10 @@ from app.models import AcademicYear, Aluno, Nota, Tenant, Usuario
 from app.services.ingestion import (
     ParsedAlunoRecord,
     ParsedNotaRecord,
+    _build_matricula_header_map,
     _extract_student_meta,
+    _mi_row_value,
+    _normalize_turma_name,
     apply_records,
 )
 
@@ -153,3 +156,59 @@ def test_extract_student_meta_handles_multiple_students_on_page():
     assert metas[0]["matricula"] == "10001"
     assert metas[1]["matricula"] == "10002"
     assert metas[0]["turma"] == "6º A"
+
+
+def test_matricula_inicial_header_map_matches_sge_layout():
+    table = [
+        [
+            "Nº",
+            "Nome do aluno",
+            "Sexo",
+            "Data de Nasc.",
+            "Naturalidade",
+            "Zona",
+            "Endereço",
+            "Filiação",
+            "Telefones:",
+            "CPF",
+            "NIS",
+            "INEP",
+            "Raça/cor",
+            "Situação no ano anterior:",
+        ],
+        [
+            "13",
+            "ERICK SANTANA DA SILVA",
+            "M",
+            "16/07/2009",
+            "MUCURI/BA",
+            "Urbana",
+            "RUA CARIBE 07 S/N - CARIBE 02",
+            "Pai: JOSE CARLOS DA SILVA\nMãe: MARIA SANTANA ANDRADE DE OLIVEIRA",
+            "(73) 999696365",
+            "11027303510",
+            "23676616983",
+            "124364700303",
+            "Parda",
+            "Desistente",
+        ],
+    ]
+
+    header = _build_matricula_header_map(table)
+    row = table[1]
+
+    assert _mi_row_value(row, header, "inep", fallback_index=11) == "124364700303"
+    assert _mi_row_value(row, header, "situacao_anterior", fallback_index=13) == "Desistente"
+    assert _mi_row_value(row, header, "situacao_anterior", fallback_index=12) != "Parda"
+
+
+def test_normalize_turma_name_handles_eja_noturno_eixo_header():
+    turma = _normalize_turma_name("EJA - EIXO V - 8º E 9º ANOS - TURMA G", "Noturno")
+
+    assert turma == "8/9 G"
+
+
+def test_normalize_turma_name_handles_eja_eixo_iv_turma_i_header():
+    turma = _normalize_turma_name("EJA - EIXO IV - 6º E 7º ANOS - TURMA I", "Noturno")
+
+    assert turma == "6/7 I"
