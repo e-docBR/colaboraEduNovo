@@ -33,7 +33,7 @@ Cada página informa:
 - título `Comunicado de Acesso ao ColaboraEdu`;
 - explicação breve dos benefícios do sistema;
 - nome, matrícula, turma e turno do aluno;
-- site de acesso `https://gestao.colaboraedu.cloud`;
+- site de acesso `https://gestao.colaboraedu.cloud/login/aluno`;
 - usuário do responsável no formato `resp_<matricula>`;
 - senha temporária gerada no momento da emissão;
 - aviso de troca obrigatória da senha no primeiro acesso.

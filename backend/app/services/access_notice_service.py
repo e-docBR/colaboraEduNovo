@@ -21,7 +21,7 @@ class AccessNoticeResult:
 
 
 class AccessNoticeService:
-    SITE_URL = "https://gestao.colaboraedu.cloud"
+    SITE_URL = "https://gestao.colaboraedu.cloud/login/aluno"
 
     def __init__(self, session: Session):
         self.session = session
