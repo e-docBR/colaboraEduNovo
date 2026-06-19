@@ -115,6 +115,7 @@ export const OcorrenciasPage = () => {
     const [showResponsavelForm, setShowResponsavelForm] = useState(false);
     const [novoEmailResponsavel, setNovoEmailResponsavel] = useState("");
     const [novoTelefoneResponsavel, setNovoTelefoneResponsavel] = useState("");
+    const [contatosAtualizados, setContatosAtualizados] = useState<Record<number, { email_responsavel?: string; telefone_responsavel?: string }>>({});
 
     // Menu state
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -142,6 +143,16 @@ export const OcorrenciasPage = () => {
     const alunoSelecionado = useMemo(
         () => alunosData?.items?.find((a) => a.id === alunoId) || null,
         [alunosData, alunoId]
+    );
+
+    const contatoResponsavel = alunoId ? contatosAtualizados[alunoId] : undefined;
+    const alunoTemContato = Boolean(
+        alunoSelecionado?.email_responsavel ||
+        alunoSelecionado?.telefone_responsavel ||
+        alunoSelecionado?.email ||
+        alunoSelecionado?.telefones ||
+        contatoResponsavel?.email_responsavel ||
+        contatoResponsavel?.telefone_responsavel
     );
 
     const buildNotificationPreview = () => {
@@ -200,11 +211,21 @@ export const OcorrenciasPage = () => {
         try {
             // Se o usuário preencheu dados do responsável, atualizar o cadastro do aluno primeiro
             if (!editingId && (novoEmailResponsavel.trim() || novoTelefoneResponsavel.trim())) {
+                const emailResponsavel = novoEmailResponsavel.trim();
+                const telefoneResponsavel = novoTelefoneResponsavel.trim();
                 await updateAluno({
                     id: alunoId,
-                    ...(novoEmailResponsavel.trim() && { email_responsavel: novoEmailResponsavel.trim() }),
-                    ...(novoTelefoneResponsavel.trim() && { telefone_responsavel: novoTelefoneResponsavel.trim() }),
+                    ...(emailResponsavel && { email_responsavel: emailResponsavel }),
+                    ...(telefoneResponsavel && { telefone_responsavel: telefoneResponsavel }),
                 }).unwrap();
+                setContatosAtualizados((prev) => ({
+                    ...prev,
+                    [alunoId]: {
+                        ...prev[alunoId],
+                        ...(emailResponsavel && { email_responsavel: emailResponsavel }),
+                        ...(telefoneResponsavel && { telefone_responsavel: telefoneResponsavel }),
+                    }
+                }));
             }
 
             if (editingId) {
@@ -782,7 +803,7 @@ export const OcorrenciasPage = () => {
                                 {!editingId && (
                                     <Box>
                                         {/* Painel para cadastrar responsável inline quando ainda não há contato */}
-                                        {alunoId && !alunoSelecionado?.email_responsavel && !alunoSelecionado?.telefone_responsavel && (
+                                        {alunoId && !alunoTemContato && (
                                             <Box mb={1}>
                                                 <Alert
                                                     severity="warning"

@@ -172,7 +172,9 @@ def test_change_password(client, auth_headers):
         "current_password": "admin123",
         "new_password": "NewPass456!"
     })
-    assert response.status_code == 204
+    assert response.status_code == 200
+    assert response.json["access_token"]
+    assert response.json["user"]["must_change_password"] is False
 
     # After change, the old token is revoked — must log in again with the new password
     response = client.post("/api/v1/auth/login", json={
@@ -208,7 +210,10 @@ def test_mobile_change_password_revokes_refresh_token(client, admin_user):
             "refresh_token": refresh_token,
         },
     )
-    assert response.status_code == 204
+    assert response.status_code == 200
+    assert response.json["access_token"]
+    assert response.json["refresh_token"]
+    assert response.json["refresh_token"] != refresh_token
 
     reused = client.post(
         "/api/v1/auth/refresh",

@@ -39,6 +39,7 @@ import NightlightIcon from "@mui/icons-material/Nightlight";
 import ClassIcon from "@mui/icons-material/Class";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import DownloadIcon from "@mui/icons-material/Download";
 
 import { TurmaSummary, useListTurmasQuery, useUpdateTurmaMutation, useDeleteTurmaMutation, useListUsuariosQuery } from "../../lib/api";
 import { useAppSelector } from "../../app/hooks";
@@ -70,7 +71,19 @@ export const TurmasPage = () => {
   const navigate = useNavigate();
 
   const user = useAppSelector((state) => state.auth.user);
+  const accessToken = useAppSelector((state) => state.auth.accessToken);
+  const tenantId = useAppSelector((state) => state.app.tenantId);
+  const academicYearId = useAppSelector((state) => state.app.academicYearId);
   const isAdmin = user?.role && ["admin", "super_admin"].includes(user.role);
+  const canGenerateAccessNotices = Boolean(user?.role && [
+    "admin",
+    "super_admin",
+    "coordenador",
+    "coordenacao",
+    "diretor",
+    "orientador",
+    "orientacao"
+  ].includes(user.role));
 
   const setSearch = (value: string) => {
     if (value) {
@@ -102,6 +115,9 @@ export const TurmasPage = () => {
   const professorsList = useMemo(() => usersResponse?.items ?? [], [usersResponse]);
 
   const [deletingTurma, setDeletingTurma] = useState<TurmaSummary | null>(null);
+  const [accessNoticeOpen, setAccessNoticeOpen] = useState(false);
+  const [accessNoticeTurma, setAccessNoticeTurma] = useState("");
+  const [isGeneratingAccessNotice, setIsGeneratingAccessNotice] = useState(false);
 
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: "success" | "error" }>({
     open: false,
@@ -146,6 +162,43 @@ export const TurmasPage = () => {
     }
   };
 
+  const handleDownloadAccessNotices = async () => {
+    if (!accessNoticeTurma || !accessToken) return;
+    const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
+    const params = new URLSearchParams({ turma: accessNoticeTurma });
+    const headers: Record<string, string> = { Authorization: `Bearer ${accessToken}` };
+    if (tenantId) headers["X-Tenant-ID"] = String(tenantId);
+    if (academicYearId) headers["x-academic-year-id"] = String(academicYearId);
+
+    setIsGeneratingAccessNotice(true);
+    try {
+      const response = await fetch(`${API_BASE}/exports/comunicados-acesso?${params.toString()}`, { headers });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "Erro ao gerar comunicados.");
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get("Content-Disposition") || "";
+      const filenameMatch = disposition.match(/filename="?([^"]+)"?/i);
+      const fallback = `comunicados_acesso_${accessNoticeTurma.replace(/\W+/g, "_")}.docx`;
+      const filename = filenameMatch?.[1] || fallback;
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      setAccessNoticeOpen(false);
+      setSnackbar({ open: true, message: "Comunicados gerados com sucesso!", severity: "success" });
+    } catch (error: any) {
+      setSnackbar({ open: true, message: error?.message || "Erro ao gerar comunicados.", severity: "error" });
+    } finally {
+      setIsGeneratingAccessNotice(false);
+    }
+  };
+
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return turmas;
@@ -157,13 +210,28 @@ export const TurmasPage = () => {
 
   return (
     <Box sx={{ minHeight: "100vh" }}>
-      <Box mb={3}>
-        <Typography variant="h3" fontWeight={800} sx={{ letterSpacing: "-0.02em", color: "text.primary", mb: 0.5 }}>
-          Turmas
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Gestão de turmas e desempenho por série
-        </Typography>
+      <Box mb={3} display="flex" flexDirection={{ xs: "column", md: "row" }} justifyContent="space-between" gap={2}>
+        <Box>
+          <Typography variant="h3" fontWeight={800} sx={{ letterSpacing: "-0.02em", color: "text.primary", mb: 0.5 }}>
+            Turmas
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Gestão de turmas e desempenho por série
+          </Typography>
+        </Box>
+        {canGenerateAccessNotices && (
+          <Button
+            variant="contained"
+            startIcon={<DownloadIcon />}
+            onClick={() => {
+              setAccessNoticeTurma(filtered[0]?.turma || "");
+              setAccessNoticeOpen(true);
+            }}
+            sx={{ alignSelf: { xs: "stretch", md: "flex-start" }, fontWeight: 700, textTransform: "none" }}
+          >
+            Gerar comunicados de acesso
+          </Button>
+        )}
       </Box>
 
       <TextField
@@ -392,6 +460,42 @@ export const TurmasPage = () => {
           <Button onClick={() => setDeletingTurma(null)} variant="outlined">Cancelar</Button>
           <Button onClick={handleDelete} color="error" variant="contained" disabled={isDeleting}>
             Confirmar Exclusão
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={accessNoticeOpen} onClose={() => setAccessNoticeOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Gerar Comunicados de Acesso</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Alert severity="warning">
+              As senhas temporárias dos responsáveis da turma selecionada serão redefinidas.
+            </Alert>
+            <TextField
+              select
+              label="Turma"
+              value={accessNoticeTurma}
+              onChange={(e) => setAccessNoticeTurma(e.target.value)}
+              fullWidth
+              size="small"
+            >
+              {turmas.map((turma) => (
+                <MenuItem key={turma.slug || turma.turma} value={turma.turma}>
+                  {turma.turma} - {turma.turno}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 0 }}>
+          <Button onClick={() => setAccessNoticeOpen(false)}>Cancelar</Button>
+          <Button
+            variant="contained"
+            startIcon={<DownloadIcon />}
+            onClick={handleDownloadAccessNotices}
+            disabled={isGeneratingAccessNotice || !accessNoticeTurma}
+          >
+            {isGeneratingAccessNotice ? "Gerando..." : "Baixar DOCX"}
           </Button>
         </DialogActions>
       </Dialog>

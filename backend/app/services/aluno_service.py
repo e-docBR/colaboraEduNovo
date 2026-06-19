@@ -67,6 +67,10 @@ class AlunoService:
                     media_faltas=round(float(media_faltas), 1) if media_faltas is not None else None,
                     is_archived=aluno.is_archived,
                     deleted_at=aluno.deleted_at,
+                    telefones=aluno.telefones,
+                    email=aluno.email,
+                    email_responsavel=aluno.email_responsavel,
+                    telefone_responsavel=aluno.telefone_responsavel,
                     max_pts=max_pts,
                 )
             )
@@ -245,4 +249,3 @@ class AlunoService:
             "notas": notas_list,
             "generated_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
         }
-

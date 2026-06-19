@@ -6,7 +6,7 @@ import { Navigate, useNavigate } from "react-router-dom";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
-import { logout } from "./authSlice";
+import { logout, setCredentials } from "./authSlice";
 import { useChangePasswordMutation } from "../../lib/api";
 
 const SPECIAL_PASSWORD_CHARS = `!@#$%^&*()-_=+[]{};:'",.<>?/\\|\`~`;
@@ -22,6 +22,12 @@ const PASSWORD_RULES = [
 ];
 
 const validatePassword = (p: string) => PASSWORD_RULES.every((r) => r.test(p));
+
+const homeForRole = (role?: string) => {
+  if (role === "responsavel") return "/app/portal-responsavel";
+  if (role === "aluno") return "/app/meu-boletim";
+  return "/app";
+};
 
 export const ChangePasswordPage = () => {
   const navigate = useNavigate();
@@ -66,10 +72,10 @@ export const ChangePasswordPage = () => {
       return;
     }
     try {
-      await changePassword({ current_password: currentPassword, new_password: newPassword }).unwrap();
-      // Force re-login so the revoked token is never silently refreshed (B8).
-      dispatch(logout());
-      navigate("/login", { replace: true, state: { message: "Senha alterada com sucesso. Faça login novamente." } });
+      const response = await changePassword({ current_password: currentPassword, new_password: newPassword }).unwrap();
+      dispatch(setCredentials(response));
+      setSuccess(true);
+      navigate(homeForRole(response.user?.role), { replace: true });
     } catch (err) {
       setError(resolveErrorMessage(err));
     }

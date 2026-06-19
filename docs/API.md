@@ -113,7 +113,23 @@ Revoga os tokens do usuário atual (adiciona ao blocklist Redis).
 
 **Autenticado**
 
-**Resposta:** `204 No Content`
+**Resposta 200 — web:**
+```json
+{
+  "access_token": "eyJ...",
+  "user": {
+    "id": 1,
+    "username": "resp_57411",
+    "role": "responsavel",
+    "tenant_id": 1,
+    "must_change_password": false
+  }
+}
+```
+
+> A sessão anterior é revogada e o backend emite uma nova sessão. No web, o cookie
+> HttpOnly `rt` também é atualizado. No mobile/nativo, a resposta inclui
+> `refresh_token`.
 
 ---
 
@@ -568,6 +584,32 @@ Remove um comunicado.
 Marca um comunicado como lido.
 
 **Autenticado**
+
+---
+
+### Exportações
+
+#### `GET /exports/comunicados-acesso`
+
+Gera um arquivo DOCX por turma com uma carta de acesso para cada
+aluno/responsável.
+
+**Autenticado** | Roles: `admin`, `super_admin`, `coordenador`, `diretor`, `orientador`
+
+**Query params:**
+| Campo | Obrigatório | Descrição |
+|-------|-------------|-----------|
+| `turma` | Sim | Nome exato da turma, por exemplo `6/7 I` |
+
+**Efeito colateral de segurança:** para cada aluno ativo da turma, o sistema cria ou
+reaproveita o usuário `resp_<matricula>`, gera uma nova senha temporária, atualiza
+`password_hash`, marca `must_change_password=true` e ativa a conta.
+
+**Resposta 200:**
+- `Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document`
+- `Content-Disposition: attachment; filename="comunicados_acesso_<turma>.docx"`
+
+**Erros:** `400` turma ausente, `403` perfil sem permissão, `404` turma sem alunos ativos.
 
 ---
 

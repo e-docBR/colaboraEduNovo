@@ -3,7 +3,7 @@ import csv
 import io
 from datetime import datetime
 
-from flask import Blueprint, Response, jsonify, request, g
+from flask import Blueprint, Response, jsonify, request, g, send_file
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from sqlalchemy.orm import joinedload
 from werkzeug.utils import secure_filename
@@ -11,7 +11,8 @@ from werkzeug.utils import secure_filename
 from ...core.database import session_scope
 from ...core.decorators import require_roles
 from ...core.extensions import limiter
-from ...models import Aluno, Nota
+from ...models import Aluno, Nota, Tenant
+from ...services.access_notice_service import AccessNoticeService
 from ...services.audit import log_action
 
 
@@ -208,6 +209,69 @@ def register(parent: Blueprint) -> None:
         if fmt == "csv":
             return _csv_response(rows, filename)
         return _xlsx_response(rows, "Notas", filename)
+
+    # ── Access notices ────────────────────────────────────────────────────────
+
+    @bp.get("/exports/comunicados-acesso")
+    @jwt_required()
+    @limiter.limit("10 per hour")
+    @require_roles(
+        "admin",
+        "super_admin",
+        "coordenador",
+        "coordenacao",
+        "diretor",
+        "orientador",
+        "orientacao",
+    )
+    def export_comunicados_acesso():
+        """Download guardian access notices as one DOCX per class."""
+        turma_filter = (request.args.get("turma") or "").strip()
+        if not turma_filter:
+            return jsonify({"error": "Informe a turma para gerar os comunicados."}), 400
+
+        tenant_id = getattr(g, "tenant_id", None)
+        academic_year_id = getattr(g, "academic_year_id", None)
+        if not tenant_id:
+            return jsonify({"error": "Escola não identificada."}), 400
+
+        user_id = int(get_jwt_identity())
+        with session_scope() as session:
+            tenant = session.get(Tenant, tenant_id)
+            school_name = tenant.name if tenant else "ColaboraEdu"
+            try:
+                result = AccessNoticeService(session).generate_class_docx(
+                    tenant_id=tenant_id,
+                    academic_year_id=academic_year_id,
+                    turma=turma_filter,
+                    school_name=school_name,
+                )
+            except ValueError as exc:
+                return jsonify({"error": str(exc)}), 404
+            except RuntimeError as exc:
+                return jsonify({"error": str(exc)}), 500
+
+            log_action(
+                session,
+                user_id,
+                "EXPORT_COMUNICADOS_ACESSO",
+                "Aluno",
+                details={
+                    "turma": turma_filter,
+                    "row_count": result.row_count,
+                    "academic_year_id": academic_year_id,
+                    "format": "docx",
+                    "passwords_reset": True,
+                },
+            )
+
+        response = send_file(
+            result.buffer,
+            mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            as_attachment=True,
+            download_name=secure_filename(result.filename) or "comunicados_acesso.docx",
+        )
+        return _apply_download_headers(response)
 
     parent.register_blueprint(bp)
 

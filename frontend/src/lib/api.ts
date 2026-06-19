@@ -767,7 +767,7 @@ export const api = createApi({
       query: () => "/notas/filtros",
       providesTags: ["Notas"]
     }),
-    changePassword: builder.mutation<void, { current_password: string; new_password: string }>({
+    changePassword: builder.mutation<LoginResponse, { current_password: string; new_password: string }>({
       query: (body) => ({
         url: "/auth/change-password",
         method: "POST",

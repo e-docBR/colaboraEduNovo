@@ -1,6 +1,6 @@
 """Auth endpoints."""
 import secrets
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, make_response
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -8,7 +8,7 @@ from sqlalchemy import select
 from ...core.database import session_scope
 from ...core.security import generate_tokens, add_token_to_blocklist, hash_password
 from ...services.usuario_service import UsuarioService
-from ...schemas.usuario import LoginRequest, ChangePasswordRequest
+from ...schemas.usuario import LoginRequest, ChangePasswordRequest, UsuarioSchema
 from ...core.extensions import limiter
 from loguru import logger
 
@@ -277,22 +277,46 @@ def register(parent: Blueprint) -> None:
             return jsonify({"error": "Dados inválidos", "details": e.errors(include_context=False)}), 422
 
         user_id = int(get_jwt_identity())
+        jwt_data = get_jwt()
 
         with session_scope() as session:
+            from ...models import Usuario
+
             service = UsuarioService(session)
             service.change_password(user_id, payload.current_password, payload.new_password)
+            session.flush()
 
-        # Revoke the current token so the user must re-authenticate with the new password.
-        # This invalidates any attacker who obtained the old token before the change.
+            user = session.get(Usuario, user_id)
+            if not user:
+                return jsonify({"error": "Usuário não encontrado"}), 404
+
+            roles = [user.role] if user.role else []
+            extra_claims = {
+                "aluno_id": user.aluno_id,
+                "matricula": user.matricula,
+                "tenant_id": user.tenant_id,
+                "academic_year_id": jwt_data.get("academic_year_id"),
+            }
+            tokens = generate_tokens(identity=str(user.id), roles=roles, extra_claims=extra_claims)
+            user_data = UsuarioSchema.model_validate(user).model_dump()
+
+        # Revoke the old session, then immediately return a fresh one so users
+        # who were forced to change password continue to the correct portal.
         import time as _time
-        jwt_data = get_jwt()
         jti = jwt_data["jti"]
         exp = jwt_data.get("exp", 0)
         ttl = max(int(exp - _time.time()), 1)
         add_token_to_blocklist(jti, ttl)
         _revoke_refresh_token_if_present()
 
-        return ("", 204)
+        response_body = {"access_token": tokens["access_token"], "user": user_data}
+        if _is_mobile_client():
+            response_body["refresh_token"] = tokens["refresh_token"]
+
+        resp = make_response(jsonify(response_body))
+        if not _is_mobile_client():
+            _set_refresh_cookie(resp, tokens["refresh_token"])
+        return resp
 
     @bp.post("/auth/forgot-password")
     @limiter.limit("5 per hour")

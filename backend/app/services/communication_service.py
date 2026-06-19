@@ -126,10 +126,17 @@ class CommunicationService:
         }
 
         try:
-            response = requests.post(url, json=payload, headers=headers, timeout=10)
+            response = requests.post(url, json=payload, headers=headers, timeout=30)
             response.raise_for_status()
             logger.info(f"WhatsApp message sent to {CommunicationService._mask_phone(normalized)}")
             return True
+        except requests.HTTPError as e:
+            body = e.response.text[:500] if e.response is not None else ""
+            logger.error(
+                f"Failed to send WhatsApp to {CommunicationService._mask_phone(normalized)}: "
+                f"{e}; response={body!r}"
+            )
+            return False
         except Exception as e:
             logger.error(f"Failed to send WhatsApp to {CommunicationService._mask_phone(normalized)}: {e}")
             return False

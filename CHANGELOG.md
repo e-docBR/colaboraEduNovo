@@ -8,6 +8,39 @@ ou restaurar qualquer release via `git checkout vX.Y.Z` ou pelo GitHub → *Rele
 
 ---
 
+## [1.8.3] - 2026-06-19
+
+### Portal do Responsável
+- Após a troca obrigatória de senha, responsáveis permanecem autenticados e são
+  redirecionados automaticamente para `/app/portal-responsavel`.
+- Alunos são redirecionados para `/app/meu-boletim`; equipe administrativa segue
+  para `/app`.
+- `POST /auth/change-password` agora revoga a sessão anterior, emite novos tokens e
+  retorna o usuário atualizado com `must_change_password=false`.
+
+### Comunicados de Acesso
+- Novo endpoint restrito `GET /api/v1/exports/comunicados-acesso?turma=<turma>`
+  para gerar DOCX por turma com uma carta por aluno/responsável.
+- O gerador cria ou reaproveita contas `resp_<matricula>`, redefine uma senha
+  temporária e marca `must_change_password=True`.
+- A tela de **Turmas** recebeu o botão “Gerar comunicados de acesso”, com seleção de
+  turma e download do DOCX.
+- A geração registra auditoria com turma, ano letivo, quantidade de registros e
+  emissor.
+
+### Ocorrências e Mensageria
+- O cadastro rápido de contato do responsável em ocorrências passa a atualizar o
+  estado da tela, evitando solicitar o mesmo contato em nova ocorrência do aluno.
+- Listagens de alunos incluem contatos do aluno/responsável usados pelo fluxo de
+  ocorrências.
+- Logs de falha no WhatsApp agora incluem trecho da resposta HTTP e o timeout de
+  envio foi ampliado para 30 segundos.
+
+### Testes
+- Cobertura específica para geração de comunicados DOCX e reset/criação de contas
+  de responsáveis.
+- Testes de autenticação atualizados para a nova resposta de troca de senha.
+
 ## [1.8.2] - 2026-06-12
 
 ### Relatórios / Ata de Resultado
