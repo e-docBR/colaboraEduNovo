@@ -1,7 +1,8 @@
 # Comunicados de Acesso por Turma
 
 Este recurso gera um arquivo DOCX por turma com uma carta individual para cada
-aluno/responsável, contendo as instruções de acesso ao ColaboraEdu.
+aluno/responsável, contendo as instruções de acesso ao ColaboraEdu. O layout usa
+dois comunicados por folha para facilitar a impressão e o recorte.
 
 ## Quem pode gerar
 
@@ -23,7 +24,8 @@ Professores, alunos e responsáveis não têm permissão para gerar o arquivo.
 4. Selecione a turma.
 5. Clique em **Baixar DOCX**.
 
-O arquivo baixado terá uma página por aluno/responsável.
+O arquivo baixado terá dois comunicados por folha. Se a turma tiver quantidade
+ímpar de alunos, o último comunicado ficará sozinho na última folha.
 
 ## Conteúdo da carta
 
@@ -77,7 +79,7 @@ Resposta:
 
 ## Validações realizadas
 
-- Geração DOCX com uma página por aluno.
+- Geração DOCX com dois comunicados por folha.
 - Criação de responsável inexistente.
 - Reset de senha de responsável existente.
 - `must_change_password=true` após emissão.

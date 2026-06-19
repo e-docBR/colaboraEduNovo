@@ -53,8 +53,14 @@ class AccessNoticeService:
         section.right_margin = Inches(0.75)
 
         for index, aluno in enumerate(alunos):
-            if index:
+            if index and index % 2 == 0:
                 document.add_page_break()
+            elif index % 2 == 1:
+                separator = document.add_paragraph()
+                separator.paragraph_format.space_before = Pt(4)
+                separator.paragraph_format.space_after = Pt(4)
+                run = separator.add_run("─" * 78)
+                run.font.size = Pt(7)
             usuario = self._reset_guardian_password(aluno)
             password = self._temporary_password()
             usuario.password_hash = hash_password(password)
@@ -124,50 +130,58 @@ class AccessNoticeService:
         align,
         font_size,
     ) -> None:
+        def paragraph(text: str = "", *, bold: bool = False, center: bool = False, size: int = 9):
+            p = document.add_paragraph()
+            p.alignment = align.CENTER if center else align.LEFT
+            p.paragraph_format.space_after = font_size(1)
+            p.paragraph_format.line_spacing = 1.0
+            run = p.add_run(text)
+            run.bold = bold
+            run.font.size = font_size(size)
+            return p
+
         title = document.add_paragraph()
         title.alignment = align.CENTER
+        title.paragraph_format.space_after = font_size(0)
         run = title.add_run(school_name)
         run.bold = True
-        run.font.size = font_size(14)
+        run.font.size = font_size(11)
 
         subtitle = document.add_paragraph()
         subtitle.alignment = align.CENTER
+        subtitle.paragraph_format.space_after = font_size(3)
         run = subtitle.add_run("Comunicado de Acesso ao ColaboraEdu")
         run.bold = True
-        run.font.size = font_size(16)
+        run.font.size = font_size(12)
 
-        document.add_paragraph()
-        document.add_paragraph("Prezada família,")
-        document.add_paragraph(
-            "A escola passa a utilizar o ColaboraEdu para aproximar a família da vida escolar "
-            "dos estudantes. Pelo sistema, os responsáveis podem acompanhar boletins, notas, "
-            "ocorrências, comunicados e outras informações importantes."
-        )
-        document.add_paragraph(
-            "Esse acesso facilita o acompanhamento pedagógico, melhora a comunicação com a escola "
-            "e ajuda a família a participar mais de perto do desenvolvimento do estudante."
+        paragraph("Prezada família,")
+        paragraph(
+            "O ColaboraEdu permite acompanhar boletins, notas, ocorrências, comunicados "
+            "e informações escolares, aproximando família e escola."
         )
 
-        document.add_paragraph("Dados do aluno:", style=None).runs[0].bold = True
-        document.add_paragraph(f"Nome: {aluno.nome}")
-        document.add_paragraph(f"Matrícula: {aluno.matricula}")
-        document.add_paragraph(f"Turma: {aluno.turma}")
-        document.add_paragraph(f"Turno: {aluno.turno}")
+        paragraph("Dados do aluno:", bold=True)
+        paragraph(f"Nome: {aluno.nome}")
+        paragraph(f"Matrícula: {aluno.matricula}    Turma: {aluno.turma}    Turno: {aluno.turno}")
 
-        document.add_paragraph()
-        document.add_paragraph("Dados de acesso do responsável:", style=None).runs[0].bold = True
-        document.add_paragraph(f"Site: {self.SITE_URL}")
-        document.add_paragraph(f"Escola: {school_name}")
-        document.add_paragraph(f"Usuário: {username}")
-        document.add_paragraph(f"Senha temporária: {password}")
+        paragraph("Dados de acesso do responsável:", bold=True)
+        paragraph(f"Site: {self.SITE_URL}")
+        paragraph(f"Escola: {school_name}")
+        paragraph(f"Usuário: {username}    Senha temporária: {password}", bold=True)
 
-        document.add_paragraph()
         warning = document.add_paragraph()
+        warning.paragraph_format.space_after = font_size(2)
+        warning.paragraph_format.line_spacing = 1.0
         warning.add_run("Importante: ").bold = True
         warning.add_run(
             "no primeiro acesso, será solicitada a troca da senha. Guarde estes dados com segurança."
         )
+        for run in warning.runs:
+            run.font.size = font_size(9)
 
         footer = document.add_paragraph()
         footer.alignment = align.CENTER
+        footer.paragraph_format.space_after = font_size(1)
         footer.add_run("Atenciosamente,\nEquipe Escolar").bold = True
+        for run in footer.runs:
+            run.font.size = font_size(9)

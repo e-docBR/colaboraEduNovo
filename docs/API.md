@@ -592,7 +592,7 @@ Marca um comunicado como lido.
 #### `GET /exports/comunicados-acesso`
 
 Gera um arquivo DOCX por turma com uma carta de acesso para cada
-aluno/responsável.
+aluno/responsável, em layout de dois comunicados por folha.
 
 **Autenticado** | Roles: `admin`, `super_admin`, `coordenador`, `diretor`, `orientador`
 

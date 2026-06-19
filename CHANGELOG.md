@@ -21,6 +21,7 @@ ou restaurar qualquer release via `git checkout vX.Y.Z` ou pelo GitHub → *Rele
 ### Comunicados de Acesso
 - Novo endpoint restrito `GET /api/v1/exports/comunicados-acesso?turma=<turma>`
   para gerar DOCX por turma com uma carta por aluno/responsável.
+- O DOCX passou a usar layout compacto com dois comunicados por folha.
 - O gerador cria ou reaproveita contas `resp_<matricula>`, redefine uma senha
   temporária e marca `must_change_password=True`.
 - A tela de **Turmas** recebeu o botão “Gerar comunicados de acesso”, com seleção de
