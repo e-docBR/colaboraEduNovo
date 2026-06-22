@@ -941,7 +941,7 @@ def register(parent: Blueprint) -> None:
 
     @bp.get("/relatorios/<string:slug>")
     @jwt_required()
-    @limiter.limit("30 per hour")
+    @limiter.limit("300 per hour")
     @require_roles("admin", "super_admin", "coordenador", "diretor", "orientador", "professor")
     @cache_response(timeout=300, key_prefix="relatorios")
     def get_relatorio(slug: str):

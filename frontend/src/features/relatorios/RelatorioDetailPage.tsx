@@ -251,17 +251,19 @@ export const RelatorioDetailPage = () => {
           next = { ...next, turma: "" };
         } else {
           const derivedSerie = deriveSerieFromTurma(value);
-          const match = turmasList.find((item) => item.turma === value);
           next = {
             ...next,
             turma: value,
-            serie: derivedSerie || next.serie,
-            turno: match?.turno ?? next.turno
+            serie: definition?.filters?.serie ? derivedSerie || next.serie : next.serie
           };
         }
       }
       return next;
     });
+  };
+
+  const handleClearFilters = () => {
+    setFilters({ ...DEFAULT_FILTERS });
   };
 
   return (
@@ -398,6 +400,14 @@ export const RelatorioDetailPage = () => {
                   <MenuItem value="3">3º Trimestre (0–40 pts)</MenuItem>
                 </TextField>
               )}
+              <Button
+                variant="outlined"
+                color="inherit"
+                onClick={handleClearFilters}
+                sx={{ minWidth: 130, height: 56 }}
+              >
+                Limpar filtros
+              </Button>
             </Stack>
             {combinationIssues.length > 0 && (
               <Box mt={2}>
