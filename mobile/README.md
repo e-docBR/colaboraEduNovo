@@ -35,6 +35,7 @@ npm run build:android:production
 ```
 
 Veja o checklist de publicação em [PLAY_STORE.md](./PLAY_STORE.md).
+Para o processo completo, use [RELEASE_RUNBOOK.md](./RELEASE_RUNBOOK.md).
 
 ## Validação
 ```bash
@@ -42,6 +43,7 @@ make validate-mobile
 ```
 
 Se `mobile/node_modules` ainda não existir, o script de validação monta uma cópia temporária e instala as dependências só para typecheck.
+O roteiro manual de homologação está em [QA_TEST_PLAN.md](./QA_TEST_PLAN.md).
 
 ## Auth
 - O app envia `X-Client-Platform: mobile`.

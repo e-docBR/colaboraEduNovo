@@ -3,6 +3,7 @@
     "name": "ColaboraEdu Família",
     "slug": "colaboraedu-familia",
     "version": "1.0.0",
+    "description": "Portal mobile para alunos e responsáveis acompanharem boletins, faltas, ocorrências e comunicados escolares.",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "colaboraedu-familia",
@@ -20,6 +21,7 @@
     "android": {
       "package": "cloud.colaboraedu.familia",
       "versionCode": 1,
+      "permissions": [],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#0f172a"

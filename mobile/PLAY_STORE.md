@@ -44,17 +44,7 @@ npm run build:android:production
 
 ## Checklist antes do teste fechado
 
-- Login de aluno com senha temporária.
-- Login de responsável com usuário `resp_<matricula>`.
-- Troca obrigatória de senha.
-- Bloqueio de perfis administrativos.
-- Visualização de boletim sem notas.
-- Visualização de boletim com notas e faltas.
-- Comunicados vazios e com mensagens.
-- Ocorrências vazias e com registros.
-- Logout.
-- Sessão expirada e retorno ao login.
-- Teste em pelo menos dois aparelhos Android.
+Use o roteiro detalhado em [QA_TEST_PLAN.md](./QA_TEST_PLAN.md).
 
 ## Materiais necessários para a loja
 
@@ -63,3 +53,9 @@ npm run build:android:production
 - Política de privacidade publicada em URL pública.
 - Conta Google Play Console.
 - Lista de testadores internos/fechados.
+
+## Documentos relacionados
+
+- [RELEASE_RUNBOOK.md](./RELEASE_RUNBOOK.md)
+- [STORE_LISTING.md](./STORE_LISTING.md)
+- [PRIVACY_POLICY_DRAFT.md](./PRIVACY_POLICY_DRAFT.md)
