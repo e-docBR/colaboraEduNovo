@@ -13,7 +13,7 @@ producao ou Play Store. Nenhum deploy de producao foi executado nesta etapa.
 - Expo SDK: `54.0.0`
 - Android package: `cloud.colaboraedu.familia`
 - API local usada no export: `http://10.0.2.2:5000/api/v1`
-- Tenant local usado no export: `colegio-frei-ronaldo`
+- Tenant local usado nos testes: `default`
 
 ## Correcoes aplicadas
 
@@ -32,8 +32,45 @@ producao ou Play Store. Nenhum deploy de producao foi executado nesta etapa.
 | `make validate-mobile` | OK |
 | `npm run lint --prefix mobile` | OK |
 | `npx expo config --type public` | OK |
-| `EXPO_PUBLIC_API_URL=http://10.0.2.2:5000/api/v1 EXPO_PUBLIC_TENANT_SLUG=colegio-frei-ronaldo npx expo export --platform android --output-dir /tmp/colaboraedu-mobile-export` | OK |
+| `EXPO_PUBLIC_API_URL=http://10.0.2.2:5000/api/v1 EXPO_PUBLIC_TENANT_SLUG=default npx expo export --platform android --output-dir /tmp/colaboraedu-mobile-export` | OK |
 | `npm audit --audit-level=moderate --prefix mobile` | Pendente: 40 moderadas |
+
+## Testes locais com API
+
+Infra local executada:
+
+- PostgreSQL local via Docker: `localhost:5440`
+- Redis local via Docker: `localhost:6389`
+- Backend Flask local: `http://127.0.0.1:5000`
+
+Validações:
+
+| Teste | Resultado |
+| --- | --- |
+| `GET /health` | OK: database e redis |
+| `make validate-backend` | OK |
+| `make validate-frontend` | OK, com 11 warnings antigos de variáveis não usadas |
+| `make test` | OK: 117 testes backend aprovados |
+| `make migrate` | OK no banco local |
+| Login aluno local | OK: `aluno900001` / `900001`, `must_change_password=True` |
+| `GET /api/v1/alunos/me` | OK: retornou aluno local e 3 notas |
+| Login responsável local | OK: `resp_900001` / `900001`, `must_change_password=True` |
+| `GET /api/v1/responsavel/meu-filho` | OK: retornou aluno, 1 ocorrência e 1 comunicado |
+| Troca de senha temporária | OK: `must_change_password=False` após troca |
+
+Massa local criada:
+
+- Aluno: `ALUNO TESTE FAMILIA`
+- Matrícula: `900001`
+- Usuário aluno: `aluno900001`
+- Usuário responsável: `resp_900001`
+- Senha temporária local restaurada após o teste: `900001`
+
+Arquivo local criado e ignorado pelo Git:
+
+- `mobile/.env`
+- `EXPO_PUBLIC_API_URL=http://10.0.2.2:5000/api/v1`
+- `EXPO_PUBLIC_TENANT_SLUG=default`
 
 ## Observacoes do export Android
 
@@ -60,10 +97,9 @@ planejada do Expo/React Native, nao por `--force`.
 
 ## Proximos passos locais
 
-1. Subir API local ou staging com massa de teste de aluno/responsavel.
-2. Rodar o app em emulador ou celular Android com
+1. Rodar o app em emulador ou celular Android com
    `EXPO_PUBLIC_API_URL` apontando para API acessivel pelo aparelho.
-3. Executar o roteiro de `QA_TEST_PLAN.md`.
-4. Gerar APK interno via EAS somente com URL de staging, nunca localhost.
-5. Instalar APK em pelo menos dois aparelhos Android e registrar evidencias.
-6. Enviar para producao ou Play Store apenas apos aprovacao explicita.
+2. Executar o roteiro de `QA_TEST_PLAN.md`.
+3. Gerar APK interno via EAS somente com URL de staging, nunca localhost.
+4. Instalar APK em pelo menos dois aparelhos Android e registrar evidencias.
+5. Enviar para producao ou Play Store apenas apos aprovacao explicita.
