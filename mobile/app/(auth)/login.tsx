@@ -17,11 +17,12 @@ import { authApi, DEFAULT_TENANT_SLUG } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth.store';
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [selectedTenantSlug, setSelectedTenantSlug] = useState(DEFAULT_TENANT_SLUG ?? '');
   const [loading, setLoading] = useState(false);
   const signIn = useAuthStore((s) => s.signIn);
+  const signOut = useAuthStore((s) => s.signOut);
 
   const { data: tenants = [], isLoading: tenantsLoading } = useQuery({
     queryKey: ['public-tenants'],
@@ -36,8 +37,8 @@ export default function LoginScreen() {
   }, [selectedTenantSlug, tenants]);
 
   const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert('Atenção', 'Preencha o e-mail e a senha.');
+    if (!username.trim() || !password.trim()) {
+      Alert.alert('Atenção', 'Preencha o usuário e a senha.');
       return;
     }
 
@@ -49,12 +50,24 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const { data } = await authApi.login(
-        email.trim().toLowerCase(),
+        username.trim(),
         password,
         selectedTenantSlug,
       );
       await signIn(data.access_token, data.refresh_token, data.user);
-      router.replace('/(tabs)');
+      if (!['aluno', 'responsavel'].includes(data.user.role)) {
+        await signOut();
+        Alert.alert(
+          'App exclusivo para famílias',
+          'Este aplicativo é destinado a alunos e responsáveis. A equipe escolar deve acessar pelo painel web.',
+        );
+        return;
+      }
+      if (data.user.must_change_password) {
+        router.replace('/change-password');
+      } else {
+        router.replace('/(tabs)');
+      }
     } catch (error: unknown) {
       const msg =
         (error as { response?: { data?: { error?: string } } })?.response?.data?.error ??
@@ -87,8 +100,8 @@ export default function LoginScreen() {
 
         {/* Card */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Entrar na plataforma</Text>
-          <Text style={styles.cardSubtitle}>Use suas credenciais institucionais</Text>
+          <Text style={styles.cardTitle}>Portal da família</Text>
+          <Text style={styles.cardSubtitle}>Acompanhe boletins, ocorrências e recados</Text>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Escola</Text>
@@ -121,18 +134,18 @@ export default function LoginScreen() {
             )}
           </View>
 
-          {/* Email */}
+          {/* Username */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>E-mail</Text>
+            <Text style={styles.label}>Usuário</Text>
             <TextInput
               style={styles.input}
-              placeholder="seu@email.com.br"
+              placeholder="resp_12345 ou matrícula"
               placeholderTextColor="#94a3b8"
               autoCapitalize="none"
-              keyboardType="email-address"
+              keyboardType="default"
               returnKeyType="next"
-              value={email}
-              onChangeText={setEmail}
+              value={username}
+              onChangeText={setUsername}
             />
           </View>
 

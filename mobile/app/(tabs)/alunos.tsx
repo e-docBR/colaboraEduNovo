@@ -1,173 +1,179 @@
-/**
- * Alunos tab — list of students with server-side pagination and search.
- */
-import { useState, useCallback } from 'react';
 import {
-  View,
-  Text,
-  FlatList,
-  TextInput,
-  StyleSheet,
-  RefreshControl,
   ActivityIndicator,
-  TouchableOpacity,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
-import { router } from 'expo-router';
-import { useInfiniteQuery } from '@tanstack/react-query';
-import { alunosApi, type Aluno } from '../../lib/api';
+import { useQuery } from '@tanstack/react-query';
+import { familyApi, type AlunoDetail, type AlunoNota } from '../../lib/api';
+import { useAuthStore } from '../../lib/auth.store';
 
-const PAGE_SIZE = 20;
+function fmtNota(value?: number | null) {
+  return typeof value === 'number' ? value.toFixed(1) : '—';
+}
 
-function AlunoItem({ item }: { item: Aluno }) {
-  const initials = item.nome
-    .split(' ')
-    .slice(0, 2)
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase();
+function situacaoColor(value?: string | null) {
+  const normalized = value?.toUpperCase() ?? '';
+  if (normalized.startsWith('APR')) return '#22c55e';
+  if (normalized.startsWith('REC')) return '#f59e0b';
+  if (normalized.startsWith('REP')) return '#ef4444';
+  return '#64748b';
+}
 
+function NotaCard({ nota }: { nota: AlunoNota }) {
   return (
-    <TouchableOpacity
-      style={styles.item}
-      activeOpacity={0.7}
-      onPress={() => router.push(`/aluno/${item.id}`)}
-    >
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>{initials}</Text>
-      </View>
-      <View style={styles.itemInfo}>
-        <Text style={styles.itemName}>{item.nome}</Text>
-        <Text style={styles.itemMeta}>
-          {item.turma} · {item.turno}
+    <View style={styles.notaCard}>
+      <View style={styles.notaHeader}>
+        <Text style={styles.disciplina}>{nota.disciplina}</Text>
+        <Text style={[styles.situacao, { color: situacaoColor(nota.situacao) }]}>
+          {nota.situacao || '—'}
         </Text>
       </View>
-      <Text style={styles.chevron}>›</Text>
-    </TouchableOpacity>
+      <View style={styles.gradeGrid}>
+        <View style={styles.gradeCell}>
+          <Text style={styles.gradeLabel}>1º Tri</Text>
+          <Text style={styles.gradeValue}>{fmtNota(nota.trimestre1)}</Text>
+        </View>
+        <View style={styles.gradeCell}>
+          <Text style={styles.gradeLabel}>2º Tri</Text>
+          <Text style={styles.gradeValue}>{fmtNota(nota.trimestre2)}</Text>
+        </View>
+        <View style={styles.gradeCell}>
+          <Text style={styles.gradeLabel}>3º Tri</Text>
+          <Text style={styles.gradeValue}>{fmtNota(nota.trimestre3)}</Text>
+        </View>
+        <View style={styles.gradeCell}>
+          <Text style={styles.gradeLabel}>Total</Text>
+          <Text style={styles.gradeTotal}>{fmtNota(nota.total)}</Text>
+        </View>
+        <View style={styles.gradeCell}>
+          <Text style={styles.gradeLabel}>Faltas</Text>
+          <Text style={styles.gradeValue}>{nota.faltas ?? 0}</Text>
+        </View>
+      </View>
+    </View>
   );
 }
 
-export default function AlunosScreen() {
-  const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+export default function BoletimScreen() {
+  const role = useAuthStore((s) => s.user?.role);
 
-  // Debounce search input to avoid firing a request on every keystroke
-  const handleSearch = useCallback((text: string) => {
-    setSearch(text);
-    clearTimeout((handleSearch as any)._timer);
-    (handleSearch as any)._timer = setTimeout(() => setDebouncedSearch(text), 400);
-  }, []);
-
-  const {
-    data,
-    isLoading,
-    isError,
-    refetch,
-    isRefetching,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useInfiniteQuery({
-    queryKey: ['alunos', debouncedSearch],
-    queryFn: ({ pageParam = 1 }) =>
-      alunosApi
-        .list({ page: pageParam as number, per_page: PAGE_SIZE, q: debouncedSearch || undefined })
-        .then((r) => r.data),
-    getNextPageParam: (lastPage) => {
-      const loaded = lastPage.meta.page * lastPage.meta.per_page;
-      return loaded < lastPage.meta.total ? lastPage.meta.page + 1 : undefined;
-    },
-    initialPageParam: 1,
+  const responsavelQuery = useQuery({
+    queryKey: ['boletim', 'responsavel'],
+    queryFn: () => familyApi.getMeuFilho().then((r) => r.data.aluno),
+    enabled: role === 'responsavel',
   });
 
-  const allAlunos: Aluno[] = data?.pages.flatMap((page) => page.items) ?? [];
+  const alunoQuery = useQuery({
+    queryKey: ['boletim', 'aluno'],
+    queryFn: () => familyApi.getMeuAluno().then((r) => r.data),
+    enabled: role === 'aluno',
+  });
+
+  const aluno: AlunoDetail | undefined = role === 'responsavel' ? responsavelQuery.data : alunoQuery.data;
+  const isLoading = responsavelQuery.isLoading || alunoQuery.isLoading;
+  const isError = responsavelQuery.isError || alunoQuery.isError;
+  const isRefetching = responsavelQuery.isRefetching || alunoQuery.isRefetching;
+
+  const refetch = () => {
+    responsavelQuery.refetch();
+    alunoQuery.refetch();
+  };
 
   return (
-    <View style={styles.container}>
-      {/* Search */}
-      <View style={styles.searchWrapper}>
-        <TextInput
-          style={styles.search}
-          placeholder="🔎  Buscar aluno..."
-          placeholderTextColor="#475569"
-          value={search}
-          onChangeText={handleSearch}
-        />
-      </View>
-
-      {isLoading && (
-        <ActivityIndicator color="#3b82f6" size="large" style={{ marginTop: 40 }} />
-      )}
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
+    >
+      {isLoading && <ActivityIndicator color="#3b82f6" size="large" style={styles.loader} />}
 
       {isError && (
         <View style={styles.errorBox}>
-          <Text style={styles.errorText}>Erro ao carregar alunos.</Text>
+          <Text style={styles.errorText}>Não foi possível carregar o boletim.</Text>
         </View>
       )}
 
-      {!isLoading && (
-        <FlatList
-          data={allAlunos}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={({ item }) => <AlunoItem item={item} />}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
-          onEndReached={() => { if (hasNextPage && !isFetchingNextPage) fetchNextPage(); }}
-          onEndReachedThreshold={0.3}
-          ListFooterComponent={
-            isFetchingNextPage
-              ? <ActivityIndicator color="#3b82f6" style={{ marginVertical: 16 }} />
-              : null
-          }
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text style={styles.emptyEmoji}>📭</Text>
-              <Text style={styles.emptyText}>Nenhum aluno encontrado.</Text>
+      {aluno && (
+        <>
+          <View style={styles.hero}>
+            <Text style={styles.heroTitle}>{aluno.nome}</Text>
+            <Text style={styles.heroMeta}>
+              {aluno.turma} · {aluno.turno} · Matrícula {aluno.matricula ?? '—'}
+            </Text>
+            <View style={styles.mediaBadge}>
+              <Text style={styles.mediaLabel}>Média geral</Text>
+              <Text style={styles.mediaValue}>{fmtNota(aluno.media)}</Text>
             </View>
-          }
-          contentContainerStyle={{ paddingBottom: 32 }}
-        />
+          </View>
+
+          <Text style={styles.sectionTitle}>Notas por disciplina</Text>
+          {aluno.notas.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyText}>Nenhuma nota registrada.</Text>
+            </View>
+          ) : (
+            aluno.notas.map((nota) => <NotaCard key={nota.id} nota={nota} />)
+          )}
+        </>
       )}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' },
-  searchWrapper: { padding: 16 },
-  search: {
+  content: { padding: 18, paddingBottom: 32 },
+  loader: { marginTop: 40 },
+  errorBox: { backgroundColor: '#7f1d1d', borderRadius: 14, padding: 16 },
+  errorText: { color: '#fecaca', fontSize: 14 },
+  hero: {
     backgroundColor: '#1e293b',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: '#f1f5f9',
-    borderWidth: 1,
     borderColor: '#334155',
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 18,
   },
-  item: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+  heroTitle: { color: '#f8fafc', fontSize: 20, fontWeight: '900' },
+  heroMeta: { color: '#94a3b8', fontSize: 13, lineHeight: 20, marginTop: 6 },
+  mediaBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#052e16',
+    borderColor: '#166534',
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#1d4ed8',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
+  mediaLabel: { color: '#86efac', fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
+  mediaValue: { color: '#bbf7d0', fontSize: 22, fontWeight: '900' },
+  sectionTitle: { color: '#f8fafc', fontSize: 17, fontWeight: '900', marginBottom: 12, marginTop: 22 },
+  notaCard: {
+    backgroundColor: '#1e293b',
+    borderColor: '#334155',
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 12,
+    padding: 14,
   },
-  avatarText: { color: '#ffffff', fontWeight: '700', fontSize: 16 },
-  itemInfo: { flex: 1 },
-  itemName: { fontSize: 15, fontWeight: '600', color: '#f1f5f9' },
-  itemMeta: { fontSize: 12, color: '#64748b', marginTop: 2 },
-  chevron: { color: '#334155', fontSize: 22, fontWeight: '300', marginLeft: 4 },
-  separator: { height: 1, backgroundColor: '#1e293b', marginLeft: 78 },
-  errorBox: { margin: 24, padding: 16, backgroundColor: '#7f1d1d', borderRadius: 12 },
-  errorText: { color: '#fca5a5', fontSize: 14 },
-  empty: { alignItems: 'center', marginTop: 60 },
-  emptyEmoji: { fontSize: 40, marginBottom: 12 },
-  emptyText: { color: '#475569', fontSize: 15 },
+  notaHeader: { flexDirection: 'row', gap: 12, justifyContent: 'space-between', marginBottom: 12 },
+  disciplina: { color: '#f8fafc', flex: 1, fontSize: 15, fontWeight: '800' },
+  situacao: { fontSize: 12, fontWeight: '900' },
+  gradeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  gradeCell: {
+    backgroundColor: '#0f172a',
+    borderColor: '#334155',
+    borderRadius: 12,
+    borderWidth: 1,
+    minWidth: '30%',
+    padding: 10,
+  },
+  gradeLabel: { color: '#64748b', fontSize: 11, fontWeight: '800' },
+  gradeValue: { color: '#e2e8f0', fontSize: 17, fontWeight: '800', marginTop: 3 },
+  gradeTotal: { color: '#60a5fa', fontSize: 18, fontWeight: '900', marginTop: 3 },
+  emptyBox: { backgroundColor: '#1e293b', borderRadius: 16, padding: 24 },
+  emptyText: { color: '#64748b', textAlign: 'center' },
 });

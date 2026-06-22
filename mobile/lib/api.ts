@@ -4,6 +4,7 @@
  */
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
+import { router } from 'expo-router';
 
 // Use the local emulator URL only for development. Production builds must define
 // the public API explicitly to avoid shipping an app pointed at localhost.
@@ -67,6 +68,8 @@ apiClient.interceptors.response.use(
         await SecureStore.deleteItemAsync('access_token');
         await SecureStore.deleteItemAsync('refresh_token');
         await SecureStore.deleteItemAsync('user_data');
+        await SecureStore.deleteItemAsync('last_active');
+        router.replace('/(auth)/login');
       }
     }
     return Promise.reject(error);
@@ -84,6 +87,8 @@ export interface LoginResponse {
     role: string;    // Changed from roles[] to role
     tenant_id: number;
     tenant_name: string;
+    aluno_id?: number | null;
+    must_change_password?: boolean;
   };
 }
 
@@ -95,14 +100,21 @@ export interface PublicTenant {
 
 export const authApi = {
   listTenants: () => apiClient.get<PublicTenant[]>('/auth/tenants'),
-  login: (email: string, password: string, tenantSlug?: string) =>
+  login: (username: string, password: string, tenantSlug?: string) =>
     apiClient.post<LoginResponse>('/auth/login', {
-      username: email,
+      username,
       password,
       tenant_slug: tenantSlug ?? DEFAULT_TENANT_SLUG,
     }, {
       headers: { 'X-Client-Platform': 'mobile' }
     }), // Backend expects username
+  changePassword: (currentPassword: string, newPassword: string) =>
+    apiClient.post<LoginResponse>('/auth/change-password', {
+      current_password: currentPassword,
+      new_password: newPassword,
+    }, {
+      headers: { 'X-Client-Platform': 'mobile' }
+    }),
   me: () => apiClient.get<LoginResponse['user']>('/usuarios/me'), // Fixed endpoint
 };
 
@@ -124,9 +136,13 @@ export const logoutRequest = async (accessToken?: string | null, refreshToken?: 
 export interface Aluno {
   id: number;
   nome: string;
+  matricula?: string;
   turma: string;
   turno: string;
   academic_year_id: number;
+  media?: number | null;
+  faltas?: number | null;
+  max_pts?: number | null;
 }
 
 export interface PaginatedResponse<T> {
@@ -161,6 +177,7 @@ export interface AlunoDetail extends Aluno {
   matricula?: string;
   media?: number | null;
   faltas?: number | null;
+  max_pts?: number | null;
   risk_score?: number | null;
   risk_status?: string | null;
   notas: AlunoNota[];
@@ -168,6 +185,35 @@ export interface AlunoDetail extends Aluno {
 
 export const alunoDetailApi = {
   get: (id: number) => apiClient.get<AlunoDetail>(`/alunos/${id}`),
+};
+
+export interface ResponsavelOcorrencia {
+  id: number;
+  tipo: string;
+  descricao: string;
+  resolvida: boolean;
+  data_registro: string;
+  gravidade?: string | null;
+  observacao_pais?: string | null;
+}
+
+export interface ResponsavelComunicado {
+  id: number;
+  titulo: string;
+  conteudo: string;
+  data_envio: string | null;
+  lido: boolean;
+}
+
+export interface ResponsavelPortalResponse {
+  aluno: AlunoDetail;
+  ocorrencias: ResponsavelOcorrencia[];
+  comunicados: ResponsavelComunicado[];
+}
+
+export const familyApi = {
+  getMeuAluno: () => apiClient.get<AlunoDetail>('/alunos/me'),
+  getMeuFilho: () => apiClient.get<ResponsavelPortalResponse>('/responsavel/meu-filho'),
 };
 
 // --- Comunicados ---

@@ -47,6 +47,7 @@ export default function PerfilScreen() {
     coordenador: 'Coordenador Pedagógico',
     professor: 'Professor',
     aluno: 'Aluno',
+    responsavel: 'Responsável',
     super_admin: 'Super Admin',
   };
 
@@ -65,12 +66,12 @@ export default function PerfilScreen() {
 
       {/* Info */}
       <View style={styles.card}>
-        <ProfileRow label="E-mail" value={user?.email ?? '—'} />
+        <ProfileRow label="Usuário" value={user?.username ?? '—'} />
         <View style={styles.divider} />
         <ProfileRow label="Instituição" value={user?.tenant_name ?? '—'} />
         <View style={styles.divider} />
         <ProfileRow
-          label="Permissões"
+          label="Perfil"
           value={primaryRole}
         />
       </View>

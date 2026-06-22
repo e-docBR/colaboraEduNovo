@@ -1,34 +1,45 @@
-/**
- * Recados tab — lista de comunicados/avisos da instituição.
- * Comunicados não lidos são destacados; toque abre o conteúdo completo.
- */
 import { useState } from 'react';
 import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  RefreshControl,
   ActivityIndicator,
   Modal,
-  ScrollView,
   Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { comunicadosApi, type Comunicado } from '../../lib/api';
+import {
+  comunicadosApi,
+  familyApi,
+  ocorrenciasApi,
+  type Comunicado,
+  type Ocorrencia,
+  type ResponsavelComunicado,
+  type ResponsavelOcorrencia,
+} from '../../lib/api';
+import { useAuthStore } from '../../lib/auth.store';
 
-function formatDate(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+type Tab = 'comunicados' | 'ocorrencias';
+type AnyComunicado = Comunicado | ResponsavelComunicado;
+type AnyOcorrencia = Ocorrencia | ResponsavelOcorrencia;
+
+function formatDate(iso?: string | null) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
-interface ComunicadoModalProps {
-  item: Comunicado | null;
-  onClose: () => void;
+function isRead(item: AnyComunicado) {
+  return 'lido' in item ? item.lido : Boolean(item.is_read);
 }
 
-function ComunicadoModal({ item, onClose }: ComunicadoModalProps) {
+function ComunicadoModal({ item, onClose }: { item: AnyComunicado | null; onClose: () => void }) {
   if (!item) return null;
   return (
     <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -36,13 +47,11 @@ function ComunicadoModal({ item, onClose }: ComunicadoModalProps) {
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle} numberOfLines={2}>{item.titulo}</Text>
           <Pressable onPress={onClose} style={styles.closeBtn}>
-            <Text style={styles.closeBtnText}>✕</Text>
+            <Text style={styles.closeBtnText}>Fechar</Text>
           </Pressable>
         </View>
-        <Text style={styles.modalMeta}>
-          {item.autor} · {formatDate(item.data_envio)}
-        </Text>
-        <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 40 }}>
+        <Text style={styles.modalMeta}>{formatDate(item.data_envio)}</Text>
+        <ScrollView contentContainerStyle={styles.modalBody}>
           <Text style={styles.modalContent}>{item.conteudo}</Text>
         </ScrollView>
       </View>
@@ -50,174 +59,217 @@ function ComunicadoModal({ item, onClose }: ComunicadoModalProps) {
   );
 }
 
-interface ItemProps {
-  item: Comunicado;
-  onPress: () => void;
-}
-
-function ComunicadoItem({ item, onPress }: ItemProps) {
-  const isUnread = !item.is_read;
+function ComunicadoItem({ item, onPress }: { item: AnyComunicado; onPress: () => void }) {
+  const unread = !isRead(item);
   return (
-    <TouchableOpacity style={[styles.item, isUnread && styles.itemUnread]} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.itemLeft}>
-        {isUnread && <View style={styles.dot} />}
+    <TouchableOpacity style={[styles.listItem, unread && styles.unreadItem]} onPress={onPress}>
+      <View style={styles.itemHeader}>
+        <Text style={styles.itemTitle} numberOfLines={1}>{item.titulo}</Text>
+        {unread && <Text style={styles.newBadge}>Novo</Text>}
       </View>
-      <View style={styles.itemContent}>
-        <Text style={[styles.itemTitle, isUnread && styles.itemTitleUnread]} numberOfLines={1}>
-          {item.titulo}
-        </Text>
-        <Text style={styles.itemPreview} numberOfLines={2}>{item.conteudo}</Text>
-        <Text style={styles.itemMeta}>{item.autor} · {formatDate(item.data_envio)}</Text>
-      </View>
-      {isUnread && (
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>Novo</Text>
-        </View>
-      )}
+      <Text style={styles.itemText} numberOfLines={2}>{item.conteudo}</Text>
+      <Text style={styles.itemDate}>{formatDate(item.data_envio)}</Text>
     </TouchableOpacity>
   );
 }
 
-export default function ComunicadosScreen() {
-  const queryClient = useQueryClient();
-  const [selected, setSelected] = useState<Comunicado | null>(null);
+function OcorrenciaItem({ item }: { item: AnyOcorrencia }) {
+  return (
+    <View style={styles.listItem}>
+      <View style={styles.itemHeader}>
+        <Text style={styles.itemTitle}>{item.tipo}</Text>
+        <Text style={[styles.statusBadge, item.resolvida ? styles.resolved : styles.pending]}>
+          {item.resolvida ? 'Resolvida' : 'Aberta'}
+        </Text>
+      </View>
+      {item.gravidade ? <Text style={styles.itemMeta}>Gravidade: {item.gravidade}</Text> : null}
+      <Text style={styles.itemText}>{item.descricao}</Text>
+      {'observacao_pais' in item && item.observacao_pais ? (
+        <Text style={styles.parentNote}>Para a família: {item.observacao_pais}</Text>
+      ) : null}
+      <Text style={styles.itemDate}>{formatDate(item.data_registro)}</Text>
+    </View>
+  );
+}
 
-  const { data, isLoading, isError, refetch, isRefetching } = useQuery({
-    queryKey: ['comunicados'],
-    queryFn: () => comunicadosApi.list({ per_page: 50 }).then((r) => r.data),
+export default function RegistrosScreen() {
+  const queryClient = useQueryClient();
+  const user = useAuthStore((s) => s.user);
+  const role = user?.role;
+  const [tab, setTab] = useState<Tab>('comunicados');
+  const [selectedComunicado, setSelectedComunicado] = useState<AnyComunicado | null>(null);
+
+  const responsavelQuery = useQuery({
+    queryKey: ['registros', 'responsavel'],
+    queryFn: () => familyApi.getMeuFilho().then((r) => r.data),
+    enabled: role === 'responsavel',
   });
 
-  const items = data?.items ?? [];
-  const unreadCount = items.filter((c) => !c.is_read).length;
+  const alunoOcorrenciasQuery = useQuery({
+    queryKey: ['registros', 'aluno-ocorrencias', user?.aluno_id],
+    queryFn: () => ocorrenciasApi.listByAluno(Number(user?.aluno_id)).then((r) => r.data.items),
+    enabled: role === 'aluno' && !!user?.aluno_id,
+  });
 
-  const handleOpen = async (item: Comunicado) => {
-    setSelected(item);
-    if (!item.is_read) {
+  const alunoComunicadosQuery = useQuery({
+    queryKey: ['registros', 'aluno-comunicados'],
+    queryFn: () => comunicadosApi.list({ per_page: 50 }).then((r) => r.data.items),
+    enabled: role === 'aluno',
+  });
+
+  const comunicados: AnyComunicado[] =
+    role === 'responsavel' ? responsavelQuery.data?.comunicados ?? [] : alunoComunicadosQuery.data ?? [];
+  const ocorrencias: AnyOcorrencia[] =
+    role === 'responsavel' ? responsavelQuery.data?.ocorrencias ?? [] : alunoOcorrenciasQuery.data ?? [];
+
+  const isLoading = responsavelQuery.isLoading || alunoOcorrenciasQuery.isLoading || alunoComunicadosQuery.isLoading;
+  const isError = responsavelQuery.isError || alunoOcorrenciasQuery.isError || alunoComunicadosQuery.isError;
+  const isRefetching =
+    responsavelQuery.isRefetching || alunoOcorrenciasQuery.isRefetching || alunoComunicadosQuery.isRefetching;
+
+  const refetch = () => {
+    responsavelQuery.refetch();
+    alunoOcorrenciasQuery.refetch();
+    alunoComunicadosQuery.refetch();
+  };
+
+  const handleOpenComunicado = async (item: AnyComunicado) => {
+    setSelectedComunicado(item);
+    if (!isRead(item)) {
       await comunicadosApi.markRead(item.id).catch(() => null);
-      // Optimistic update in cache
-      queryClient.setQueryData<typeof data>(['comunicados'], (old) => {
-        if (!old) return old;
-        return {
-          ...old,
-          items: old.items.map((c) => (c.id === item.id ? { ...c, is_read: true } : c)),
-        };
-      });
+      queryClient.invalidateQueries({ queryKey: ['registros'] });
+      queryClient.invalidateQueries({ queryKey: ['family-home'] });
     }
   };
 
+  const unreadCount = comunicados.filter((item) => !isRead(item)).length;
+
   return (
     <View style={styles.container}>
-      {/* Header bar */}
-      <View style={styles.headerBar}>
-        <Text style={styles.headerTitle}>📢  Recados</Text>
-        {unreadCount > 0 && (
-          <View style={styles.unreadBadge}>
-            <Text style={styles.unreadBadgeText}>{unreadCount} não lido{unreadCount > 1 ? 's' : ''}</Text>
-          </View>
-        )}
+      <View style={styles.tabs}>
+        <TouchableOpacity
+          style={[styles.tabButton, tab === 'comunicados' && styles.tabButtonActive]}
+          onPress={() => setTab('comunicados')}
+        >
+          <Text style={[styles.tabText, tab === 'comunicados' && styles.tabTextActive]}>
+            Recados{unreadCount > 0 ? ` (${unreadCount})` : ''}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabButton, tab === 'ocorrencias' && styles.tabButtonActive]}
+          onPress={() => setTab('ocorrencias')}
+        >
+          <Text style={[styles.tabText, tab === 'ocorrencias' && styles.tabTextActive]}>
+            Ocorrências
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {isLoading && (
-        <ActivityIndicator color="#3b82f6" size="large" style={{ marginTop: 40 }} />
-      )}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
+      >
+        {isLoading && <ActivityIndicator color="#3b82f6" size="large" style={styles.loader} />}
+        {isError && (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>Não foi possível carregar os registros.</Text>
+          </View>
+        )}
 
-      {isError && (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>Não foi possível carregar os recados.</Text>
-        </View>
-      )}
+        {!isLoading && tab === 'comunicados' && (
+          comunicados.length === 0 ? (
+            <Text style={styles.emptyText}>Nenhum recado por enquanto.</Text>
+          ) : (
+            comunicados.map((item) => (
+              <ComunicadoItem key={item.id} item={item} onPress={() => handleOpenComunicado(item)} />
+            ))
+          )
+        )}
 
-      {!isLoading && (
-        <FlatList
-          data={items}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={({ item }) => (
-            <ComunicadoItem item={item} onPress={() => handleOpen(item)} />
-          )}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text style={styles.emptyEmoji}>📭</Text>
-              <Text style={styles.emptyText}>Nenhum recado por enquanto.</Text>
-            </View>
-          }
-          contentContainerStyle={{ paddingBottom: 32 }}
-        />
-      )}
+        {!isLoading && tab === 'ocorrencias' && (
+          ocorrencias.length === 0 ? (
+            <Text style={styles.emptyText}>Nenhuma ocorrência registrada.</Text>
+          ) : (
+            ocorrencias.map((item) => <OcorrenciaItem key={item.id} item={item} />)
+          )
+        )}
+      </ScrollView>
 
-      <ComunicadoModal item={selected} onClose={() => setSelected(null)} />
+      <ComunicadoModal item={selectedComunicado} onClose={() => setSelectedComunicado(null)} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' },
-
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1e293b',
+  tabs: { flexDirection: 'row', gap: 10, padding: 16 },
+  tabButton: {
+    backgroundColor: '#1e293b',
+    borderColor: '#334155',
+    borderRadius: 14,
+    borderWidth: 1,
+    flex: 1,
+    paddingVertical: 12,
   },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: '#f1f5f9' },
-  unreadBadge: {
-    backgroundColor: '#dc2626',
-    borderRadius: 12,
-    paddingHorizontal: 10,
+  tabButtonActive: { backgroundColor: '#1d4ed8', borderColor: '#3b82f6' },
+  tabText: { color: '#94a3b8', fontSize: 14, fontWeight: '800', textAlign: 'center' },
+  tabTextActive: { color: '#ffffff' },
+  scroll: { flex: 1 },
+  content: { paddingHorizontal: 16, paddingBottom: 32 },
+  loader: { marginTop: 40 },
+  errorBox: { backgroundColor: '#7f1d1d', borderRadius: 14, padding: 16 },
+  errorText: { color: '#fecaca' },
+  listItem: {
+    backgroundColor: '#1e293b',
+    borderColor: '#334155',
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 12,
+    padding: 15,
+  },
+  unreadItem: { borderColor: '#3b82f6' },
+  itemHeader: { alignItems: 'center', flexDirection: 'row', gap: 10, justifyContent: 'space-between' },
+  itemTitle: { color: '#f8fafc', flex: 1, fontSize: 15, fontWeight: '900' },
+  itemText: { color: '#cbd5e1', fontSize: 14, lineHeight: 21, marginTop: 8 },
+  itemMeta: { color: '#93c5fd', fontSize: 12, fontWeight: '700', marginTop: 8 },
+  itemDate: { color: '#64748b', fontSize: 12, marginTop: 10 },
+  newBadge: {
+    backgroundColor: '#2563eb',
+    borderRadius: 9,
+    color: '#dbeafe',
+    fontSize: 11,
+    fontWeight: '900',
+    overflow: 'hidden',
+    paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  unreadBadgeText: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
-
-  item: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-  },
-  itemUnread: { backgroundColor: '#0f1f38' },
-  itemLeft: { width: 16, paddingTop: 4 },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#3b82f6' },
-  itemContent: { flex: 1, marginRight: 8 },
-  itemTitle: { fontSize: 14, fontWeight: '500', color: '#94a3b8', marginBottom: 4 },
-  itemTitleUnread: { color: '#f1f5f9', fontWeight: '700' },
-  itemPreview: { fontSize: 13, color: '#475569', lineHeight: 18, marginBottom: 6 },
-  itemMeta: { fontSize: 11, color: '#334155' },
-  badge: {
-    backgroundColor: '#1d4ed8',
-    borderRadius: 8,
+  statusBadge: {
+    borderRadius: 9,
+    fontSize: 11,
+    fontWeight: '900',
+    overflow: 'hidden',
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    alignSelf: 'flex-start',
-    marginTop: 2,
+    paddingVertical: 3,
   },
-  badgeText: { color: '#bfdbfe', fontSize: 11, fontWeight: '600' },
-
-  separator: { height: 1, backgroundColor: '#1e293b', marginLeft: 36 },
-  errorBox: { margin: 24, padding: 16, backgroundColor: '#7f1d1d', borderRadius: 12 },
-  errorText: { color: '#fca5a5', fontSize: 14 },
-  empty: { alignItems: 'center', marginTop: 60 },
-  emptyEmoji: { fontSize: 40, marginBottom: 12 },
-  emptyText: { color: '#475569', fontSize: 15 },
-
-  // Modal
+  resolved: { backgroundColor: '#14532d', color: '#bbf7d0' },
+  pending: { backgroundColor: '#78350f', color: '#fde68a' },
+  parentNote: { color: '#bfdbfe', fontSize: 13, lineHeight: 20, marginTop: 8 },
+  emptyText: { color: '#64748b', fontSize: 15, marginTop: 40, textAlign: 'center' },
   modalContainer: { flex: 1, backgroundColor: '#0f172a' },
   modalHeader: {
-    flexDirection: 'row',
     alignItems: 'flex-start',
+    borderBottomColor: '#1e293b',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
     justifyContent: 'space-between',
     padding: 20,
-    paddingTop: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1e293b',
   },
-  modalTitle: { flex: 1, fontSize: 18, fontWeight: '700', color: '#f1f5f9', marginRight: 12 },
-  closeBtn: { padding: 6 },
-  closeBtnText: { color: '#64748b', fontSize: 18, fontWeight: '700' },
-  modalMeta: { paddingHorizontal: 20, paddingVertical: 10, fontSize: 12, color: '#475569' },
-  modalBody: { flex: 1, paddingHorizontal: 20, paddingTop: 8 },
-  modalContent: { fontSize: 15, color: '#cbd5e1', lineHeight: 24 },
+  modalTitle: { color: '#f8fafc', flex: 1, fontSize: 19, fontWeight: '900' },
+  closeBtn: { paddingVertical: 3 },
+  closeBtnText: { color: '#93c5fd', fontSize: 14, fontWeight: '800' },
+  modalMeta: { color: '#64748b', fontSize: 12, paddingHorizontal: 20, paddingTop: 12 },
+  modalBody: { padding: 20, paddingBottom: 40 },
+  modalContent: { color: '#cbd5e1', fontSize: 16, lineHeight: 25 },
 });

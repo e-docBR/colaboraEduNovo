@@ -1,7 +1,8 @@
 /**
- * Tabs layout with real ColaboraEdu navigation.
- * Tabs: Início (Dashboard), Alunos, Chat IA, Perfil
+ * Tabs layout for the ColaboraEdu family app.
+ * Tabs: Início, Boletim, Registros, Perfil.
  */
+import { useEffect } from 'react';
 import { Tabs, router } from 'expo-router';
 import { TouchableOpacity } from 'react-native';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -20,6 +21,7 @@ function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const signOut = useAuthStore((s) => s.signOut);
+  const user = useAuthStore((s) => s.user);
 
   const isDark = colorScheme === 'dark';
   const tabBarBg = isDark ? '#0f172a' : '#ffffff';
@@ -30,6 +32,12 @@ export default function TabLayout() {
     await signOut();
     router.replace('/(auth)/login');
   };
+
+  useEffect(() => {
+    if (user && !['aluno', 'responsavel'].includes(user.role)) {
+      signOut().then(() => router.replace('/(auth)/login'));
+    }
+  }, [signOut, user]);
 
   return (
     <Tabs
@@ -63,7 +71,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Início',
-          headerTitle: 'Dashboard',
+          headerTitle: 'Portal da Família',
           tabBarIcon: ({ focused }) => <TabIcon emoji="🏠" focused={focused} />,
           headerRight: () => (
             <TouchableOpacity onPress={handleSignOut} style={{ marginRight: 16 }}>
@@ -76,23 +84,29 @@ export default function TabLayout() {
         }}
       />
 
-      {/* Alunos */}
+      {/* Boletim */}
       <Tabs.Screen
         name="alunos"
         options={{
-          title: 'Alunos',
-          headerTitle: 'Alunos',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="👥" focused={focused} />,
+          title: 'Boletim',
+          headerTitle: 'Boletim',
+          tabBarIcon: ({ focused }) => <TabIcon emoji="📊" focused={focused} />,
         }}
       />
 
-      {/* Chat IA */}
       <Tabs.Screen
         name="chat"
         options={{
-          title: 'Chat IA',
-          headerTitle: '🤖 Chat com IA',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="🤖" focused={focused} />,
+          href: null,
+        }}
+      />
+
+      <Tabs.Screen
+        name="two"
+        options={{
+          title: 'Registros',
+          headerTitle: 'Recados e Ocorrências',
+          tabBarIcon: ({ focused }) => <TabIcon emoji="📌" focused={focused} />,
         }}
       />
 
@@ -106,15 +120,6 @@ export default function TabLayout() {
         }}
       />
 
-      {/* Recados (comunicados) */}
-      <Tabs.Screen
-        name="two"
-        options={{
-          title: 'Recados',
-          headerTitle: 'Recados',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="📢" focused={focused} />,
-        }}
-      />
     </Tabs>
   );
 }

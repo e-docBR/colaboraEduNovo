@@ -5,7 +5,7 @@
  */
 import '../global.css';
 import { useEffect } from 'react';
-import { router, Slot, Stack } from 'expo-router';
+import { router, Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -37,7 +37,9 @@ export default function RootLayout() {
   const rehydrate = useAuthStore((s) => s.rehydrate);
   const isLoading = useAuthStore((s) => s.isLoading);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
   const colorScheme = useColorScheme();
+  const pathname = usePathname();
 
   // Rehydrate auth state from SecureStore on boot
   useEffect(() => {
@@ -50,9 +52,11 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
       if (!isAuthenticated) {
         router.replace('/(auth)/login');
+      } else if (user?.must_change_password && pathname !== '/change-password') {
+        router.replace('/change-password');
       }
     }
-  }, [isLoading, isAuthenticated]);
+  }, [isLoading, isAuthenticated, pathname, user?.must_change_password]);
 
   if (isLoading) {
     return null; // SplashScreen is still visible
@@ -64,6 +68,7 @@ export default function RootLayout() {
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
+          <Stack.Screen name="change-password" options={{ headerShown: false }} />
           <Stack.Screen name="+not-found" />
         </Stack>
       </ThemeProvider>
