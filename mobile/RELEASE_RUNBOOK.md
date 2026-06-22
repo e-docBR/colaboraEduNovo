@@ -8,25 +8,41 @@
 git status --short
 ```
 
-2. Validar TypeScript do app:
+2. Confirmar que existe apenas uma versão do React Native:
+
+```bash
+npm ls react-native --prefix mobile
+```
+
+O resultado esperado é somente `react-native@0.81.5`. Não seguir com build se
+aparecer `react-native@0.86.x` aninhado.
+
+3. Validar TypeScript do app:
 
 ```bash
 make validate-mobile
 ```
 
-3. Confirmar configuração Expo:
+4. Confirmar configuração Expo:
 
 ```bash
 cd mobile
 npx expo config --type public
 ```
 
-4. Conferir no resultado:
+5. Conferir no resultado:
 
 - `name`: ColaboraEdu Família
 - `slug`: colaboraedu-familia
 - `android.package`: cloud.colaboraedu.familia
 - `android.versionCode`: número maior que a versão já enviada à Play Store
+
+6. Confirmar export Android local antes do APK:
+
+```bash
+cd mobile
+EXPO_PUBLIC_API_URL=http://10.0.2.2:5000/api/v1 EXPO_PUBLIC_TENANT_SLUG=colegio-frei-ronaldo npx expo export --platform android --output-dir /tmp/colaboraedu-mobile-export
+```
 
 ## 2. Configurar ambiente EAS
 

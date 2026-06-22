@@ -11,6 +11,18 @@ teste interno/fechado na Play Store.
 - Staging/homologação: usar URL pública de API de testes
 - Produção: somente após autorização explícita
 
+## Checagens automatizadas antes do teste manual
+
+- `npm ls react-native --prefix mobile`
+- `make validate-mobile`
+- `npm run lint --prefix mobile`
+- `npx expo config --type public`
+- `EXPO_PUBLIC_API_URL=http://10.0.2.2:5000/api/v1 EXPO_PUBLIC_TENANT_SLUG=colegio-frei-ronaldo npx expo export --platform android --output-dir /tmp/colaboraedu-mobile-export`
+
+O comando `npm ls react-native --prefix mobile` deve mostrar somente
+`react-native@0.81.5`. Se aparecer outra versão aninhada, especialmente
+`0.86.x`, o bundle Android pode falhar.
+
 ## Massa mínima de teste
 
 - 1 usuário `aluno` com senha temporária.
