@@ -30,18 +30,32 @@ function notaColor(value?: number | null) {
   return value >= 18 ? '#2e7d32' : '#ef6c00';
 }
 
-function BoletimRow({ nota }: { nota: AlunoNota }) {
+function FixedDisciplinaColumn({ notas }: { notas: AlunoNota[] }) {
+  return (
+    <View style={styles.fixedColumn}>
+      <View style={[styles.tableHeader, styles.fixedHeader]}>
+        <Text style={[styles.tableHeaderText, styles.fixedHeaderText]}>Disciplina</Text>
+      </View>
+      {notas.map((nota) => (
+        <View key={`disciplina-${nota.id}`} style={styles.fixedRow}>
+          <Text style={styles.disciplinaText} numberOfLines={2}>
+            {nota.disciplina}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function BoletimScoresRow({ nota }: { nota: AlunoNota }) {
   return (
     <View style={styles.tableRow}>
-      <Text style={[styles.tableCell, styles.disciplinaCell]} numberOfLines={2}>
-        {nota.disciplina}
-      </Text>
-      <Text style={[styles.tableCell, styles.numberCell, { color: notaColor(nota.trimestre1) }]}>
+      <Text style={[styles.tableCell, styles.triCell, { color: notaColor(nota.trimestre1) }]}>
         {fmtNota(nota.trimestre1)}
       </Text>
-      <Text style={[styles.tableCell, styles.numberCell]}>{fmtNota(nota.trimestre2)}</Text>
-      <Text style={[styles.tableCell, styles.numberCell]}>{fmtNota(nota.trimestre3)}</Text>
-      <Text style={[styles.tableCell, styles.numberCell, styles.totalCell, { color: notaColor(nota.total) }]}>
+      <Text style={[styles.tableCell, styles.triCell]}>{fmtNota(nota.trimestre2)}</Text>
+      <Text style={[styles.tableCell, styles.triCell]}>{fmtNota(nota.trimestre3)}</Text>
+      <Text style={[styles.tableCell, styles.triCell, styles.totalCell, { color: notaColor(nota.total) }]}>
         {fmtNota(nota.total)}
       </Text>
       <Text style={[styles.tableCell, styles.faltasCell]}>{nota.faltas ?? 0}</Text>
@@ -139,20 +153,22 @@ export default function BoletimScreen() {
               <Text style={styles.emptyText}>Nenhuma nota registrada.</Text>
             </View>
           ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tableScroller}>
-              <View style={styles.tableCard}>
-                <View style={styles.tableHeader}>
-                  <Text style={[styles.tableHeaderText, styles.disciplinaCell]}>Disciplina</Text>
-                  <Text style={[styles.tableHeaderText, styles.numberCell]}>1º Tri</Text>
-                  <Text style={[styles.tableHeaderText, styles.numberCell]}>2º Tri</Text>
-                  <Text style={[styles.tableHeaderText, styles.numberCell]}>3º Tri</Text>
-                  <Text style={[styles.tableHeaderText, styles.numberCell]}>Total</Text>
-                  <Text style={[styles.tableHeaderText, styles.faltasCell]}>Faltas</Text>
-                  <Text style={[styles.tableHeaderText, styles.situacaoCell]}>Situação</Text>
+            <View style={styles.tableCard}>
+              <FixedDisciplinaColumn notas={sortedNotas} />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tableScroller}>
+                <View style={styles.scoreColumns}>
+                  <View style={styles.tableHeader}>
+                    <Text style={[styles.tableHeaderText, styles.triCell]}>1º</Text>
+                    <Text style={[styles.tableHeaderText, styles.triCell]}>2º</Text>
+                    <Text style={[styles.tableHeaderText, styles.triCell]}>3º</Text>
+                    <Text style={[styles.tableHeaderText, styles.triCell]}>Total</Text>
+                    <Text style={[styles.tableHeaderText, styles.faltasCell]}>Faltas</Text>
+                    <Text style={[styles.tableHeaderText, styles.situacaoCell]}>Situação</Text>
+                  </View>
+                  {sortedNotas.map((nota) => <BoletimScoresRow key={nota.id} nota={nota} />)}
                 </View>
-                {sortedNotas.map((nota) => <BoletimRow key={nota.id} nota={nota} />)}
-              </View>
-            </ScrollView>
+              </ScrollView>
+            </View>
           )}
         </>
       )}
@@ -203,13 +219,14 @@ const styles = StyleSheet.create({
   webTabActive: { borderBottomColor: '#0b63f6', borderBottomWidth: 3 },
   webTabText: { color: '#64748b', fontSize: 13, fontWeight: '800' },
   webTabTextActive: { color: '#0b63f6' },
-  tableScroller: { marginBottom: 8 },
+  tableScroller: { flex: 1 },
   tableCard: {
     backgroundColor: '#ffffff',
     borderColor: '#dbe4f0',
     borderRadius: 8,
     borderWidth: 1,
-    minWidth: 780,
+    flexDirection: 'row',
+    marginBottom: 8,
     overflow: 'hidden',
     shadowColor: '#0f172a',
     shadowOffset: { width: 0, height: 2 },
@@ -217,36 +234,53 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
+  fixedColumn: {
+    backgroundColor: '#ffffff',
+    borderRightColor: '#dbe4f0',
+    borderRightWidth: 1,
+    width: 148,
+    zIndex: 2,
+  },
+  fixedHeader: { justifyContent: 'center' },
+  fixedHeaderText: { paddingHorizontal: 10 },
+  fixedRow: {
+    borderBottomColor: '#f1f5f9',
+    borderBottomWidth: 1,
+    justifyContent: 'center',
+    minHeight: 50,
+    paddingHorizontal: 10,
+  },
+  disciplinaText: { color: '#020617', fontSize: 12, fontWeight: '700', lineHeight: 16 },
+  scoreColumns: { minWidth: 408 },
   tableHeader: {
     alignItems: 'center',
     borderBottomColor: '#eef2f7',
     borderBottomWidth: 1,
     flexDirection: 'row',
-    minHeight: 58,
+    minHeight: 48,
   },
-  tableHeaderText: { color: '#020617', fontSize: 14, fontWeight: '900' },
+  tableHeaderText: { color: '#020617', fontSize: 12, fontWeight: '900', textAlign: 'center' },
   tableRow: {
     alignItems: 'center',
     borderBottomColor: '#f1f5f9',
     borderBottomWidth: 1,
     flexDirection: 'row',
-    minHeight: 64,
+    minHeight: 50,
   },
-  tableCell: { color: '#020617', fontSize: 15, paddingHorizontal: 12 },
-  disciplinaCell: { width: 260 },
-  numberCell: { fontWeight: '800', textAlign: 'center', width: 90 },
+  tableCell: { color: '#020617', fontSize: 13, paddingHorizontal: 6 },
+  triCell: { fontWeight: '800', textAlign: 'center', width: 52 },
   totalCell: { fontWeight: '900' },
-  faltasCell: { textAlign: 'center', width: 80 },
-  situacaoCell: { alignItems: 'center', width: 110 },
+  faltasCell: { textAlign: 'center', width: 62 },
+  situacaoCell: { alignItems: 'center', width: 84 },
   situacaoBadge: {
     borderColor: '#cbd5e1',
-    borderRadius: 7,
+    borderRadius: 6,
     borderWidth: 1,
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
     overflow: 'hidden',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
   },
   emptyBox: { backgroundColor: '#ffffff', borderRadius: 8, padding: 24 },
   emptyText: { color: '#64748b', textAlign: 'center' },
