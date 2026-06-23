@@ -96,41 +96,43 @@ export default function RegistrosScreen() {
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const role = user?.role;
+  const isResponsavel = role === 'responsavel';
+  const isAluno = role === 'aluno';
   const [tab, setTab] = useState<Tab>('comunicados');
   const [selectedComunicado, setSelectedComunicado] = useState<AnyComunicado | null>(null);
 
   const responsavelQuery = useQuery({
     queryKey: ['registros', 'responsavel'],
     queryFn: () => familyApi.getMeuFilho().then((r) => r.data),
-    enabled: role === 'responsavel',
+    enabled: isResponsavel,
   });
 
   const alunoOcorrenciasQuery = useQuery({
     queryKey: ['registros', 'aluno-ocorrencias', user?.aluno_id],
     queryFn: () => ocorrenciasApi.listByAluno(Number(user?.aluno_id)).then((r) => r.data.items),
-    enabled: role === 'aluno' && !!user?.aluno_id,
+    enabled: isAluno && !!user?.aluno_id,
   });
 
   const alunoComunicadosQuery = useQuery({
     queryKey: ['registros', 'aluno-comunicados'],
     queryFn: () => comunicadosApi.list({ per_page: 50 }).then((r) => r.data.items),
-    enabled: role === 'aluno',
+    enabled: isAluno,
   });
 
   const comunicados: AnyComunicado[] =
-    role === 'responsavel' ? responsavelQuery.data?.comunicados ?? [] : alunoComunicadosQuery.data ?? [];
+    isResponsavel ? responsavelQuery.data?.comunicados ?? [] : alunoComunicadosQuery.data ?? [];
   const ocorrencias: AnyOcorrencia[] =
-    role === 'responsavel' ? responsavelQuery.data?.ocorrencias ?? [] : alunoOcorrenciasQuery.data ?? [];
+    isResponsavel ? responsavelQuery.data?.ocorrencias ?? [] : alunoOcorrenciasQuery.data ?? [];
 
-  const isLoading = responsavelQuery.isLoading || alunoOcorrenciasQuery.isLoading || alunoComunicadosQuery.isLoading;
-  const isError = responsavelQuery.isError || alunoOcorrenciasQuery.isError || alunoComunicadosQuery.isError;
-  const isRefetching =
-    responsavelQuery.isRefetching || alunoOcorrenciasQuery.isRefetching || alunoComunicadosQuery.isRefetching;
+  const activeQueries = isResponsavel
+    ? [responsavelQuery]
+    : [alunoOcorrenciasQuery, alunoComunicadosQuery];
+  const isLoading = activeQueries.some((query) => query.isLoading);
+  const isError = activeQueries.some((query) => query.isError);
+  const isRefetching = activeQueries.some((query) => query.isRefetching);
 
   const refetch = () => {
-    responsavelQuery.refetch();
-    alunoOcorrenciasQuery.refetch();
-    alunoComunicadosQuery.refetch();
+    activeQueries.forEach((query) => query.refetch());
   };
 
   const handleOpenComunicado = async (item: AnyComunicado) => {

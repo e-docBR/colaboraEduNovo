@@ -59,27 +59,29 @@ function NotaCard({ nota }: { nota: AlunoNota }) {
 
 export default function BoletimScreen() {
   const role = useAuthStore((s) => s.user?.role);
+  const isResponsavel = role === 'responsavel';
+  const isAluno = role === 'aluno';
 
   const responsavelQuery = useQuery({
     queryKey: ['boletim', 'responsavel'],
     queryFn: () => familyApi.getMeuFilho().then((r) => r.data.aluno),
-    enabled: role === 'responsavel',
+    enabled: isResponsavel,
   });
 
   const alunoQuery = useQuery({
     queryKey: ['boletim', 'aluno'],
     queryFn: () => familyApi.getMeuAluno().then((r) => r.data),
-    enabled: role === 'aluno',
+    enabled: isAluno,
   });
 
-  const aluno: AlunoDetail | undefined = role === 'responsavel' ? responsavelQuery.data : alunoQuery.data;
-  const isLoading = responsavelQuery.isLoading || alunoQuery.isLoading;
-  const isError = responsavelQuery.isError || alunoQuery.isError;
-  const isRefetching = responsavelQuery.isRefetching || alunoQuery.isRefetching;
+  const activeQuery = isResponsavel ? responsavelQuery : alunoQuery;
+  const aluno: AlunoDetail | undefined = activeQuery.data;
+  const isLoading = activeQuery.isLoading;
+  const isError = activeQuery.isError;
+  const isRefetching = activeQuery.isRefetching;
 
   const refetch = () => {
-    responsavelQuery.refetch();
-    alunoQuery.refetch();
+    activeQuery.refetch();
   };
 
   return (

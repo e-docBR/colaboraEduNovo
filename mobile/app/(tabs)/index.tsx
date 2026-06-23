@@ -40,61 +40,51 @@ function MetricCard({ label, value, color }: { label: string; value: string | nu
 export default function HomeScreen() {
   const user = useAuthStore((s) => s.user);
   const role = user?.role;
+  const isResponsavel = role === 'responsavel';
+  const isAluno = role === 'aluno';
 
   const responsavelQuery = useQuery({
     queryKey: ['family-home', 'responsavel'],
     queryFn: () => familyApi.getMeuFilho().then((r) => r.data),
-    enabled: role === 'responsavel',
+    enabled: isResponsavel,
   });
 
   const alunoQuery = useQuery({
     queryKey: ['family-home', 'aluno'],
     queryFn: () => familyApi.getMeuAluno().then((r) => r.data),
-    enabled: role === 'aluno',
+    enabled: isAluno,
   });
 
   const alunoOcorrenciasQuery = useQuery({
     queryKey: ['family-home', 'aluno-ocorrencias', user?.aluno_id],
     queryFn: () => ocorrenciasApi.listByAluno(Number(user?.aluno_id)).then((r) => r.data.items),
-    enabled: role === 'aluno' && !!user?.aluno_id,
+    enabled: isAluno && !!user?.aluno_id,
   });
 
   const alunoComunicadosQuery = useQuery({
     queryKey: ['family-home', 'aluno-comunicados'],
     queryFn: () => comunicadosApi.list({ per_page: 20 }).then((r) => r.data.items),
-    enabled: role === 'aluno',
+    enabled: isAluno,
   });
 
-  const isLoading =
-    responsavelQuery.isLoading ||
-    alunoQuery.isLoading ||
-    alunoOcorrenciasQuery.isLoading ||
-    alunoComunicadosQuery.isLoading;
+  const familyQueries = isResponsavel
+    ? [responsavelQuery]
+    : [alunoQuery, alunoOcorrenciasQuery, alunoComunicadosQuery];
 
-  const isError =
-    responsavelQuery.isError ||
-    alunoQuery.isError ||
-    alunoOcorrenciasQuery.isError ||
-    alunoComunicadosQuery.isError;
+  const isLoading = familyQueries.some((query) => query.isLoading);
+  const isError = familyQueries.some((query) => query.isError);
 
-  const aluno = role === 'responsavel' ? responsavelQuery.data?.aluno : alunoQuery.data;
+  const aluno = isResponsavel ? responsavelQuery.data?.aluno : alunoQuery.data;
   const ocorrencias: Array<Ocorrencia | ResponsavelOcorrencia> =
-    role === 'responsavel' ? responsavelQuery.data?.ocorrencias ?? [] : alunoOcorrenciasQuery.data ?? [];
+    isResponsavel ? responsavelQuery.data?.ocorrencias ?? [] : alunoOcorrenciasQuery.data ?? [];
   const comunicados: Array<Comunicado | ResponsavelComunicado> =
-    role === 'responsavel' ? responsavelQuery.data?.comunicados ?? [] : alunoComunicadosQuery.data ?? [];
+    isResponsavel ? responsavelQuery.data?.comunicados ?? [] : alunoComunicadosQuery.data ?? [];
 
   const refetch = () => {
-    responsavelQuery.refetch();
-    alunoQuery.refetch();
-    alunoOcorrenciasQuery.refetch();
-    alunoComunicadosQuery.refetch();
+    familyQueries.forEach((query) => query.refetch());
   };
 
-  const isRefetching =
-    responsavelQuery.isRefetching ||
-    alunoQuery.isRefetching ||
-    alunoOcorrenciasQuery.isRefetching ||
-    alunoComunicadosQuery.isRefetching;
+  const isRefetching = familyQueries.some((query) => query.isRefetching);
 
   const unreadCount = comunicados.filter((item) =>
     'lido' in item ? !item.lido : !item.is_read,
