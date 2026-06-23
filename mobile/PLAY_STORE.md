@@ -22,12 +22,20 @@ senha temporária devem criar uma nova senha.
 
 ## Configuração de build
 
-Antes de criar qualquer build remoto, configure a URL pública da API de teste:
+Os perfis EAS já declaram as variáveis públicas usadas no build:
 
-```bash
-cd mobile
-npx eas-cli env:create --environment preview --name EXPO_PUBLIC_API_URL --value https://sua-api-de-staging/api/v1
-```
+- `EXPO_PUBLIC_API_URL=https://gestao.colaboraedu.cloud/api/v1`
+- `EXPO_PUBLIC_TENANT_SLUG=colegio-frei-ronaldo`
+
+O perfil `preview` gera APK para instalação manual/teste interno com dados reais.
+O perfil `production` gera AAB para envio à Play Store, também apontando para a
+API oficial. Não promover para público aberto antes do QA fechado.
+
+Validação feita em produção:
+
+- `https://gestao.colaboraedu.cloud/health` retornou `status=ok`.
+- `/api/v1/auth/tenants` retornou `Colégio Frei Ronaldo` com slug
+  `colegio-frei-ronaldo`.
 
 Para build de teste interno em APK:
 
@@ -35,8 +43,7 @@ Para build de teste interno em APK:
 npm run build:android:preview
 ```
 
-Para gerar AAB de Play Store, configure explicitamente a API autorizada para a
-publicação e execute:
+Para gerar AAB de Play Store após homologação:
 
 ```bash
 npm run build:android:production

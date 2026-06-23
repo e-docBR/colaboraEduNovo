@@ -23,42 +23,51 @@ aparecer `react-native@0.86.x` aninhado.
 make validate-mobile
 ```
 
-4. Confirmar configuração Expo:
+4. Validar API oficial e tenant de produção:
+
+```bash
+make mobile-release-preflight
+```
+
+5. Confirmar configuração Expo:
 
 ```bash
 cd mobile
 npx expo config --type public
 ```
 
-5. Conferir no resultado:
+6. Conferir no resultado:
 
 - `name`: ColaboraEdu Família
 - `slug`: colaboraedu-familia
 - `android.package`: cloud.colaboraedu.familia
 - `android.versionCode`: número maior que a versão já enviada à Play Store
 
-6. Confirmar export Android local antes do APK:
+7. Confirmar export Android local antes do APK:
 
 ```bash
 cd mobile
-EXPO_PUBLIC_API_URL=http://10.0.2.2:5000/api/v1 EXPO_PUBLIC_TENANT_SLUG=colegio-frei-ronaldo npx expo export --platform android --output-dir /tmp/colaboraedu-mobile-export
+EXPO_PUBLIC_API_URL=https://gestao.colaboraedu.cloud/api/v1 EXPO_PUBLIC_TENANT_SLUG=colegio-frei-ronaldo npx expo export --platform android --output-dir /tmp/colaboraedu-mobile-export
 ```
 
 ## 2. Configurar ambiente EAS
 
-Preview/staging:
+Os perfis `preview` e `production` em `eas.json` já apontam para a API oficial:
+
+- `EXPO_PUBLIC_API_URL=https://gestao.colaboraedu.cloud/api/v1`
+- `EXPO_PUBLIC_TENANT_SLUG=colegio-frei-ronaldo`
+
+Use `preview` para APK interno com dados reais. Use `production` apenas para AAB
+de Play Store depois do QA aprovado.
+
+Antes do build, confirme:
 
 ```bash
-cd mobile
-npx eas-cli env:create --environment preview --name EXPO_PUBLIC_API_URL --value https://SUA_API_STAGING/api/v1
+curl https://gestao.colaboraedu.cloud/health
+curl https://gestao.colaboraedu.cloud/api/v1/auth/tenants
 ```
 
-Produção, somente quando autorizado:
-
-```bash
-cd mobile
-npx eas-cli env:create --environment production --name EXPO_PUBLIC_API_URL --value https://gestao.colaboraedu.cloud/api/v1
-```
+O tenant esperado é `Colégio Frei Ronaldo` com slug `colegio-frei-ronaldo`.
 
 ## 3. APK interno para teste manual
 
@@ -73,6 +82,8 @@ Após o build:
 - Instalar em pelo menos dois celulares.
 - Executar o roteiro de `QA_TEST_PLAN.md`.
 - Registrar evidências: aparelho, Android, usuário testado, resultado e prints.
+- Confirmar no app que a escola padrão é `Colégio Frei Ronaldo`.
+- Confirmar login com usuário real de aluno e responsável.
 
 ## 4. AAB para Play Store
 
