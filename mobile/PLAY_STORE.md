@@ -40,8 +40,11 @@ Validação feita em produção:
 Para build de teste interno em APK:
 
 ```bash
-npm run build:android:preview
+make mobile-build-preview
 ```
+
+Esse comando executa typecheck, preflight da API/tenant reais, valida login EAS
+e então inicia o build `preview`.
 
 Para gerar AAB de Play Store após homologação:
 

@@ -92,6 +92,12 @@ cd mobile
 npm run build:android:preview
 ```
 
+Ou, a partir da raiz do projeto, use o alvo completo:
+
+```bash
+make mobile-build-preview
+```
+
 Após o build:
 
 - Baixar o APK no painel EAS.
