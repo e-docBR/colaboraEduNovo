@@ -16,7 +16,7 @@
 # =============================================================================
 
 .DEFAULT_GOAL := help
-.PHONY: help setup infra backend worker frontend mobile dev docker test lint doctor validate validate-backend validate-frontend validate-mobile audit rc-check prod-preflight prod-smoke restore-backup stop clean migrate
+.PHONY: help setup infra backend worker frontend mobile dev docker test lint doctor validate validate-backend validate-frontend validate-mobile smoke-mobile-family audit rc-check prod-preflight prod-smoke restore-backup stop clean migrate
 
 VENV       := .venv
 PYTHON     := $(VENV)/bin/python
@@ -43,6 +43,7 @@ help:
 	@echo "  make lint       Executa ruff check"
 	@echo "  make doctor     Verifica pré-requisitos locais de backend/frontend/mobile"
 	@echo "  make validate   Executa validações locais usando apenas toolchains do projeto"
+	@echo "  make smoke-mobile-family  Valida login/endpoints do app família na API local"
 	@echo "  make audit      Audita dependências Python, frontend e mobile"
 	@echo "  make rc-check   Executa gates de release candidate para piloto"
 	@echo "  make prod-preflight Valida .env e docker-compose de produção"
@@ -150,6 +151,9 @@ validate-frontend:
 
 validate-mobile:
 	./scripts/validate-workspace.sh mobile
+
+smoke-mobile-family:
+	./scripts/mobile_family_smoke.py
 
 # ── Auditoria de dependências ────────────────────────────────────────────────
 audit:

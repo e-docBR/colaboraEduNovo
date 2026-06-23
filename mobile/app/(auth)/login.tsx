@@ -25,10 +25,26 @@ export default function LoginScreen() {
   const signIn = useAuthStore((s) => s.signIn);
   const signOut = useAuthStore((s) => s.signOut);
 
-  const { data: tenants = [], isLoading: tenantsLoading } = useQuery({
+  const {
+    data: tenants = [],
+    isLoading: tenantsLoading,
+    isError: tenantsError,
+    error: tenantsQueryError,
+  } = useQuery({
     queryKey: ['public-tenants'],
     queryFn: () => authApi.listTenants().then((r) => r.data),
   });
+
+  const fallbackTenants = selectedTenantSlug
+    ? [{ id: 0, name: selectedTenantSlug, slug: selectedTenantSlug }]
+    : [];
+  const visibleTenants = tenants.length > 0 ? tenants : fallbackTenants;
+  const tenantErrorMessage = tenantsError
+    ? getApiErrorMessage(
+        tenantsQueryError,
+        'Não foi possível carregar as escolas. Usando a escola configurada neste ambiente.',
+      )
+    : null;
 
   useEffect(() => {
     if (selectedTenantSlug || tenants.length === 0) return;
@@ -111,7 +127,10 @@ export default function LoginScreen() {
               </View>
             ) : (
               <View style={styles.tenantList}>
-                {tenants.map((tenant) => {
+                {tenantErrorMessage ? (
+                  <Text style={styles.tenantErrorText}>{tenantErrorMessage}</Text>
+                ) : null}
+                {visibleTenants.map((tenant) => {
                   const active = selectedTenantSlug === tenant.slug;
                   return (
                     <TouchableOpacity
@@ -129,6 +148,11 @@ export default function LoginScreen() {
                     </TouchableOpacity>
                   );
                 })}
+                {visibleTenants.length === 0 ? (
+                  <Text style={styles.tenantErrorText}>
+                    Nenhuma escola disponível. Confira a URL da API do app.
+                  </Text>
+                ) : null}
               </View>
             )}
           </View>
@@ -299,6 +323,11 @@ const styles = StyleSheet.create({
   },
   tenantList: {
     gap: 8,
+  },
+  tenantErrorText: {
+    color: '#fca5a5',
+    fontSize: 12,
+    lineHeight: 18,
   },
   tenantChip: {
     minHeight: 48,

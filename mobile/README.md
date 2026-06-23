@@ -88,6 +88,10 @@ make backend
 scripts/mobile_family_smoke.py
 ```
 
+O smoke cria/atualiza automaticamente uma massa local simples com aluno,
+responsável, notas, ocorrência e comunicado. Ele também restaura a senha
+temporária ao final do teste para permitir novas execuções.
+
 Credenciais locais usadas pelo smoke:
 
 - Aluno: `aluno900001` / `900001`

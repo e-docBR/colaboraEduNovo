@@ -9,6 +9,7 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,24 @@ BACKEND_PYTHON = BACKEND_DIR / ".venv" / "bin" / "python"
 
 if BACKEND_PYTHON.exists() and Path(sys.executable).absolute() != BACKEND_PYTHON.absolute():
     os.execv(str(BACKEND_PYTHON), [str(BACKEND_PYTHON), *sys.argv])
+
+
+def load_local_env() -> bool:
+    env_path = ROOT / ".env"
+    if not env_path.exists():
+        return False
+
+    for line in env_path.read_text().splitlines():
+        if line.startswith(("DATABASE_URL=", "REDIS_URL=", "SECRET_KEY=", "JWT_SECRET_KEY=")):
+            key, value = line.split("=", 1)
+            os.environ[key] = value
+    return True
+
+
+def ensure_backend_on_path() -> None:
+    backend_path = str(BACKEND_DIR)
+    if backend_path not in sys.path:
+        sys.path.insert(0, backend_path)
 
 
 def request_json(
@@ -55,18 +74,158 @@ def login(base_url: str, username: str, password: str, tenant: str) -> dict[str,
     )
 
 
+def ensure_local_fixture(tenant_slug: str, password: str) -> None:
+    if not load_local_env():
+        print("AVISO: .env local nao encontrado; massa local nao foi preparada.")
+        return
+
+    ensure_backend_on_path()
+
+    from app.core.database import session_scope  # noqa: PLC0415
+    from app.core.security import hash_password  # noqa: PLC0415
+    from app.models import AcademicYear, Aluno, Comunicado, Nota, Ocorrencia, Tenant  # noqa: PLC0415
+    from app.services.accounts import ensure_aluno_user, ensure_responsavel_user  # noqa: PLC0415
+
+    matricula = password
+    with session_scope() as session:
+        tenant = session.query(Tenant).filter(Tenant.slug == tenant_slug).first()
+        if not tenant:
+            tenant = Tenant(name="ColaboraEdu Local", slug=tenant_slug, is_active=True)
+            session.add(tenant)
+            session.flush()
+
+        academic_year = (
+            session.query(AcademicYear)
+            .filter(AcademicYear.tenant_id == tenant.id, AcademicYear.label == "2026")
+            .first()
+        )
+        if not academic_year:
+            academic_year = AcademicYear(
+                tenant_id=tenant.id,
+                label="2026",
+                is_current=True,
+                status="open",
+                trimestre_atual=1,
+            )
+            session.add(academic_year)
+            session.flush()
+        else:
+            academic_year.is_current = True
+            academic_year.status = "open"
+            academic_year.trimestre_atual = 1
+
+        aluno = (
+            session.query(Aluno)
+            .filter(
+                Aluno.tenant_id == tenant.id,
+                Aluno.academic_year_id == academic_year.id,
+                Aluno.matricula == matricula,
+            )
+            .first()
+        )
+        if not aluno:
+            aluno = Aluno(
+                tenant_id=tenant.id,
+                academic_year_id=academic_year.id,
+                matricula=matricula,
+                nome="ALUNO TESTE FAMILIA",
+                turma="7o TESTE",
+                turno="Matutino",
+            )
+            session.add(aluno)
+
+        aluno.nome = "ALUNO TESTE FAMILIA"
+        aluno.turma = "7o TESTE"
+        aluno.turno = "Matutino"
+        aluno.status = "Ativo"
+        aluno.email_responsavel = "responsavel.local@example.com"
+        aluno.telefone_responsavel = "73999999999"
+        aluno.deleted_at = None
+        aluno.is_archived = False
+        session.flush()
+
+        session.query(Nota).filter(Nota.aluno_id == aluno.id).delete(synchronize_session=False)
+        for disciplina, total, faltas in (
+            ("LINGUA PORTUGUESA", "24.0", 2),
+            ("MATEMATICA", "18.5", 4),
+            ("CIENCIAS", "27.0", 1),
+        ):
+            session.add(
+                Nota(
+                    tenant_id=tenant.id,
+                    academic_year_id=academic_year.id,
+                    aluno_id=aluno.id,
+                    disciplina=disciplina,
+                    disciplina_normalizada=disciplina,
+                    trimestre1=Decimal(total),
+                    total=Decimal(total),
+                    faltas=faltas,
+                    situacao="EMC",
+                )
+            )
+
+        aluno_user, _ = ensure_aluno_user(session, aluno)
+        resp_user, _ = ensure_responsavel_user(session, aluno)
+        for user in (aluno_user, resp_user):
+            user.password_hash = hash_password(password)
+            user.must_change_password = True
+            user.is_active = True
+            user.deleted_at = None
+            user.is_archived = False
+
+        comunicado = (
+            session.query(Comunicado)
+            .filter(
+                Comunicado.tenant_id == tenant.id,
+                Comunicado.academic_year_id == academic_year.id,
+                Comunicado.titulo == "Comunicado local de teste Android",
+            )
+            .first()
+        )
+        if not comunicado:
+            session.add(
+                Comunicado(
+                    tenant_id=tenant.id,
+                    academic_year_id=academic_year.id,
+                    titulo="Comunicado local de teste Android",
+                    conteudo="Comunicado criado automaticamente para validar o app familia.",
+                    target_type="TODOS",
+                    arquivado=False,
+                )
+            )
+
+        ocorrencia = (
+            session.query(Ocorrencia)
+            .filter(
+                Ocorrencia.tenant_id == tenant.id,
+                Ocorrencia.academic_year_id == academic_year.id,
+                Ocorrencia.aluno_id == aluno.id,
+                Ocorrencia.descricao == "Ocorrencia local de teste Android",
+            )
+            .first()
+        )
+        if not ocorrencia:
+            session.add(
+                Ocorrencia(
+                    tenant_id=tenant.id,
+                    academic_year_id=academic_year.id,
+                    aluno_id=aluno.id,
+                    tipo="Advertencia",
+                    descricao="Ocorrencia local de teste Android",
+                    observacao_pais="Registro criado apenas para validacao local.",
+                    gravidade="LEVE",
+                    acao_tomada="Orientacao registrada no teste local.",
+                    notificacao_status="Pendente",
+                )
+            )
+
+
 def restore_local_password(usernames: list[str], password: str) -> None:
-    env_path = ROOT / ".env"
-    if not env_path.exists():
+    if not load_local_env():
         print("AVISO: .env local nao encontrado; senha temporaria nao foi restaurada.")
         return
 
-    for line in env_path.read_text().splitlines():
-        if line.startswith(("DATABASE_URL=", "REDIS_URL=", "SECRET_KEY=", "JWT_SECRET_KEY=")):
-            key, value = line.split("=", 1)
-            os.environ[key] = value
-
-    sys.path.insert(0, str(BACKEND_DIR))
+    ensure_backend_on_path()
 
     from app.core.database import session_scope  # noqa: PLC0415
     from app.core.security import hash_password  # noqa: PLC0415
@@ -95,6 +254,8 @@ def main() -> int:
     base_url = args.base_url.rstrip("/")
 
     if not args.no_restore:
+        ensure_local_fixture(args.tenant, args.temp_password)
+        print("OK massa local preparada")
         restore_local_password([args.student_user, args.responsible_user], args.temp_password)
         print("OK senha temporaria local preparada")
 
