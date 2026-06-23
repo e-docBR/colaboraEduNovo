@@ -57,6 +57,7 @@ Validações:
 | Login responsável local | OK: `resp_900001` / `900001`, `must_change_password=True` |
 | `GET /api/v1/responsavel/meu-filho` | OK: retornou aluno, 1 ocorrência e 1 comunicado |
 | Troca de senha temporária | OK: `must_change_password=False` após troca |
+| `scripts/mobile_family_smoke.py` | OK: login aluno, login responsável, endpoints família e troca de senha |
 
 Massa local criada:
 
@@ -71,6 +72,10 @@ Arquivo local criado e ignorado pelo Git:
 - `mobile/.env`
 - `EXPO_PUBLIC_API_URL=http://10.0.2.2:5000/api/v1`
 - `EXPO_PUBLIC_TENANT_SLUG=default`
+
+Para navegador no Windows acessando o Metro pelo IP do WSL, trocar a API para
+`http://IP_DO_WSL:5000/api/v1`. Para emulador Android, manter
+`http://10.0.2.2:5000/api/v1`.
 
 ## Observacoes do export Android
 

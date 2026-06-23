@@ -15,6 +15,7 @@ import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { authApi, DEFAULT_TENANT_SLUG } from '../../lib/api';
 import { useAuthStore } from '../../lib/auth.store';
+import { getApiErrorMessage } from '../../lib/errors';
 
 export default function LoginScreen() {
   const [username, setUsername] = useState('');
@@ -69,9 +70,7 @@ export default function LoginScreen() {
         router.replace('/(tabs)');
       }
     } catch (error: unknown) {
-      const msg =
-        (error as { response?: { data?: { error?: string } } })?.response?.data?.error ??
-        'Credenciais inválidas. Tente novamente.';
+      const msg = getApiErrorMessage(error, 'Credenciais inválidas. Tente novamente.');
       Alert.alert('Erro ao entrar', msg);
     } finally {
       setLoading(false);

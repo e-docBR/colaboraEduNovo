@@ -14,6 +14,7 @@ import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { authApi } from '../lib/api';
 import { useAuthStore } from '../lib/auth.store';
+import { getApiErrorMessage } from '../lib/errors';
 
 function passwordError(password: string) {
   if (password.length < 8) return 'A senha deve ter pelo menos 8 caracteres.';
@@ -55,9 +56,10 @@ export default function ChangePasswordScreen() {
       await signIn(data.access_token, data.refresh_token, data.user);
       router.replace('/(tabs)');
     } catch (error: unknown) {
-      const msg =
-        (error as { response?: { data?: { error?: string } } })?.response?.data?.error ??
-        'Não foi possível alterar a senha. Confira a senha atual e tente novamente.';
+      const msg = getApiErrorMessage(
+        error,
+        'Não foi possível alterar a senha. Confira a senha atual e tente novamente.',
+      );
       Alert.alert('Erro ao alterar senha', msg);
     } finally {
       setLoading(false);

@@ -15,6 +15,7 @@ if (process.env.NODE_ENV === 'production' && !configuredBaseUrl) {
 }
 
 const BASE_URL = configuredBaseUrl ?? 'http://10.0.2.2:5000/api/v1';
+export const API_BASE_URL = BASE_URL;
 export const DEFAULT_TENANT_SLUG = process.env.EXPO_PUBLIC_TENANT_SLUG;
 
 export const apiClient = axios.create({

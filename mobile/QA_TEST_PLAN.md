@@ -11,13 +11,27 @@ teste interno/fechado na Play Store.
 - Staging/homologação: usar URL pública de API de testes
 - Produção: somente após autorização explícita
 
+### URL da API por alvo de teste
+
+- Navegador no Windows abrindo `http://IP_DO_WSL:8081`: usar `EXPO_PUBLIC_API_URL=http://IP_DO_WSL:5000/api/v1`.
+- Emulador Android: usar `EXPO_PUBLIC_API_URL=http://10.0.2.2:5000/api/v1`.
+- Celular físico: usar `EXPO_PUBLIC_API_URL=http://IP_DA_MAQUINA:5000/api/v1`, acessível pela rede local.
+
+Se a página abre mas o login falha, primeiro confirmar:
+
+```bash
+curl http://127.0.0.1:5000/health
+scripts/mobile_family_smoke.py
+```
+
 ## Checagens automatizadas antes do teste manual
 
 - `npm ls react-native --prefix mobile`
 - `make validate-mobile`
 - `npm run lint --prefix mobile`
 - `npx expo config --type public`
-- `EXPO_PUBLIC_API_URL=http://10.0.2.2:5000/api/v1 EXPO_PUBLIC_TENANT_SLUG=colegio-frei-ronaldo npx expo export --platform android --output-dir /tmp/colaboraedu-mobile-export`
+- `scripts/mobile_family_smoke.py`
+- `EXPO_PUBLIC_API_URL=http://10.0.2.2:5000/api/v1 EXPO_PUBLIC_TENANT_SLUG=default npx expo export --platform android --output-dir /tmp/colaboraedu-mobile-export`
 
 O comando `npm ls react-native --prefix mobile` deve mostrar somente
 `react-native@0.81.5`. Se aparecer outra versão aninhada, especialmente
