@@ -71,6 +71,22 @@ O tenant esperado é `Colégio Frei Ronaldo` com slug `colegio-frei-ronaldo`.
 
 ## 3. APK interno para teste manual
 
+### Login Expo/EAS no WSL
+
+No WSL, o login por navegador pode travar porque o callback `localhost` abre no
+Windows. O caminho mais estável é usar um token de acesso Expo:
+
+1. Acesse `https://expo.dev/accounts/[sua-conta]/settings/access-tokens`.
+2. Crie um token para build, por exemplo `colaboraedu-wsl-build`.
+3. No terminal do WSL, exporte o token somente para a sessão atual:
+
+```bash
+export EXPO_TOKEN=seu_token_aqui
+npx eas-cli whoami
+```
+
+O comando `whoami` precisa mostrar o usuário/organização Expo antes de seguir.
+
 ```bash
 cd mobile
 npm run build:android:preview
