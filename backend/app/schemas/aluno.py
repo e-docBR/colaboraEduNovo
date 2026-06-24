@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-_PHONE_RE = re.compile(r"^[0-9\s()+-]{8,30}$")
+_PHONE_RE = re.compile(r"^[0-9\s()+,;/.-]{8,100}$")
 _CPF_RE = re.compile(r"^\d{11}$")
 
 

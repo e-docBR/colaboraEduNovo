@@ -52,6 +52,12 @@ def test_aluno_update_rejects_blank_required_fields():
         raise AssertionError("blank nome should fail validation")
 
 
+def test_aluno_update_accepts_imported_multiple_phone_format():
+    payload = AlunoUpdate(telefones="(73) 999272178 /998627294")
+
+    assert payload.telefones == "(73) 999272178 /998627294"
+
+
 def test_aluno_create_rejects_invalid_email():
     try:
         AlunoCreate(
