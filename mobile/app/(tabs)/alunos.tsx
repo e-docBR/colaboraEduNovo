@@ -17,6 +17,28 @@ function fmtNota(value?: number | null) {
   return typeof value === 'number' ? value.toFixed(1) : '—';
 }
 
+function normalizeText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+}
+
+function abbreviateDisciplina(value: string) {
+  const normalized = normalizeText(value);
+  if (normalized.includes('ARTE')) return 'Art';
+  if (normalized.includes('CIENCIA')) return 'Ciênc';
+  if (normalized.includes('FINANCEIRA')) return 'Ed. Fin';
+  if (normalized.includes('EDUCACAO FISICA')) return 'Ed. Fís';
+  if (normalized.includes('RELIGIOSO')) return 'Ens. Rel';
+  if (normalized.includes('GEOGRAFIA')) return 'Geo';
+  if (normalized.includes('HISTORIA')) return 'Hist';
+  if (normalized.includes('INGLES') || normalized.includes('INGLESA')) return 'Ing';
+  if (normalized.includes('PORTUGUES')) return 'Port';
+  if (normalized.includes('MATEMATICA')) return 'Mat';
+  return value.length > 9 ? `${value.slice(0, 9)}.` : value;
+}
+
 function situacaoColor(value?: string | null) {
   const normalized = value?.toUpperCase() ?? '';
   if (normalized.startsWith('APR')) return '#22c55e';
@@ -26,8 +48,8 @@ function situacaoColor(value?: string | null) {
 }
 
 function notaColor(value?: number | null) {
-  if (typeof value !== 'number') return '#0f172a';
-  return value >= 18 ? '#2e7d32' : '#ef6c00';
+  if (typeof value !== 'number') return '#94a3b8';
+  return value >= 18 ? '#15803d' : '#ea580c';
 }
 
 function FixedDisciplinaColumn({ notas }: { notas: AlunoNota[] }) {
@@ -36,10 +58,17 @@ function FixedDisciplinaColumn({ notas }: { notas: AlunoNota[] }) {
       <View style={[styles.tableHeader, styles.fixedHeader]}>
         <Text style={[styles.tableHeaderText, styles.fixedHeaderText]}>Disciplina</Text>
       </View>
-      {notas.map((nota) => (
-        <View key={`disciplina-${nota.id}`} style={styles.fixedRow}>
-          <Text style={styles.disciplinaText} numberOfLines={2}>
-            {nota.disciplina}
+      {notas.map((nota, index) => (
+        <View
+          key={`disciplina-${nota.id}`}
+          style={[styles.fixedRow, index % 2 === 1 && styles.tableRowAlt]}
+        >
+          <Text
+            accessibilityLabel={nota.disciplina}
+            style={styles.disciplinaText}
+            numberOfLines={1}
+          >
+            {abbreviateDisciplina(nota.disciplina)}
           </Text>
         </View>
       ))}
@@ -47,23 +76,30 @@ function FixedDisciplinaColumn({ notas }: { notas: AlunoNota[] }) {
   );
 }
 
-function BoletimScoresRow({ nota }: { nota: AlunoNota }) {
+function BoletimScoresRow({ nota, index }: { nota: AlunoNota; index: number }) {
   return (
-    <View style={styles.tableRow}>
-      <Text style={[styles.tableCell, styles.triCell, { color: notaColor(nota.trimestre1) }]}>
-        {fmtNota(nota.trimestre1)}
-      </Text>
-      <Text style={[styles.tableCell, styles.triCell]}>{fmtNota(nota.trimestre2)}</Text>
-      <Text style={[styles.tableCell, styles.triCell]}>{fmtNota(nota.trimestre3)}</Text>
-      <Text style={[styles.tableCell, styles.triCell, styles.totalCell, { color: notaColor(nota.total) }]}>
-        {fmtNota(nota.total)}
-      </Text>
+    <View style={[styles.tableRow, index % 2 === 1 && styles.tableRowAlt]}>
+      <GradeValue value={nota.trimestre1} />
+      <GradeValue value={nota.trimestre2} />
+      <GradeValue value={nota.trimestre3} />
+      <GradeValue value={nota.total} total />
       <Text style={[styles.tableCell, styles.faltasCell]}>{nota.faltas ?? 0}</Text>
       <View style={[styles.tableCell, styles.situacaoCell]}>
         <Text style={[styles.situacaoBadge, { color: situacaoColor(nota.situacao) }]}>
           {nota.situacao || '—'}
         </Text>
       </View>
+    </View>
+  );
+}
+
+function GradeValue({ value, total = false }: { value?: number | null; total?: boolean }) {
+  const hasValue = typeof value === 'number';
+  return (
+    <View style={[styles.gradeValueCell, total && styles.totalValueCell]}>
+      <Text style={[styles.gradeValueText, total && styles.totalValueText, { color: notaColor(value) }]}>
+        {hasValue ? fmtNota(value) : '—'}
+      </Text>
     </View>
   );
 }
@@ -165,7 +201,9 @@ export default function BoletimScreen() {
                     <Text style={[styles.tableHeaderText, styles.faltasCell]}>Faltas</Text>
                     <Text style={[styles.tableHeaderText, styles.situacaoCell]}>Situação</Text>
                   </View>
-                  {sortedNotas.map((nota) => <BoletimScoresRow key={nota.id} nota={nota} />)}
+                  {sortedNotas.map((nota, index) => (
+                    <BoletimScoresRow key={nota.id} nota={nota} index={index} />
+                  ))}
                 </View>
               </ScrollView>
             </View>
@@ -238,26 +276,26 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRightColor: '#dbe4f0',
     borderRightWidth: 1,
-    width: 148,
+    width: 86,
     zIndex: 2,
   },
   fixedHeader: { justifyContent: 'center' },
-  fixedHeaderText: { paddingHorizontal: 10 },
+  fixedHeaderText: { fontSize: 11, paddingHorizontal: 8 },
   fixedRow: {
     borderBottomColor: '#f1f5f9',
     borderBottomWidth: 1,
     justifyContent: 'center',
-    minHeight: 50,
-    paddingHorizontal: 10,
+    minHeight: 44,
+    paddingHorizontal: 8,
   },
-  disciplinaText: { color: '#020617', fontSize: 12, fontWeight: '700', lineHeight: 16 },
-  scoreColumns: { minWidth: 408 },
+  disciplinaText: { color: '#020617', fontSize: 13, fontWeight: '900', lineHeight: 16 },
+  scoreColumns: { minWidth: 370 },
   tableHeader: {
     alignItems: 'center',
     borderBottomColor: '#eef2f7',
     borderBottomWidth: 1,
     flexDirection: 'row',
-    minHeight: 48,
+    minHeight: 42,
   },
   tableHeaderText: { color: '#020617', fontSize: 12, fontWeight: '900', textAlign: 'center' },
   tableRow: {
@@ -265,13 +303,36 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f1f5f9',
     borderBottomWidth: 1,
     flexDirection: 'row',
-    minHeight: 50,
+    minHeight: 44,
+  },
+  tableRowAlt: {
+    backgroundColor: '#f8fafc',
   },
   tableCell: { color: '#020617', fontSize: 13, paddingHorizontal: 6 },
-  triCell: { fontWeight: '800', textAlign: 'center', width: 52 },
-  totalCell: { fontWeight: '900' },
-  faltasCell: { textAlign: 'center', width: 62 },
-  situacaoCell: { alignItems: 'center', width: 84 },
+  triCell: { fontWeight: '800', textAlign: 'center', width: 46 },
+  gradeValueCell: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 46,
+  },
+  gradeValueText: {
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  totalValueCell: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+    borderRadius: 9,
+    borderWidth: 1,
+    marginHorizontal: 3,
+    minHeight: 28,
+    width: 50,
+  },
+  totalValueText: {
+    fontSize: 14,
+  },
+  faltasCell: { color: '#334155', fontWeight: '800', textAlign: 'center', width: 54 },
+  situacaoCell: { alignItems: 'center', width: 78 },
   situacaoBadge: {
     borderColor: '#cbd5e1',
     borderRadius: 6,
