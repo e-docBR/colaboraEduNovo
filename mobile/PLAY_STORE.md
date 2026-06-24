@@ -43,14 +43,37 @@ Para build de teste interno em APK:
 make mobile-build-preview
 ```
 
-Esse comando executa typecheck, preflight da API/tenant reais, valida login EAS
-e então inicia o build `preview`.
+Esse comando executa typecheck, preflight da API/tenant reais, checagem local de
+prontidão Play Store, valida login EAS e então inicia o build `preview`.
 
 Para gerar AAB de Play Store após homologação:
 
 ```bash
-npm run build:android:production
+make mobile-build-production
 ```
+
+O AAB deve ser gerado somente depois de o APK `preview` estar aprovado em teste
+manual. O alvo `mobile-build-production` usa o perfil EAS `production`, que gera
+`app-bundle` para envio ao Google Play Console.
+
+## Checagem local de prontidão
+
+Antes de abrir uma nova versão na loja, rode:
+
+```bash
+make mobile-store-readiness
+```
+
+Ela confere nome, slug, pacote Android, versão, scripts de build, ambiente EAS
+de produção e imagens declaradas em `app.json`.
+
+Status atual conhecido:
+
+- Configuração Android/EAS: OK.
+- API real e tenant: OK via `make mobile-release-preflight`.
+- Ícone/splash/adaptive icon: dimensões OK, mas os arquivos estão com extensão
+  `.png` e conteúdo JPEG. O APK já foi gerado assim, porém antes da publicação
+  final é recomendado substituir por PNG real mantendo a mesma identidade visual.
 
 ## Checklist antes do teste fechado
 
@@ -58,11 +81,23 @@ Use o roteiro detalhado em [QA_TEST_PLAN.md](./QA_TEST_PLAN.md).
 
 ## Materiais necessários para a loja
 
-- Ícone final em alta resolução.
+- Ícone final PNG em alta resolução.
+- Adaptive icon PNG.
+- Splash icon PNG.
 - Screenshots de login, início, boletim, registros e perfil.
 - Política de privacidade publicada em URL pública.
 - Conta Google Play Console.
 - Lista de testadores internos/fechados.
+
+## Sequência recomendada agora
+
+1. Rodar `make mobile-build-preview`.
+2. Instalar o APK em pelo menos dois aparelhos Android.
+3. Preencher evidências do roteiro de [QA_TEST_PLAN.md](./QA_TEST_PLAN.md).
+4. Corrigir qualquer problema visual ou funcional encontrado.
+5. Substituir imagens `.png` que ainda estejam codificadas como JPEG.
+6. Rodar `make mobile-build-production`.
+7. Enviar o AAB para a trilha de teste interno no Play Console.
 
 ## Documentos relacionados
 

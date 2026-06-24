@@ -16,7 +16,7 @@
 # =============================================================================
 
 .DEFAULT_GOAL := help
-.PHONY: help setup infra backend worker frontend mobile dev docker test lint doctor validate validate-backend validate-frontend validate-mobile smoke-mobile-family mobile-release-preflight mobile-build-preview audit rc-check prod-preflight prod-smoke restore-backup stop clean migrate
+.PHONY: help setup infra backend worker frontend mobile dev docker test lint doctor validate validate-backend validate-frontend validate-mobile smoke-mobile-family mobile-release-preflight mobile-store-readiness mobile-build-preview mobile-build-production audit rc-check prod-preflight prod-smoke restore-backup stop clean migrate
 
 VENV       := .venv
 PYTHON     := $(VENV)/bin/python
@@ -45,7 +45,9 @@ help:
 	@echo "  make validate   Executa validações locais usando apenas toolchains do projeto"
 	@echo "  make smoke-mobile-family  Valida login/endpoints do app família na API local"
 	@echo "  make mobile-release-preflight  Confere API/tenant reais antes do build Android"
+	@echo "  make mobile-store-readiness  Confere configuração Android/Play Store local"
 	@echo "  make mobile-build-preview  Valida e inicia APK interno Android via EAS"
+	@echo "  make mobile-build-production  Valida e inicia AAB Android via EAS"
 	@echo "  make audit      Audita dependências Python, frontend e mobile"
 	@echo "  make rc-check   Executa gates de release candidate para piloto"
 	@echo "  make prod-preflight Valida .env e docker-compose de produção"
@@ -160,9 +162,16 @@ smoke-mobile-family:
 mobile-release-preflight:
 	./scripts/mobile_release_preflight.py
 
-mobile-build-preview: validate-mobile mobile-release-preflight
+mobile-store-readiness:
+	./scripts/mobile_store_readiness.py
+
+mobile-build-preview: validate-mobile mobile-release-preflight mobile-store-readiness
 	cd mobile && npx eas-cli whoami
 	cd mobile && npm run build:android:preview
+
+mobile-build-production: validate-mobile mobile-release-preflight mobile-store-readiness
+	cd mobile && npx eas-cli whoami
+	cd mobile && npm run build:android:production
 
 # ── Auditoria de dependências ────────────────────────────────────────────────
 audit:

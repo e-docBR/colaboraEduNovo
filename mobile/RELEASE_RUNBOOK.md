@@ -29,21 +29,31 @@ make validate-mobile
 make mobile-release-preflight
 ```
 
-5. Confirmar configuração Expo:
+5. Confirmar configuração Android/Play Store:
+
+```bash
+make mobile-store-readiness
+```
+
+A checagem pode emitir avisos sem bloquear o build. Antes da publicação final,
+tratar avisos relacionados a assets de loja, especialmente arquivos `.png` que
+estejam codificados como JPEG.
+
+6. Confirmar configuração Expo:
 
 ```bash
 cd mobile
 npx expo config --type public
 ```
 
-6. Conferir no resultado:
+7. Conferir no resultado:
 
 - `name`: ColaboraEdu Família
 - `slug`: colaboraedu-familia
 - `android.package`: cloud.colaboraedu.familia
 - `android.versionCode`: número maior que a versão já enviada à Play Store
 
-7. Confirmar export Android local antes do APK:
+8. Confirmar export Android local antes do APK:
 
 ```bash
 cd mobile
@@ -120,8 +130,7 @@ Antes de gerar AAB:
 Gerar AAB:
 
 ```bash
-cd mobile
-npm run build:android:production
+make mobile-build-production
 ```
 
 ## 5. Teste interno/fechado na Play Store
