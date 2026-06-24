@@ -12,6 +12,50 @@ interface AlunoFormProps {
 
 const TURNOS = ["Matutino", "Vespertino", "Noturno"];
 
+const OPTIONAL_TEXT_FIELDS: (keyof AlunoSummary)[] = [
+    "status",
+    "sexo",
+    "data_nascimento",
+    "naturalidade",
+    "zona",
+    "endereco",
+    "filiacao",
+    "telefones",
+    "cpf",
+    "nis",
+    "inep",
+    "situacao_anterior",
+    "email",
+    "email_responsavel",
+    "telefone_responsavel",
+];
+
+const trimToNull = (value: unknown) => {
+    if (typeof value !== "string") {
+        return value ?? null;
+    }
+    const trimmed = value.trim();
+    return trimmed === "" ? null : trimmed;
+};
+
+const normalizeAlunoPayload = (data: Partial<AlunoSummary>): Partial<AlunoSummary> => {
+    const normalized: Partial<AlunoSummary> = { ...data };
+    const writable = normalized as Record<string, unknown>;
+
+    OPTIONAL_TEXT_FIELDS.forEach((field) => {
+        if (field in normalized) {
+            writable[field] = trimToNull(writable[field]);
+        }
+    });
+
+    if (typeof normalized.cpf === "string") {
+        const digits = normalized.cpf.replace(/\D/g, "");
+        normalized.cpf = digits || null;
+    }
+
+    return normalized;
+};
+
 export const AlunoForm = ({ initialData, onSubmit, onCancel, isLoading }: AlunoFormProps) => {
     const [formData, setFormData] = useState<Partial<AlunoSummary>>({
         nome: "",
@@ -54,13 +98,14 @@ export const AlunoForm = ({ initialData, onSubmit, onCancel, isLoading }: AlunoF
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const result = alunoSchema.safeParse(formData);
+        const payload = normalizeAlunoPayload(formData);
+        const result = alunoSchema.safeParse(payload);
         if (!result.success) {
             setFieldErrors(getFieldErrors(result));
             return;
         }
         setFieldErrors({});
-        onSubmit(formData);
+        onSubmit(payload);
     };
 
     return (

@@ -1,17 +1,20 @@
 import { z } from "zod";
 
 const phoneRegex = /^(\(?\d{2}\)?[\s-]?)?(\d{4,5}[\s-]?\d{4})(\s*[,;/]\s*(\(?\d{2}\)?[\s-]?)?(\d{4,5}[\s-]?\d{4}))*$/;
+const cpfRegex = /^(\d{11}|\d{3}\.\d{3}\.\d{3}-\d{2})$/;
+const optionalEmail = (message: string) => z.string().email(message).or(z.literal("")).nullish();
+const optionalPhone = (message: string) => z.string().regex(phoneRegex, message).or(z.literal("")).nullish();
 
 export const alunoSchema = z.object({
   nome: z.string().min(3, "Nome deve ter pelo menos 3 caracteres"),
   matricula: z.string().min(1, "Matrícula é obrigatória").max(32, "Máximo 32 caracteres"),
   turma: z.string().min(1, "Turma é obrigatória"),
   turno: z.string().min(1, "Turno é obrigatório"),
-  email: z.string().email("E-mail inválido").or(z.literal("")).optional(),
-  email_responsavel: z.string().email("E-mail do responsável inválido").or(z.literal("")).optional(),
-  telefones: z.string().regex(phoneRegex, "Telefone inválido (use (DD) XXXXX-XXXX)").or(z.literal("")).optional(),
-  telefone_responsavel: z.string().regex(phoneRegex, "Telefone inválido").or(z.literal("")).optional(),
-  cpf: z.string().regex(/^\d{3}\.\d{3}\.\d{3}-\d{2}$/, "CPF inválido (use 000.000.000-00)").or(z.literal("")).optional(),
+  email: optionalEmail("E-mail inválido"),
+  email_responsavel: optionalEmail("E-mail do responsável inválido"),
+  telefones: optionalPhone("Telefone inválido (use (DD) XXXXX-XXXX)"),
+  telefone_responsavel: optionalPhone("Telefone inválido"),
+  cpf: z.string().regex(cpfRegex, "CPF inválido").or(z.literal("")).nullish(),
 });
 
 export const ocorrenciaSchema = z.object({
