@@ -149,8 +149,6 @@ export const OcorrenciasPage = () => {
     const alunoTemContato = Boolean(
         alunoSelecionado?.email_responsavel ||
         alunoSelecionado?.telefone_responsavel ||
-        alunoSelecionado?.email ||
-        alunoSelecionado?.telefones ||
         contatoResponsavel?.email_responsavel ||
         contatoResponsavel?.telefone_responsavel
     );
