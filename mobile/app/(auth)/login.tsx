@@ -25,6 +25,7 @@ import { getApiErrorMessage } from '../../lib/errors';
 export default function LoginScreen() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [selectedTenantSlug, setSelectedTenantSlug] = useState(DEFAULT_TENANT_SLUG ?? '');
   const [tenantModalVisible, setTenantModalVisible] = useState(false);
   const [tenantSearch, setTenantSearch] = useState('');
@@ -184,7 +185,7 @@ export default function LoginScreen() {
             <Text style={styles.label}>Usuário</Text>
             <TextInput
               style={styles.input}
-              placeholder="resp_12345 ou matrícula"
+              placeholder="resp_12345 ou aluno12345"
               placeholderTextColor="#94a3b8"
               autoCapitalize="none"
               keyboardType="default"
@@ -197,16 +198,31 @@ export default function LoginScreen() {
           {/* Password */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Senha</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="••••••••"
-              placeholderTextColor="#94a3b8"
-              secureTextEntry
-              returnKeyType="done"
-              onSubmitEditing={handleLogin}
-              value={password}
-              onChangeText={setPassword}
-            />
+            <View style={styles.passwordInputWrap}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="••••••••"
+                placeholderTextColor="#94a3b8"
+                secureTextEntry={!showPassword}
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
+                value={password}
+                onChangeText={setPassword}
+              />
+              <TouchableOpacity
+                accessibilityLabel={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                accessibilityRole="button"
+                onPress={() => setShowPassword((value) => !value)}
+                style={styles.passwordToggle}
+                activeOpacity={0.75}
+              >
+                <MaterialIcons
+                  name={showPassword ? 'visibility-off' : 'visibility'}
+                  size={22}
+                  color="#94a3b8"
+                />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Login Button */}
@@ -380,6 +396,29 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 16,
     color: '#f1f5f9',
+  },
+  passwordInputWrap: {
+    alignItems: 'center',
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderRadius: 12,
+    flexDirection: 'row',
+    minHeight: 52,
+  },
+  passwordInput: {
+    color: '#f1f5f9',
+    flex: 1,
+    fontSize: 16,
+    paddingLeft: 16,
+    paddingRight: 8,
+    paddingVertical: 14,
+  },
+  passwordToggle: {
+    alignItems: 'center',
+    height: 52,
+    justifyContent: 'center',
+    width: 52,
   },
   tenantLoading: {
     minHeight: 48,
