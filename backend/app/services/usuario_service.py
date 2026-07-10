@@ -46,7 +46,9 @@ class UsuarioService:
                 user = super_admins[0] if len(super_admins) == 1 else None
         else:
             # In SaaS mode, tenant context is mandatory for regular users because
-            # usernames and e-mails are unique only inside each school.
+            # usernames and e-mails are unique only inside each school. The public
+            # student/family portal does not show a school selector, so allow a
+            # unique active aluno/responsavel username to resolve its own tenant.
             super_admins = self.repository.session.execute(
                 select(Usuario)
                 .where(
@@ -60,7 +62,20 @@ class UsuarioService:
             ).scalars().all()
             user = super_admins[0] if len(super_admins) == 1 else None
             if not user:
-                raise UnauthorizedError("Selecione a escola para acessar")
+                portal_users = self.repository.session.execute(
+                    select(Usuario)
+                    .where(
+                        or_(Usuario.username == username, Usuario.email == username),
+                        Usuario.role.in_(("aluno", "responsavel")),
+                        Usuario.is_active.is_(True),
+                        Usuario.deleted_at.is_(None),
+                        Usuario.is_archived.is_(False),
+                    )
+                    .execution_options(include_all_tenants=True)
+                ).scalars().all()
+                user = portal_users[0] if len(portal_users) == 1 else None
+                if not user:
+                    raise UnauthorizedError("Selecione a escola para acessar")
 
         if (
             not user

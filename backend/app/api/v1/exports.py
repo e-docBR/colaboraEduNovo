@@ -225,10 +225,14 @@ def register(parent: Blueprint) -> None:
         "orientacao",
     )
     def export_comunicados_acesso():
-        """Download guardian access notices as one DOCX per class."""
+        """Download guardian or student access notices as one DOCX per class."""
         turma_filter = (request.args.get("turma") or "").strip()
         if not turma_filter:
             return jsonify({"error": "Informe a turma para gerar os comunicados."}), 400
+
+        tipo = (request.args.get("tipo") or "responsavel").strip().lower()
+        if tipo not in ("responsavel", "aluno"):
+            tipo = "responsavel"
 
         tenant_id = getattr(g, "tenant_id", None)
         academic_year_id = getattr(g, "academic_year_id", None)
@@ -245,6 +249,7 @@ def register(parent: Blueprint) -> None:
                     academic_year_id=academic_year_id,
                     turma=turma_filter,
                     school_name=school_name,
+                    tipo=tipo,
                 )
             except ValueError as exc:
                 return jsonify({"error": str(exc)}), 404
@@ -262,6 +267,7 @@ def register(parent: Blueprint) -> None:
                     "academic_year_id": academic_year_id,
                     "format": "docx",
                     "passwords_reset": True,
+                    "tipo": tipo,
                 },
             )
 

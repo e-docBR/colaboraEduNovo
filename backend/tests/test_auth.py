@@ -123,6 +123,85 @@ def test_regular_user_login_requires_tenant(client, admin_user):
     assert response.status_code == 401
 
 
+def test_unique_student_portal_user_can_login_without_school(client):
+    with session_scope() as session:
+        tenant = Tenant(name="Portal Escola", slug="portal-escola", is_active=True)
+        session.add(tenant)
+        session.flush()
+        year = AcademicYear(tenant_id=tenant.id, label="2026", is_current=True)
+        session.add(year)
+        session.flush()
+        aluno = Aluno(
+            matricula="60692",
+            nome="DIMITRY TESTE",
+            turma="7º D",
+            turno="Vespertino",
+            tenant_id=tenant.id,
+            academic_year_id=year.id,
+        )
+        session.add(aluno)
+        session.flush()
+        session.add(
+            Usuario(
+                username="dimitry60692",
+                password_hash=hash_password("eF1DEYNOlw"),
+                role="aluno",
+                aluno_id=aluno.id,
+                matricula=aluno.matricula,
+                tenant_id=tenant.id,
+                must_change_password=True,
+            )
+        )
+
+    response = client.post("/api/v1/auth/login", json={
+        "username": "dimitry60692",
+        "password": "eF1DEYNOlw",
+    })
+    assert response.status_code == 200
+    assert response.json["user"]["username"] == "dimitry60692"
+    assert response.json["user"]["tenant_id"] is not None
+    assert response.json["user"]["must_change_password"] is True
+
+
+def test_ambiguous_student_portal_user_without_school_is_rejected(client):
+    for suffix in ("a", "b"):
+        with session_scope() as session:
+            tenant = Tenant(name=f"Portal Escola {suffix}", slug=f"portal-escola-{suffix}", is_active=True)
+            session.add(tenant)
+            session.flush()
+            year = AcademicYear(tenant_id=tenant.id, label="2026", is_current=True)
+            session.add(year)
+            session.flush()
+            aluno = Aluno(
+                matricula="60692",
+                nome="DIMITRY TESTE",
+                turma="7º D",
+                turno="Vespertino",
+                tenant_id=tenant.id,
+                academic_year_id=year.id,
+            )
+            session.add(aluno)
+            session.flush()
+            session.add(
+                Usuario(
+                    username="dimitry60692",
+                    password_hash=hash_password("eF1DEYNOlw"),
+                    role="aluno",
+                    aluno_id=aluno.id,
+                    matricula=aluno.matricula,
+                    tenant_id=tenant.id,
+                    must_change_password=True,
+                )
+            )
+
+    response = client.post("/api/v1/auth/login", json={
+        "username": "dimitry60692",
+        "password": "eF1DEYNOlw",
+    })
+    assert response.status_code == 401
+    assert response.json["error"] == "Selecione a escola para acessar"
+
+
 def test_global_super_admin_can_login_without_school_when_archived_superadmins_exist(client, flask_app, admin_user):
     with session_scope() as session:
         session.add(

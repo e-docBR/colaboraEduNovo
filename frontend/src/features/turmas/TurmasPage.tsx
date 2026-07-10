@@ -117,6 +117,7 @@ export const TurmasPage = () => {
   const [deletingTurma, setDeletingTurma] = useState<TurmaSummary | null>(null);
   const [accessNoticeOpen, setAccessNoticeOpen] = useState(false);
   const [accessNoticeTurma, setAccessNoticeTurma] = useState("");
+  const [accessNoticeTipo, setAccessNoticeTipo] = useState("responsavel");
   const [isGeneratingAccessNotice, setIsGeneratingAccessNotice] = useState(false);
 
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: "success" | "error" }>({
@@ -165,7 +166,7 @@ export const TurmasPage = () => {
   const handleDownloadAccessNotices = async () => {
     if (!accessNoticeTurma || !accessToken) return;
     const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
-    const params = new URLSearchParams({ turma: accessNoticeTurma });
+    const params = new URLSearchParams({ turma: accessNoticeTurma, tipo: accessNoticeTipo });
     const headers: Record<string, string> = { Authorization: `Bearer ${accessToken}` };
     if (tenantId) headers["X-Tenant-ID"] = String(tenantId);
     if (academicYearId) headers["x-academic-year-id"] = String(academicYearId);
@@ -225,6 +226,7 @@ export const TurmasPage = () => {
             startIcon={<DownloadIcon />}
             onClick={() => {
               setAccessNoticeTurma(filtered[0]?.turma || "");
+              setAccessNoticeTipo("responsavel");
               setAccessNoticeOpen(true);
             }}
             sx={{ alignSelf: { xs: "stretch", md: "flex-start" }, fontWeight: 700, textTransform: "none" }}
@@ -469,8 +471,21 @@ export const TurmasPage = () => {
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <Alert severity="warning">
-              As senhas temporárias dos responsáveis da turma selecionada serão redefinidas.
+              {accessNoticeTipo === "aluno"
+                ? "Novas senhas serão emitidas apenas para alunos sem senha temporária ativa. Senhas temporárias já geradas serão preservadas."
+                : "Novas senhas serão emitidas apenas para responsáveis sem senha temporária ativa. Senhas temporárias já geradas serão preservadas."}
             </Alert>
+            <TextField
+              select
+              label="Destinatário"
+              value={accessNoticeTipo}
+              onChange={(e) => setAccessNoticeTipo(e.target.value)}
+              fullWidth
+              size="small"
+            >
+              <MenuItem value="responsavel">Responsáveis</MenuItem>
+              <MenuItem value="aluno">Alunos</MenuItem>
+            </TextField>
             <TextField
               select
               label="Turma"

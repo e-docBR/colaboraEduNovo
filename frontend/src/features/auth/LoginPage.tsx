@@ -175,7 +175,7 @@ export const LoginPage = () => {
       const response = await login({
         username,
         password,
-        tenant_slug: selectedSchool === SUPER_ADMIN_ACCESS ? undefined : selectedSchool || undefined,
+        tenant_slug: isStudentFlow || selectedSchool === SUPER_ADMIN_ACCESS ? undefined : selectedSchool || undefined,
       }).unwrap();
       dispatch(setCredentials(response));
       if (response.user?.tenant_id) dispatch(setTenantId(response.user.tenant_id));
@@ -199,6 +199,7 @@ export const LoginPage = () => {
     if (schools && schools.length > 0) {
       const schoolSlugs = schools.map((s) => s.slug);
       if (!isStudentFlow && selectedSchool === SUPER_ADMIN_ACCESS) return;
+      if (isStudentFlow) return;
       if (!schoolSlugs.includes(selectedSchool)) setSelectedSchool(schools[0].slug);
     }
   }, [isStudentFlow, selectedSchool, schools]);
