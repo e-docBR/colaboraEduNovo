@@ -214,7 +214,6 @@ def register(parent: Blueprint) -> None:
 
     @bp.get("/exports/comunicados-acesso")
     @jwt_required()
-    @limiter.limit("10 per hour")
     @require_roles(
         "admin",
         "super_admin",

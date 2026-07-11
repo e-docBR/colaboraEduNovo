@@ -81,13 +81,17 @@ class AccessNoticeService:
             else:
                 usuario, is_new_user = self._get_guardian_user(aluno)
 
-            should_issue_password = is_new_user or not (
+            has_active_temporary_password = (
                 usuario.must_change_password
                 and usuario.is_active
                 and usuario.deleted_at is None
                 and not usuario.is_archived
-            ) or verify_password(aluno.matricula, usuario.password_hash)
-            password = self._temporary_password() if should_issue_password else None
+            )
+            if tipo == "aluno":
+                password = aluno.matricula
+            else:
+                should_issue_password = is_new_user or not has_active_temporary_password
+                password = self._temporary_password() if should_issue_password else None
             if password:
                 usuario.password_hash = hash_password(password)
                 usuario.must_change_password = True

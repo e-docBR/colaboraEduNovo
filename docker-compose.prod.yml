@@ -1,6 +1,7 @@
 services:
   # ─── Docker Socket Proxy (security: isolates Docker socket from Traefik) ────
   socket-proxy:
+    profiles: ["traefik"]
     image: tecnativa/docker-socket-proxy:0.2
     restart: unless-stopped
     deploy:
@@ -23,6 +24,7 @@ services:
       - socket_network
 
   traefik:
+    profiles: ["traefik"]
     image: traefik:v2.10
     restart: unless-stopped
     deploy:
@@ -102,6 +104,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:5000:5000"
     user: "1001:1001"
     deploy:
       resources:
@@ -153,8 +157,8 @@ services:
     command:
       - gunicorn
       - --bind=0.0.0.0:5000
-      - --workers=4
-      - --threads=4
+      - --workers=2
+      - --threads=2
       - --worker-class=gthread
       - --timeout=120
       - --keep-alive=5
@@ -262,6 +266,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.prod
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:8088:80"
     deploy:
       resources:
         limits:
@@ -273,7 +279,7 @@ services:
         max-size: "20m"
         max-file: "3"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -301,6 +307,8 @@ services:
   uptime-kuma:
     image: louislam/uptime-kuma:1
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:3001"
     deploy:
       resources:
         limits:

@@ -472,7 +472,7 @@ export const TurmasPage = () => {
           <Stack spacing={2} sx={{ mt: 1 }}>
             <Alert severity="warning">
               {accessNoticeTipo === "aluno"
-                ? "Novas senhas serão emitidas apenas para alunos sem senha temporária ativa. Senhas temporárias já geradas serão preservadas."
+                ? "Para alunos, a senha temporária gerada no comunicado será a matrícula do aluno."
                 : "Novas senhas serão emitidas apenas para responsáveis sem senha temporária ativa. Senhas temporárias já geradas serão preservadas."}
             </Alert>
             <TextField
