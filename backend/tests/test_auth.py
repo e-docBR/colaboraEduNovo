@@ -144,7 +144,7 @@ def test_unique_student_portal_user_can_login_without_school(client):
         session.add(
             Usuario(
                 username="dimitry60692",
-                password_hash=hash_password("eF1DEYNOlw"),
+                password_hash=hash_password(aluno.matricula),
                 role="aluno",
                 aluno_id=aluno.id,
                 matricula=aluno.matricula,
@@ -155,12 +155,118 @@ def test_unique_student_portal_user_can_login_without_school(client):
 
     response = client.post("/api/v1/auth/login", json={
         "username": "dimitry60692",
-        "password": "eF1DEYNOlw",
+        "password": "60692",
     })
     assert response.status_code == 200
     assert response.json["user"]["username"] == "dimitry60692"
     assert response.json["user"]["tenant_id"] is not None
     assert response.json["user"]["must_change_password"] is True
+
+
+def test_student_first_access_with_invalid_password_returns_matricula_guidance_code(client):
+    with session_scope() as session:
+        tenant = Tenant(name="Senha Temporária", slug="senha-temporaria", is_active=True)
+        session.add(tenant)
+        session.flush()
+        year = AcademicYear(tenant_id=tenant.id, label="2026", is_current=True)
+        session.add(year)
+        session.flush()
+        aluno = Aluno(
+            matricula="60693",
+            nome="ALUNO PRIMEIRO ACESSO",
+            turma="7º D",
+            turno="Vespertino",
+            tenant_id=tenant.id,
+            academic_year_id=year.id,
+        )
+        session.add(aluno)
+        session.flush()
+        session.add(
+            Usuario(
+                username="aluno60693",
+                password_hash=hash_password(aluno.matricula),
+                role="aluno",
+                aluno_id=aluno.id,
+                matricula=aluno.matricula,
+                tenant_id=tenant.id,
+                must_change_password=True,
+            )
+        )
+
+    response = client.post("/api/v1/auth/login", json={
+        "username": "aluno60693",
+        "password": "senha-antiga",
+    })
+
+    assert response.status_code == 401
+    assert response.json == {
+        "code": "STUDENT_TEMPORARY_PASSWORD_CHANGED",
+        "error": "Usuário ou senha inválidos",
+    }
+
+
+def test_student_with_permanent_password_keeps_generic_invalid_password_error(client):
+    with session_scope() as session:
+        tenant = Tenant(name="Senha Permanente", slug="senha-permanente", is_active=True)
+        session.add(tenant)
+        session.flush()
+        year = AcademicYear(tenant_id=tenant.id, label="2026", is_current=True)
+        session.add(year)
+        session.flush()
+        aluno = Aluno(
+            matricula="60694",
+            nome="ALUNO SENHA PERMANENTE",
+            turma="7º D",
+            turno="Vespertino",
+            tenant_id=tenant.id,
+            academic_year_id=year.id,
+        )
+        session.add(aluno)
+        session.flush()
+        session.add(
+            Usuario(
+                username="aluno60694",
+                password_hash=hash_password("SenhaPermanente1!"),
+                role="aluno",
+                aluno_id=aluno.id,
+                matricula=aluno.matricula,
+                tenant_id=tenant.id,
+                must_change_password=False,
+            )
+        )
+
+    response = client.post("/api/v1/auth/login", json={
+        "username": "aluno60694",
+        "password": "senha-incorreta",
+    })
+
+    assert response.status_code == 401
+    assert response.json == {"error": "Usuário ou senha inválidos"}
+
+
+def test_guardian_with_temporary_password_keeps_generic_invalid_password_error(client):
+    with session_scope() as session:
+        tenant = Tenant(name="Responsável", slug="responsavel-senha", is_active=True)
+        session.add(tenant)
+        session.flush()
+        session.add(
+            Usuario(
+                username="responsavel60695",
+                password_hash=hash_password("senha-temporaria"),
+                role="responsavel",
+                matricula="60695",
+                tenant_id=tenant.id,
+                must_change_password=True,
+            )
+        )
+
+    response = client.post("/api/v1/auth/login", json={
+        "username": "responsavel60695",
+        "password": "senha-incorreta",
+    })
+
+    assert response.status_code == 401
+    assert response.json == {"error": "Usuário ou senha inválidos"}
 
 
 def test_ambiguous_student_portal_user_without_school_is_rejected(client):
