@@ -82,8 +82,19 @@ class UsuarioService:
             or not user.is_active
             or user.deleted_at is not None
             or user.is_archived
-            or not verify_password(password, user.password_hash)
         ):
+            raise UnauthorizedError("Usuário ou senha inválidos")
+
+        if not verify_password(password, user.password_hash):
+            # A senha aleatória emitida nos comunicados antigos não é preservada
+            # após a migração para matrícula. Só orientamos contas de aluno que
+            # ainda estão no primeiro acesso; senhas permanentes seguem genéricas.
+            if user.role == "aluno" and user.must_change_password:
+                raise AppError(
+                    "Usuário ou senha inválidos",
+                    status_code=401,
+                    payload={"code": "STUDENT_TEMPORARY_PASSWORD_CHANGED"},
+                )
             raise UnauthorizedError("Usuário ou senha inválidos")
 
         # super_admin can log in from any tenant scope without restriction

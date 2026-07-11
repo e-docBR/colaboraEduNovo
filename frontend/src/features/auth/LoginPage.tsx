@@ -4,6 +4,10 @@ import {
   Button,
   Chip,
   Checkbox,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   FormControlLabel,
   Grid2 as Grid,
@@ -138,6 +142,7 @@ export const LoginPage = () => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [temporaryPasswordDialogOpen, setTemporaryPasswordDialogOpen] = useState(false);
   const [rememberMe, setRememberMe] = useState(() => readStorage("colabora.login.remember", "true") === "true");
   const [login, { isLoading }] = useLoginMutation();
   const { data: schools } = useListPublicTenantsQuery();
@@ -164,6 +169,17 @@ export const LoginPage = () => {
     return err instanceof Error ? err.message : "Falha no login";
   };
 
+  const isTemporaryStudentPasswordChange = (err: unknown) => {
+    if (!isStudentFlow || !err || typeof err !== "object" || !("status" in err)) return false;
+    const data = (err as FetchBaseQueryError).data;
+    return Boolean(
+      data
+      && typeof data === "object"
+      && "code" in data
+      && data.code === "STUDENT_TEMPORARY_PASSWORD_CHANGED"
+    );
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
@@ -185,6 +201,10 @@ export const LoginPage = () => {
         navigate("/app");
       }
     } catch (err) {
+      if (isTemporaryStudentPasswordChange(err)) {
+        setTemporaryPasswordDialogOpen(true);
+        return;
+      }
       setError(resolveErrorMessage(err));
     }
   };
@@ -655,6 +675,29 @@ export const LoginPage = () => {
           </Grid>
         </Box>
       </Box>
+
+      <Dialog
+        open={temporaryPasswordDialogOpen}
+        onClose={() => setTemporaryPasswordDialogOpen(false)}
+        fullWidth
+        maxWidth="xs"
+        aria-labelledby="temporary-password-change-title"
+      >
+        <DialogTitle id="temporary-password-change-title" sx={{ fontWeight: 700 }}>
+          Senha temporária atualizada
+        </DialogTitle>
+        <DialogContent>
+          <Typography color="text.secondary" sx={{ lineHeight: 1.6 }}>
+            Para facilitar seu primeiro acesso, a senha temporária agora é o número da sua matrícula.
+            Digite apenas os números da matrícula no campo Senha. Depois de entrar, cadastre sua senha permanente.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 1 }}>
+          <Button variant="contained" onClick={() => setTemporaryPasswordDialogOpen(false)}>
+            Entendi
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* ─── Footer ─── */}
       <Box sx={{ py: 3, bgcolor: brand.branco, borderTop: `1px solid ${brand.cinza100}` }}>
